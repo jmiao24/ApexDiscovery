@@ -1,41 +1,39 @@
 import { describe, expect, it } from "vitest";
-import type { GatewayEvent } from "@ai4s/sdk";
-import { foldGatewayEvent, type FoldState } from "./runtime";
+import type { OpenCodeEvent } from "@ai4s/sdk";
+import { foldEvent, type FoldState } from "./runtime";
 
-const empty: FoldState = { blocks: [], activeAgentIndex: null };
+const empty: FoldState = { blocks: [], index: {} };
 
-function foldAll(events: GatewayEvent[]): FoldState {
-  return events.reduce(foldGatewayEvent, empty);
+function foldAll(events: OpenCodeEvent[]): FoldState {
+  return events.reduce(foldEvent, empty);
 }
 
-describe("foldGatewayEvent", () => {
-  it("accumulates consecutive message.delta into one agent block", () => {
+describe("foldEvent", () => {
+  it("upserts a text part by id (idempotent full-text updates, not appends)", () => {
     const s = foldAll([
-      { type: "message.delta", sessionId: "s", text: "Hello " },
-      { type: "message.delta", sessionId: "s", text: "world" },
+      { type: "text.updated", partId: "p1", text: "Planning" },
+      { type: "text.updated", partId: "p1", text: "Planning the review" },
     ]);
     expect(s.blocks).toHaveLength(1);
-    expect(s.blocks[0]).toEqual({ kind: "agent", markdown: "Hello world" });
+    expect(s.blocks[0]).toEqual({ kind: "agent", markdown: "Planning the review" });
   });
 
-  it("renders a tool call and marks it complete", () => {
+  it("upserts a tool call by callId and reflects status transitions", () => {
     const s = foldAll([
-      { type: "tool.start", sessionId: "s", toolCallId: "t1", title: "search" },
-      { type: "tool.complete", sessionId: "s", toolCallId: "t1", status: "success", meta: "12 rows" },
+      { type: "tool.updated", callId: "c1", tool: "search", status: "running", title: "search" },
+      { type: "tool.updated", callId: "c1", tool: "search", status: "success", title: "search (done)" },
     ]);
-    expect(s.blocks[0]).toMatchObject({ kind: "tool-call", status: "success", meta: "12 rows" });
+    expect(s.blocks).toHaveLength(1);
+    expect(s.blocks[0]).toMatchObject({ kind: "tool-call", status: "success", title: "search (done)" });
   });
 
-  it("starts a fresh agent block after a tool call", () => {
+  it("keeps distinct parts as separate blocks in arrival order", () => {
     const s = foldAll([
-      { type: "message.delta", sessionId: "s", text: "planning" },
-      { type: "tool.start", sessionId: "s", toolCallId: "t1", title: "search" },
-      { type: "tool.complete", sessionId: "s", toolCallId: "t1", status: "success" },
-      { type: "message.delta", sessionId: "s", text: "done analysis" },
-      { type: "session.done", sessionId: "s" },
+      { type: "text.updated", partId: "p1", text: "planning" },
+      { type: "tool.updated", callId: "c1", tool: "search", status: "success" },
+      { type: "text.updated", partId: "p2", text: "done" },
+      { type: "session.idle" },
     ]);
-    const kinds = s.blocks.map((b) => b.kind);
-    expect(kinds).toEqual(["agent", "tool-call", "agent", "status-line"]);
-    expect(s.blocks[2]).toEqual({ kind: "agent", markdown: "done analysis" });
+    expect(s.blocks.map((b) => b.kind)).toEqual(["agent", "tool-call", "agent", "status-line"]);
   });
 });

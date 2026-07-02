@@ -2,76 +2,69 @@ import type { RuntimeStatus, ToolCallStatus } from "@ai4s/shared";
 
 export type { RuntimeStatus, ToolCallStatus };
 
-/** Approval decisions surfaced by the desktop approval dialog. */
-export type ApprovalDecision = "allow-once" | "allow-project" | "deny";
+/** Pinned OpenCode release this client targets. */
+export const OPENCODE_VERSION = "1.17.13";
 
-// ---- Streaming events (Hermes TUI Gateway → client) ----
-// Modelled on the documented Gateway event contract (see docs/TECHNICAL_DESIGN.md §5.2).
+/** OpenCode server defaults (`opencode serve`). */
+export const DEFAULT_OPENCODE_URL = "http://127.0.0.1:4096";
 
-export interface MessageDeltaEvent {
-  type: "message.delta";
-  sessionId: string;
+// ---- Normalized events (OpenCode SSE → app) ----
+// OpenCode emits idempotent "updated" events (full current value), not deltas, so
+// text/tool events carry a stable id and the app upserts by that id.
+
+export interface TextUpdatedEvent {
+  type: "text.updated";
+  partId: string;
   text: string;
 }
-export interface ToolStartEvent {
-  type: "tool.start";
-  sessionId: string;
-  toolCallId: string;
-  title: string;
-}
-export interface ToolProgressEvent {
-  type: "tool.progress";
-  sessionId: string;
-  toolCallId: string;
-  meta: string;
-}
-export interface ToolCompleteEvent {
-  type: "tool.complete";
-  sessionId: string;
-  toolCallId: string;
+export interface ToolUpdatedEvent {
+  type: "tool.updated";
+  callId: string;
+  tool: string;
   status: ToolCallStatus;
-  meta?: string;
+  title?: string;
 }
-export interface ApprovalRequestEvent {
-  type: "approval.request";
-  sessionId: string;
-  requestId: string;
-  action: string;
+export interface SessionIdleEvent {
+  type: "session.idle";
 }
-export interface SessionDoneEvent {
-  type: "session.done";
-  sessionId: string;
-}
-export interface GatewayErrorEvent {
+export interface RuntimeErrorEvent {
   type: "error";
   message: string;
 }
 
-export type GatewayEvent =
-  | MessageDeltaEvent
-  | ToolStartEvent
-  | ToolProgressEvent
-  | ToolCompleteEvent
-  | ApprovalRequestEvent
-  | SessionDoneEvent
-  | GatewayErrorEvent;
+export type OpenCodeEvent =
+  | TextUpdatedEvent
+  | ToolUpdatedEvent
+  | SessionIdleEvent
+  | RuntimeErrorEvent;
 
-/** Minimal WebSocket surface shared by the browser `WebSocket` and node `ws`. */
-export interface SocketLike {
-  send(data: string): void;
-  close(): void;
-  onopen: ((ev: unknown) => void) | null;
-  onclose: ((ev: unknown) => void) | null;
-  onerror: ((ev: unknown) => void) | null;
-  onmessage: ((ev: { data: unknown }) => void) | null;
+export interface OpenCodeClientOptions {
+  /** Base URL of a running `opencode serve`, e.g. http://127.0.0.1:4096 */
+  baseUrl?: string;
+  /** Optional OPENCODE_SERVER_PASSWORD (basic auth). */
+  password?: string;
+  username?: string;
+  /** Inject fetch (defaults to global fetch; browser + node both have it). */
+  fetchImpl?: typeof fetch;
 }
 
-export type SocketFactory = (url: string) => SocketLike;
+// ---- Raw OpenCode wire shapes (subset we consume) ----
 
-export interface HermesClientOptions {
-  url: string;
-  /** Inject a socket (node `ws` in tests); defaults to the global WebSocket. */
-  socketFactory?: SocketFactory;
-  /** Pinned Gateway protocol version this client targets. */
-  protocolVersion?: string;
+export interface OpenCodeRawEvent {
+  type: string;
+  properties?: Record<string, unknown>;
 }
+
+export interface OpenCodeTextPart {
+  id: string;
+  type: "text";
+  text: string;
+}
+export interface OpenCodeToolPart {
+  id: string;
+  type: "tool";
+  callID: string;
+  tool: string;
+  state: { status: "pending" | "running" | "completed" | "error"; title?: string };
+}
+export type OpenCodePart = OpenCodeTextPart | OpenCodeToolPart | { type: string };

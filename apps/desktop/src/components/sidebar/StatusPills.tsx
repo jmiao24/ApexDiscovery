@@ -16,7 +16,7 @@ const MODEL_TONE: Record<ModelStatus, string> = {
 };
 
 export function StatusPills() {
-  // Runtime status is live from the Hermes client. Model is disconnected until a key is set.
+  // Runtime status is live from the OpenCode client. Model is disconnected until a key is set.
   const runtime = useRuntimeStore((s) => s.status);
   const model: ModelStatus = "disconnected";
 

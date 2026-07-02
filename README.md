@@ -7,8 +7,8 @@ workbench for macOS and Windows — an open-source alternative to Claude Science
 style products. It is not a chat box: it is a workbench that ties literature,
 code, figures, reports, and review into one auditable, reproducible workflow.
 
-Built on [Tauri 2](https://tauri.app), the [Hermes](https://github.com) agent
-runtime, MCP, scientific skills, and an artifact provenance system.
+Built on [Tauri 2](https://tauri.app), the [OpenCode](https://opencode.ai) agent
+runtime (bundled as a sidecar), MCP, scientific skills, and an artifact provenance system.
 
 ## Why it is different
 
@@ -33,7 +33,7 @@ for the full spec.
 | `apps/desktop/` | Tauri 2 + React + TypeScript + Vite desktop shell (`src/` frontend, `src-tauri/` Rust) |
 | `packages/ui/` | Shared UI component library |
 | `packages/shared/` | Shared types and utilities |
-| `packages/sdk/` | `HermesClient` SDK wrapper (isolates the UI from Hermes) |
+| `packages/sdk/` | `OpenCodeClient` SDK wrapper (isolates the UI from the runtime) |
 | `runtime/manager/` | Local Runtime Manager: dependency checks, sidecar lifecycle, workspace, provenance |
 | `runtime/hermes-profile/` | The AI4S Workbench Hermes profile distribution |
 | `runtime/mcp/` | MCP server configurations (filesystem, paper-search, BioMCP, Zotero, …) |

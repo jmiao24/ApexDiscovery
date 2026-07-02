@@ -4,9 +4,9 @@ import { BlockList } from "@/components/thread/BlockList";
 import { Composer } from "@/components/thread/Composer";
 import { cn } from "@/lib/cn";
 
-/** Live agent session backed by the Hermes Gateway (packages/sdk). */
+/** Live agent session backed by the OpenCode runtime (packages/sdk). */
 export function LiveSessionPage() {
-  const { status, gatewayUrl, blocks, error, connect, disconnect, sendPrompt } = useRuntimeStore();
+  const { status, serverUrl, blocks, error, connect, disconnect, sendPrompt } = useRuntimeStore();
   const connected = status === "ready";
   const connecting = status === "connecting";
 
@@ -39,16 +39,17 @@ export function LiveSessionPage() {
         <div className="mx-auto flex max-w-[760px] flex-col gap-4 px-8 py-6">
           {!connected && blocks.length === 0 && (
             <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-              <div className="text-sm font-medium text-text">Connect to a Hermes Gateway</div>
+              <div className="text-sm font-medium text-text">Connect to the OpenCode runtime</div>
               <p className="mt-1 text-sm text-muted">
-                AI4S Workbench drives the agent over the Hermes TUI Gateway (JSON-RPC).
-                Point it at a running Gateway, then send a prompt to start a live session.
+                AI4S Workbench drives the agent through OpenCode (`opencode serve`) over its
+                HTTP + SSE API. Point it at a running server, then send a prompt to start a live session.
               </p>
               <div className="mt-3 rounded-input bg-surface-2 px-3 py-2 font-mono text-xs text-text">
-                {gatewayUrl}
+                {serverUrl}
               </div>
               <p className="mt-2 text-xs text-muted">
-                No Gateway yet? Explore the sample sessions in the sidebar. Set the URL in Settings.
+                Not running yet? Start it with <span className="font-mono">opencode serve</span>, or
+                set the URL in Settings. Example sessions in the sidebar are read-only.
               </p>
             </div>
           )}
@@ -84,7 +85,7 @@ function ConnBadge({ status }: { status: string }) {
           status === "ready" ? "bg-ok" : status === "error" ? "bg-error" : "bg-muted",
         )}
       />
-      Hermes · {status}
+      OpenCode · {status}
     </span>
   );
 }

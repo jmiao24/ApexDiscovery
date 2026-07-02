@@ -5,12 +5,12 @@ import { cn } from "@/lib/cn";
 
 /**
  * Settings. API credentials are editable and start empty (BYOK). The agent
- * runtime is Hermes; the model provider is the user's own key.
+ * runtime is OpenCode; the model provider is the user's own key.
  */
 export function SettingsPage() {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
-  const { status, gatewayUrl, setGatewayUrl, connect, disconnect } = useRuntimeStore();
+  const { status, serverUrl, setServerUrl, connect, disconnect } = useRuntimeStore();
 
   const [provider, setProvider] = useState("OpenRouter");
   const [apiKey, setApiKey] = useState("");
@@ -24,12 +24,12 @@ export function SettingsPage() {
       <div className="mx-auto max-w-2xl px-8 py-8">
         <h1 className="font-serif text-2xl text-text">Settings</h1>
 
-        <Field label="Agent runtime" hint="AI4S Workbench drives Hermes over the TUI Gateway (JSON-RPC).">
+        <Field label="Agent runtime" hint="AI4S Workbench drives OpenCode (opencode serve) over its HTTP + SSE API.">
           <div className="flex items-center gap-2">
             <input
-              value={gatewayUrl}
-              onChange={(e) => setGatewayUrl(e.target.value)}
-              placeholder="ws://127.0.0.1:8765"
+              value={serverUrl}
+              onChange={(e) => setServerUrl(e.target.value)}
+              placeholder="http://127.0.0.1:4096"
               className="flex-1 rounded-input border border-border bg-surface px-3 py-2 font-mono text-sm text-text placeholder:text-muted"
             />
             {status === "ready" ? (
@@ -55,7 +55,7 @@ export function SettingsPage() {
                 status === "ready" ? "bg-ok" : status === "error" ? "bg-error" : "bg-muted",
               )}
             />
-            Hermes runtime · <span className="capitalize">{status}</span>
+            OpenCode runtime · <span className="capitalize">{status}</span>
           </div>
         </Field>
 

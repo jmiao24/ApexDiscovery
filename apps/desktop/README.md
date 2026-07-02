@@ -19,9 +19,9 @@ The Tauri 2 + React + TypeScript + Vite desktop application — the AI4S Workben
 - Server / runtime state → TanStack Query.
 - Streaming agent events → a dedicated event bus (`lib/events`).
 
-The frontend talks to the agent runtime only through `packages/sdk` (`HermesClient`).
+The frontend talks to the agent runtime only through `packages/sdk` (`OpenCodeClient`).
 
 ## Depends on
 
-`packages/ui`, `packages/shared`, `packages/sdk`; at runtime, the Hermes Gateway sidecar
+`packages/ui`, `packages/shared`, `packages/sdk`; at runtime, the OpenCode sidecar
 started by `runtime/manager`.

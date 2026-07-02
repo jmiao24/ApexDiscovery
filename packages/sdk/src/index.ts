@@ -1,15 +1,13 @@
-export { HermesClient, HERMES_PROTOCOL_VERSION } from "./HermesClient";
-export type {
-  ApprovalDecision,
-  GatewayEvent,
-  HermesClientOptions,
-  MessageDeltaEvent,
-  ToolStartEvent,
-  ToolProgressEvent,
-  ToolCompleteEvent,
-  ApprovalRequestEvent,
-  SessionDoneEvent,
-  GatewayErrorEvent,
-  SocketFactory,
-  SocketLike,
+export { OpenCodeClient } from "./OpenCodeClient";
+export {
+  OPENCODE_VERSION,
+  DEFAULT_OPENCODE_URL,
+  type OpenCodeEvent,
+  type TextUpdatedEvent,
+  type ToolUpdatedEvent,
+  type SessionIdleEvent,
+  type RuntimeErrorEvent,
+  type OpenCodeClientOptions,
+  type RuntimeStatus,
+  type ToolCallStatus,
 } from "./types";

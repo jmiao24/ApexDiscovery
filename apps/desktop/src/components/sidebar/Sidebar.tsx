@@ -4,7 +4,7 @@ import type { Project, Session, SessionGroup } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 import { StatusPills } from "./StatusPills";
 
-const GROUP_ORDER: SessionGroup[] = ["Today", "Active", "Earlier"];
+const GROUP_ORDER: SessionGroup[] = ["Examples", "Today", "Active", "Earlier"];
 
 const DOT: Record<NonNullable<Session["status"]>, string> = {
   idle: "bg-muted",

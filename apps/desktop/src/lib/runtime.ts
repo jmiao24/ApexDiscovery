@@ -1,60 +1,53 @@
 import { create } from "zustand";
-import { HermesClient, type GatewayEvent } from "@ai4s/sdk";
+import { OpenCodeClient, DEFAULT_OPENCODE_URL, type OpenCodeEvent } from "@ai4s/sdk";
 import type { RuntimeStatus, ThreadBlock } from "@ai4s/shared";
 
-const URL_KEY = "ai4s.gatewayUrl";
-const DEFAULT_URL = "ws://127.0.0.1:8765";
+const URL_KEY = "ai4s.opencodeUrl";
 
 function initialUrl(): string {
-  if (typeof window === "undefined") return DEFAULT_URL;
-  return window.localStorage.getItem(URL_KEY) ?? DEFAULT_URL;
+  if (typeof window === "undefined") return DEFAULT_OPENCODE_URL;
+  return window.localStorage.getItem(URL_KEY) ?? DEFAULT_OPENCODE_URL;
 }
 
 interface RuntimeState {
   status: RuntimeStatus;
-  gatewayUrl: string;
+  serverUrl: string;
   sessionId: string | null;
   blocks: ThreadBlock[];
+  index: Record<string, number>;
   error: string | null;
-  activeAgentIndex: number | null;
-  setGatewayUrl: (url: string) => void;
+  setServerUrl: (url: string) => void;
   connect: () => Promise<void>;
   disconnect: () => void;
   sendPrompt: (text: string) => Promise<void>;
 }
 
 // The client lives outside the store (it is not serializable state).
-let client: HermesClient | null = null;
+let client: OpenCodeClient | null = null;
 
 export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   status: "offline",
-  gatewayUrl: initialUrl(),
+  serverUrl: initialUrl(),
   sessionId: null,
   blocks: [],
+  index: {},
   error: null,
-  activeAgentIndex: null,
 
-  setGatewayUrl: (gatewayUrl) => {
-    if (typeof window !== "undefined") window.localStorage.setItem(URL_KEY, gatewayUrl);
-    set({ gatewayUrl });
+  setServerUrl: (serverUrl) => {
+    if (typeof window !== "undefined") window.localStorage.setItem(URL_KEY, serverUrl);
+    set({ serverUrl });
   },
 
   connect: async () => {
     get().disconnect();
-    const c = new HermesClient({ url: get().gatewayUrl });
+    const c = new OpenCodeClient({ baseUrl: get().serverUrl });
     client = c;
     c.onStatus((status) => set({ status }));
     c.onEvent((event) =>
       set((s) => {
-        const folded = foldGatewayEvent(
-          { blocks: s.blocks, activeAgentIndex: s.activeAgentIndex },
-          event,
-        );
-        return {
-          blocks: folded.blocks,
-          activeAgentIndex: folded.activeAgentIndex,
-          error: event.type === "error" ? event.message : s.error,
-        };
+        if (event.type === "error") return { error: event.message };
+        const folded = foldEvent({ blocks: s.blocks, index: s.index }, event);
+        return { blocks: folded.blocks, index: folded.index };
       }),
     );
     try {
@@ -74,12 +67,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
 
   sendPrompt: async (text) => {
     const { sessionId } = get();
-    set((s) => ({
-      blocks: [...s.blocks, { kind: "user", text }],
-      activeAgentIndex: null,
-    }));
+    set((s) => ({ blocks: [...s.blocks, { kind: "user", text }] }));
     if (!client || !sessionId) {
-      set({ error: "Not connected to a Hermes Gateway." });
+      set({ error: "Not connected to an OpenCode server." });
       return;
     }
     try {
@@ -92,38 +82,42 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
 
 export interface FoldState {
   blocks: ThreadBlock[];
-  activeAgentIndex: number | null;
+  /** Maps an OpenCode part/call id to its block index (idempotent upserts). */
+  index: Record<string, number>;
 }
 
-/** Pure reducer: fold one streamed Gateway event into the live thread blocks. */
-export function foldGatewayEvent(state: FoldState, event: GatewayEvent): FoldState {
+/** Pure reducer: fold one normalized OpenCode event into the live thread blocks. */
+export function foldEvent(state: FoldState, event: OpenCodeEvent): FoldState {
   const blocks = [...state.blocks];
+  const index = { ...state.index };
   switch (event.type) {
-    case "message.delta": {
-      if (state.activeAgentIndex != null && blocks[state.activeAgentIndex]?.kind === "agent") {
-        const cur = blocks[state.activeAgentIndex] as { kind: "agent"; markdown: string };
-        blocks[state.activeAgentIndex] = { kind: "agent", markdown: cur.markdown + event.text };
-        return { blocks, activeAgentIndex: state.activeAgentIndex };
+    case "text.updated": {
+      const key = `text:${event.partId}`;
+      if (key in index) {
+        blocks[index[key]] = { kind: "agent", markdown: event.text };
+      } else {
+        blocks.push({ kind: "agent", markdown: event.text });
+        index[key] = blocks.length - 1;
       }
-      blocks.push({ kind: "agent", markdown: event.text });
-      return { blocks, activeAgentIndex: blocks.length - 1 };
+      return { blocks, index };
     }
-    case "tool.start":
-      blocks.push({ kind: "tool-call", title: event.title, status: "running" });
-      return { blocks, activeAgentIndex: null };
-    case "tool.complete": {
-      for (let i = blocks.length - 1; i >= 0; i--) {
-        const b = blocks[i];
-        if (b.kind === "tool-call" && b.status === "running") {
-          blocks[i] = { ...b, status: event.status, meta: event.meta };
-          break;
-        }
+    case "tool.updated": {
+      const key = `tool:${event.callId}`;
+      const block: ThreadBlock = {
+        kind: "tool-call",
+        title: event.title ?? event.tool,
+        status: event.status,
+      };
+      if (key in index) blocks[index[key]] = block;
+      else {
+        blocks.push(block);
+        index[key] = blocks.length - 1;
       }
-      return { blocks, activeAgentIndex: state.activeAgentIndex };
+      return { blocks, index };
     }
-    case "session.done":
+    case "session.idle":
       blocks.push({ kind: "status-line", text: "done", tone: "done" });
-      return { blocks, activeAgentIndex: null };
+      return { blocks, index };
     default:
       return state;
   }

@@ -10,7 +10,7 @@ export interface Project {
   sessions: Session[];
 }
 
-export type SessionGroup = "Today" | "Active" | "Earlier";
+export type SessionGroup = "Examples" | "Today" | "Active" | "Earlier";
 
 export interface Session {
   id: string;

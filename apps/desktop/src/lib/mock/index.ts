@@ -7,7 +7,7 @@ const figureSession: Session = {
   id: "figure-canvas",
   projectId: "cross-species",
   title: "Cross-species atlas figure",
-  group: "Today",
+  group: "Examples",
   status: "done",
   blocks: [
     {
@@ -79,7 +79,7 @@ const sweepSession: Session = {
   id: "scvi-sweep",
   projectId: "cross-species",
   title: "SCVI Hyperparameter Screen",
-  group: "Active",
+  group: "Examples",
   status: "running",
   badge: 8,
   blocks: [
@@ -151,7 +151,7 @@ const litSession: Session = {
   id: "lit-review",
   projectId: "cross-species",
   title: "Cross-species scRNA-seq Integration",
-  group: "Active",
+  group: "Examples",
   status: "warn",
   blocks: [
     {

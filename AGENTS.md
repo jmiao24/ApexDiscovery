@@ -18,13 +18,13 @@ An open-source, local-first, model-agnostic, reproducible AI research workbench
 for macOS and Windows. See `README.md`, `docs/PRD.md`, and `docs/TECHNICAL_DESIGN.md`.
 
 Recommended stack: **Tauri 2 + React + TypeScript + Vite**, Tailwind + Radix UI,
-Hermes as the agent runtime (TUI Gateway JSON-RPC), local workspace + SQLite +
-JSONL provenance.
+**OpenCode** as the agent runtime (bundled single-binary sidecar; HTTP + SSE API),
+local workspace + SQLite + JSONL provenance.
 
 ## Repository map
 
 - `apps/desktop/` — Tauri + React desktop shell (`src/` frontend, `src-tauri/` Rust).
-- `packages/` — `ui`, `shared`, `sdk` (the `HermesClient` wrapper).
+- `packages/` — `ui`, `shared`, `sdk` (the `OpenCodeClient` wrapper).
 - `runtime/` — `manager`, `hermes-profile`, `mcp`, `skills`.
 - `docs/` — product and technical specs.
 - `examples/bci-trends/` — the built-in demo project.
@@ -32,8 +32,8 @@ JSONL provenance.
 
 ## Architecture guardrails
 
-- The UI never calls Hermes directly — it goes through `packages/sdk` (`HermesClient`).
-  Support an OpenAI-compatible API Server fallback and pin the Hermes version.
+- The UI never calls OpenCode directly — it goes through `packages/sdk` (`OpenCodeClient`).
+  Pin the OpenCode version (see `OPENCODE_VERSION`) and bundle it as a sidecar.
 - Keep the frontend, desktop shell, and agent runtime decoupled.
 - Skills, MCP servers, and model providers must stay pluggable.
 - Keep the artifact schema and workflow templates stable and versioned.

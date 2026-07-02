@@ -3,7 +3,7 @@ import { ArrowUp, Grid2x2, Mic, Plus } from "lucide-react";
 
 /**
  * The "Ask anything" composer. Static mock sessions pass no `onSend`; the live
- * Hermes session passes one to submit prompts to the Gateway.
+ * OpenCode session passes one to submit prompts to the runtime.
  */
 export function Composer({
   onSend,
