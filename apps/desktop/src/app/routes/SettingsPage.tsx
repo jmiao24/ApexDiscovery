@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useUiStore } from "@/lib/store";
+import { useRuntimeStore } from "@/lib/runtime";
 import { cn } from "@/lib/cn";
 
 /**
@@ -9,6 +10,7 @@ import { cn } from "@/lib/cn";
 export function SettingsPage() {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
+  const { status, gatewayUrl, setGatewayUrl, connect, disconnect } = useRuntimeStore();
 
   const [provider, setProvider] = useState("OpenRouter");
   const [apiKey, setApiKey] = useState("");
@@ -22,10 +24,38 @@ export function SettingsPage() {
       <div className="mx-auto max-w-2xl px-8 py-8">
         <h1 className="font-serif text-2xl text-text">Settings</h1>
 
-        <Field label="Agent runtime" hint="AI4S Workbench drives Hermes over the TUI Gateway.">
-          <div className="flex items-center gap-2 rounded-input border border-border bg-surface px-3 py-2 text-sm text-text">
-            <span className="h-1.5 w-1.5 rounded-full bg-ok" />
-            Hermes · TUI Gateway (JSON-RPC)
+        <Field label="Agent runtime" hint="AI4S Workbench drives Hermes over the TUI Gateway (JSON-RPC).">
+          <div className="flex items-center gap-2">
+            <input
+              value={gatewayUrl}
+              onChange={(e) => setGatewayUrl(e.target.value)}
+              placeholder="ws://127.0.0.1:8765"
+              className="flex-1 rounded-input border border-border bg-surface px-3 py-2 font-mono text-sm text-text placeholder:text-muted"
+            />
+            {status === "ready" ? (
+              <button
+                onClick={disconnect}
+                className="rounded-input border border-border px-4 py-2 text-sm text-text hover:bg-surface-2"
+              >
+                Disconnect
+              </button>
+            ) : (
+              <button
+                onClick={connect}
+                className="rounded-input bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90"
+              >
+                Connect
+              </button>
+            )}
+          </div>
+          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted">
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                status === "ready" ? "bg-ok" : status === "error" ? "bg-error" : "bg-muted",
+              )}
+            />
+            Hermes runtime · <span className="capitalize">{status}</span>
           </div>
         </Field>
 

@@ -41,7 +41,7 @@ export function Sidebar({ project }: { project: Project }) {
       </button>
 
       <nav className="mt-1 flex flex-col px-3">
-        <NavRow icon={<Plus size={16} />} label="New" onClick={() => navigate("/")} />
+        <NavRow icon={<Plus size={16} />} label="New" onClick={() => navigate("/live")} />
         <NavRow icon={<SlidersHorizontal size={16} />} label="Customize" onClick={() => navigate("/settings")} />
         <NavRow icon={<Files size={16} />} label="Files" onClick={() => navigate("/skills")} />
       </nav>

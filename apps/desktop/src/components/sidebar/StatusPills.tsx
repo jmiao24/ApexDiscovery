@@ -1,9 +1,6 @@
 import type { ModelStatus, RuntimeStatus } from "@ai4s/shared";
+import { useRuntimeStore } from "@/lib/runtime";
 import { cn } from "@/lib/cn";
-
-// Mock statuses this slice; wired to the runtime in slice #2/#3.
-const runtime: RuntimeStatus = "ready";
-const model: ModelStatus = "connected";
 
 const RUNTIME_TONE: Record<RuntimeStatus, string> = {
   ready: "bg-ok",
@@ -19,6 +16,10 @@ const MODEL_TONE: Record<ModelStatus, string> = {
 };
 
 export function StatusPills() {
+  // Runtime status is live from the Hermes client. Model is disconnected until a key is set.
+  const runtime = useRuntimeStore((s) => s.status);
+  const model: ModelStatus = "disconnected";
+
   return (
     <div className="flex flex-col gap-1 text-xs text-muted">
       <Pill dot={RUNTIME_TONE[runtime]} label="Runtime" value={runtime} />

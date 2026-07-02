@@ -11,6 +11,8 @@ export default defineConfig({
     alias: {
       "@": r("./src"),
       "@ai4s/shared": r("../../packages/shared/src/index.ts"),
+      "@ai4s/sdk/mock-gateway": r("../../packages/sdk/src/mockGateway.ts"),
+      "@ai4s/sdk": r("../../packages/sdk/src/index.ts"),
     },
   },
   test: {

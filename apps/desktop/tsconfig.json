@@ -20,7 +20,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@ai4s/shared": ["../../packages/shared/src/index.ts"]
+      "@ai4s/shared": ["../../packages/shared/src/index.ts"],
+      "@ai4s/sdk": ["../../packages/sdk/src/index.ts"],
+      "@ai4s/sdk/mock-gateway": ["../../packages/sdk/src/mockGateway.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]
