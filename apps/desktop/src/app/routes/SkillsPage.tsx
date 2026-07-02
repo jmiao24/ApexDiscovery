@@ -4,20 +4,26 @@ interface SkillItem {
   name: string;
   desc: string;
   installed: boolean;
-  source: string;
+  /** GitHub repo path for the source, if external. */
+  repo?: string;
 }
 
 const CORE: SkillItem[] = [
-  { name: "reproducible-research", desc: "Standardize project structure, artifacts, logs.", installed: true, source: "core" },
-  { name: "literature-review", desc: "Search, filter, and summarize literature.", installed: true, source: "core" },
-  { name: "bibliometric-analysis", desc: "Year trends, keywords, journals, clustering.", installed: true, source: "core" },
-  { name: "figure-provenance", desc: "Figures must trace to code and data.", installed: true, source: "core" },
-  { name: "citation-reviewer", desc: "Check citation format and sources.", installed: true, source: "core" },
-  { name: "paper-to-report", desc: "Generate a Markdown report.", installed: true, source: "core" },
+  { name: "reproducible-research", desc: "Standardize project structure, artifacts, logs.", installed: true },
+  { name: "literature-review", desc: "Search, filter, and summarize literature.", installed: true },
+  { name: "bibliometric-analysis", desc: "Year trends, keywords, journals, clustering.", installed: true },
+  { name: "figure-provenance", desc: "Figures must trace to code and data.", installed: true },
+  { name: "citation-reviewer", desc: "Check citation format and sources.", installed: true },
+  { name: "paper-to-report", desc: "Generate a Markdown report.", installed: true },
 ];
 
 const RECOMMENDED: SkillItem[] = [
-  { name: "K-Dense scientific-agent-skills", desc: "~148 curated scientific skills. Install by domain.", installed: false, source: "K-Dense-AI/scientific-agent-skills" },
+  {
+    name: "K-Dense scientific-agent-skills",
+    desc: "~148 curated scientific skills. Install by domain.",
+    installed: false,
+    repo: "K-Dense-AI/scientific-agent-skills",
+  },
 ];
 
 export function SkillsPage() {
@@ -41,9 +47,10 @@ export function SkillsPage() {
           ))}
         </Section>
 
-        <button className="mt-6 flex items-center gap-2 rounded-input border border-border bg-surface px-3 py-2 text-sm text-text hover:bg-surface-2">
-          <Github size={16} /> Install from GitHub
-        </button>
+        <p className="mt-6 text-xs text-muted">
+          Core skills live in <span className="font-mono">runtime/skills/core</span> and ship with the
+          app. External skills open their source repo — curated install lands in a later release.
+        </p>
       </div>
     </div>
   );
@@ -73,9 +80,14 @@ function SkillRow({ item }: { item: SkillItem }) {
           <Check size={14} /> Enabled
         </span>
       ) : (
-        <button className="rounded-input bg-accent px-3 py-1 text-xs font-medium text-accent-fg">
-          Install
-        </button>
+        <a
+          href={item.repo ? `https://github.com/${item.repo}` : "#"}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1 rounded-input border border-border px-3 py-1 text-xs font-medium text-text hover:bg-surface-2"
+        >
+          <Github size={13} /> View source
+        </a>
       )}
     </div>
   );
