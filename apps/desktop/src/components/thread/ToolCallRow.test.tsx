@@ -1,0 +1,32 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import type { ToolCallStatus } from "@ai4s/shared";
+import { ToolCallRow } from "./ToolCallRow";
+
+const STATUSES: [ToolCallStatus, string][] = [
+  ["pending", "Pending"],
+  ["running", "Running"],
+  ["waiting-approval", "Waiting"],
+  ["success", "Success"],
+  ["warning", "Warning"],
+  ["failed", "Failed"],
+];
+
+describe("ToolCallRow", () => {
+  it.each(STATUSES)("renders the %s status badge", (status, label) => {
+    const { container } = render(
+      <ToolCallRow block={{ kind: "tool-call", title: "Run tool", status }} />,
+    );
+    expect(container.querySelector(`[data-status="${status}"]`)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: label })).toBeInTheDocument();
+  });
+
+  it("shows the right-aligned meta", () => {
+    render(
+      <ToolCallRow
+        block={{ kind: "tool-call", title: "Dispatch", status: "success", meta: "142 lines of output" }}
+      />,
+    );
+    expect(screen.getByText("142 lines of output")).toBeInTheDocument();
+  });
+});
