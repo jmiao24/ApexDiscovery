@@ -1,16 +1,15 @@
 # Slice #1 — UI Shell + Static Workspace (Design Spec)
 
 Date: 2026-07-02
-Status: Awaiting user review
+Status: Awaiting user review (revised to match Claude Science reference screenshots)
 Part of: AI4S Workbench Desktop v0.1 (see `docs/PRD.md`, `docs/TECHNICAL_DESIGN.md`)
+Visual reference: three Claude Science screenshots provided by the user (logo need not match).
 
 ## 1. Why this slice first
 
 v0.1 is ~8 independent subsystems. This slice is the frontend foundation every later
-slice plugs into. It is independently verifiable (launch it, click through every page)
-and produces the README screenshots. It has **no** dependency on Hermes, Python, Rust,
-or the network, so it can be built and shipped immediately with the available tooling
-(Node 24 / pnpm 9.4).
+slice plugs into. It is independently verifiable (launch it, click through), needs no
+Hermes/Python/Rust/network, and produces the README screenshots.
 
 Build order for the rest of v0.1 (each its own spec → plan → implement cycle):
 2. HermesClient SDK + live agent chat · 3. Runtime Manager · 4. Provenance + Reviewer ·
@@ -18,40 +17,43 @@ Build order for the rest of v0.1 (each its own spec → plan → implement cycle
 
 ## 2. Goal & non-goals
 
-**Goal:** a runnable frontend that renders the entire workbench UI with mock data, in
-both light and dark themes, navigable across all pages, with the key interaction cards
-(plan / tool-call / approval / artifact) rendered from realistic fixtures.
+**Goal:** a runnable frontend that reproduces the Claude Science interaction model with
+mock data — a three-column workbench (sessions sidebar · thread/canvas · contextual
+inspector) rendered in a warm paper aesthetic, faithfully matching the three reference
+screenshots.
 
-**Non-goals (this slice):** no real agent, no real data or persistence, no network
-calls, no code execution, no Tauri native shell yet.
+**Non-goals (this slice):** no real agent, data, persistence, network, code execution,
+live kernel, or Tauri native shell.
 
 ## 3. Decisions adopted
 
-- **First slice = UI shell + static workspace** (recommended; user was away, defaults adopted).
-- **Browser-first**: build as a pure Vite React app runnable via `pnpm dev` in a browser.
-  The thin Tauri `src-tauri` wrapper is added in a later step once Rust (rustup) is
-  installed. Reversible — the frontend code does not change when wrapped.
-- **Component style**: shadcn-style — copy-in components built on Radix primitives +
-  Tailwind, for full control over the restrained/refined aesthetic (PRD §6.1). No heavy
-  prebuilt component library.
+- **First slice = UI shell + static workspace.**
+- **Browser-first**: pure Vite React app via `pnpm dev`; the thin Tauri `src-tauri`
+  wrapper is added later once Rust (rustup) is installed. Frontend code is unchanged when wrapped.
+- **Component style**: shadcn-style copy-in components on Radix primitives + Tailwind.
+- **Layout follows the screenshots** (three columns; no global top bar), superseding the
+  earlier TopBar+ArtifactDock + page-per-route model in `docs/TECHNICAL_DESIGN.md` §6.3.
+- **Light "paper" theme first**; dark theme structured via CSS variables but deferred.
+- **PDF inspector** renders a styled HTML facsimile for the mock; real pdf.js deferred.
 
 ## 4. Tech stack
 
 | Concern | Choice | Notes |
 | --- | --- | --- |
-| Framework | React + TypeScript + Vite | Per tech design §4.1 |
-| Styling | Tailwind CSS + Radix UI (shadcn-style) | Copy-in components |
-| Routing | React Router | |
-| UI state | Zustand | theme, active project, panel toggles, palette open |
+| Framework | React + TypeScript + Vite | tech design §4.1 |
+| Styling | Tailwind CSS + Radix UI (shadcn-style) | copy-in components |
+| Routing | React Router | session-centric routes |
+| UI state | Zustand | theme, active project/session, inspector state, palette |
 | Command palette | `cmdk` | ⌘K / Ctrl+K |
-| Markdown | `react-markdown` (+ remark-gfm) | reports, plan, review |
-| Code view | `highlight.js` (lightweight, synchronous, read-only) | Monaco deferred |
+| Markdown | `react-markdown` + `remark-gfm` | agent messages, reports |
+| Code view | `highlight.js` (read-only, synchronous) | Monaco deferred |
+| Fonts | `@fontsource` — serif display (Source Serif 4), sans (Inter), mono (JetBrains Mono) | bundled locally, offline-friendly |
+| Icons | `lucide-react` | line icons matching the reference |
 | Testing | Vitest + React Testing Library | TDD |
 
-**Deferred by YAGNI:** Monaco editor, charting library (ECharts/Plotly — figures shown
-as static images this slice), TanStack Query (no real async yet), `packages/ui`
-extraction (components live in `apps/desktop` until a second consumer exists), real
-Tauri shell, persistence.
+**Deferred (YAGNI):** Monaco, charting library (figures = static images), real pdf.js,
+TanStack Query (no async yet), live notebook kernel, `packages/ui` extraction, real
+Tauri shell, persistence, dark-theme polish.
 
 ## 5. Monorepo layout
 
@@ -59,122 +61,160 @@ Activate pnpm workspaces now:
 
 - `pnpm-workspace.yaml` + root `package.json` (workspace scripts, shared devDeps).
 - **`apps/desktop`** — the Vite React app (active).
-- **`packages/shared`** — the stable domain TypeScript types, imported by the app and,
-  later, by the SDK/runtime: `Project`, `Plan`, `PlanStep`, `ToolCall`, `ToolCallStatus`,
-  `Artifact`, `ArtifactType`, `ProvenanceEvent`, `Citation`, `ReviewFinding`,
-  `RuntimeStatus`, `ModelStatus`. (active)
-- `packages/ui`, `packages/sdk` — remain stubs until a second consumer exists.
+- **`packages/shared`** — stable domain types imported by the app and later the SDK:
+  `Project`, `Session`, `Message`, `StepSummary`, `ToolCall`, `ToolCallStatus`,
+  `ReviewFinding`, `Artifact`, `ArtifactType`, `ArtifactVersion`, `NotebookCell`,
+  `ProvenanceEvent`, `Citation`, `RunningJob`, `RuntimeStatus`, `ModelStatus`. (active)
+- `packages/ui`, `packages/sdk` — stubs until a second consumer exists.
 
 ## 6. Application structure
-
-Reuses the existing `apps/desktop/src` skeleton (tech design §4.2):
 
 ```text
 src/
   app/
-    routes/        # route definitions + page components
-    layout/        # AppShell, TopBar, Sidebar, ArtifactDock
+    routes/        # route defs + top-level page components
+    layout/        # AppShell, Sidebar, ThreadPane, InspectorPane
     providers/     # ThemeProvider, RouterProvider, StoreProvider
   components/
-    sidebar/ topbar/ command-palette/ cards/ artifact-viewer/
-    approval-dialog/ tool-call-card/ code-viewer/ markdown-viewer/
-  features/
-    onboarding/ projects/ chat/ agent-runtime/ literature/
-    artifacts/ provenance/ review/ skills/ settings/
+    sidebar/       # Wordmark, ProjectSwitcher, SidebarNav, SessionList, SettingsButton
+    thread/        # ThreadView, UserMessage, AgentMessage, StepSummaryRow,
+                   #   ToolCallRow, ReviewerCard, DataTable, FigureBlock,
+                   #   AnnotationPopover, RunningJobsOverlay, StatusLine, Composer
+    inspector/     # InspectorShell, ArtifactInspector, NotebookInspector, PdfInspector
+    command-palette/  code-viewer/  markdown-viewer/  cards/  approval-dialog/
+  features/        # onboarding, projects, chat, literature, artifacts, provenance,
+                   #   review, skills, settings  (thin this slice; wired later)
   lib/
-    store/         # Zustand stores
-    theme/         # CSS variables, tokens, theme toggle
-    mock/          # fixtures (the BCI-trends demo project)
-    events/ api/   # stubs this slice; wired in slice #2
+    store/  theme/  mock/  events/(stub)  api/(stub)
 ```
 
-### 6.1 Layout
+### 6.1 Layout — three columns (no global top bar)
 
-`AppShell` composes:
+`AppShell` = `Sidebar` (left, ~272px) · `ThreadPane` (center, flexible) · `InspectorPane`
+(right, ~46%, collapsible/closable).
 
-- **TopBar** — project selector · model status pill · runtime status pill · sync · settings.
-- **Sidebar** (left) — global nav: Projects, Workflows, Skills, Connectors, Settings.
-- **Main** — `<Outlet/>` for the active route.
-- **ArtifactDock** (right) — Files / Figures / Tables / Citations / Review; shown on
-  project routes, collapsible.
+**Sidebar** (white, thin right border):
+- Wordmark (serif) + `Beta` tag.
+- Project switcher: `←  <Project name>  ▾` (back arrow + dropdown).
+- Nav actions: `+ New`, `Customize`, `Files` (lucide icons).
+- Grouped session list under section headers (`Today`, `Active`); each row = status dot +
+  title (truncated) + optional right-aligned count badge (e.g. `8`).
+- Footer: settings gear, plus small runtime/model status pills.
+
+**ThreadPane** (center): renders the active session as an ordered list of blocks +
+a sticky bottom `Composer`. Block types (all from mock this slice):
+- `UserMessage` — soft gray rounded bubble.
+- `AgentMessage` — markdown text with **blue monospace inline-code tokens**.
+- `StepSummaryRow` — collapsible: `› Ran 4 searches, loaded 2 skills, … +2 more` · right `10 steps`.
+- `ToolCallRow` — leading icon + summary + right meta (`142 lines of output`, elapsed).
+  Status ∈ {Pending, Running, WaitingApproval, Success, Warning, Failed} with a badge.
+- `ReviewerCard` — header `⛊ Reviewer · N findings`; each finding has a colored badge
+  (`Warn`=amber, `OK`=green ✓, `Error`=red), title, and an expandable monospace evidence body.
+- `DataTable` — bordered table (the arm/n_latent/label example), monospace label cells.
+- `FigureBlock` — captioned static image; supports an `AnnotationPopover`
+  (numbered pin + note text + `Send` button), matching shot 1.
+- `RunningJobsOverlay` — floating `REMOTE · N` list of jobs (spinner + label + elapsed).
+- `StatusLine` — e.g. `⚡ 8 running · 16m 2s` or `all 5 agents done · Reviewing`.
+- `Composer` — rounded input `Ask anything`, left `+`/tools icons, right mic + **rust send button**.
+
+**InspectorPane** (right): `InspectorShell` (header: title, version selector `‹ v2 ›`,
+download, close) hosting one of three variants:
+- `ArtifactInspector` — tab bar `Code · Execution Log · Messages · Environment · Review ✓`;
+  `Download script` button; `Inputs` chips (filenames); `CodeViewer` with line numbers. (shot 1)
+- `NotebookInspector` — notebook name tab + `Shared with the agent` + `● Live ▾`;
+  cells (`[28] python`) with line-numbered code; `> output`; kernel footer text. (shot 2)
+- `PdfInspector` — `review.pdf`; styled two-column HTML facsimile (title, summary table,
+  figure, equations, sections). (shot 3)
 
 ### 6.2 Routes
 
-| Path | Page | Content |
+| Path | Renders |
+| --- | --- |
+| `/` | redirect to the mock project's default session |
+| `/project/:projectId/session/:sessionId` | AppShell with the session thread + its inspector |
+| `/skills` | Skills page (installed / recommended / install-from-GitHub) — paper aesthetic |
+| `/settings` | Settings (model provider, masked API keys, workspace path, backend, approvals, theme) |
+| `*` | NotFound (404) |
+
+Files/Customize open lightweight panels within the shell (mock). The PRD's Literature /
+Data&Code / Artifacts / Review surfaces are represented through the thread + inspector
+this slice; dedicated pages for them are later slices.
+
+## 7. Visual system (warm paper)
+
+CSS custom properties; light theme is authoritative, dark defined but unpolished.
+
+| Token | Light value (approx) | Use |
 | --- | --- | --- |
-| `/` | Home | welcome card, new project, recent projects, example workflows, runtime status, model status |
-| `/project/:id` | Workspace | 3-column: file/workflow tree ‖ agent chat + plan card + tool-call cards + execution timeline ‖ artifact dock |
-| `/project/:id/literature` | Literature | search box, filters, list, abstract preview, add-to-corpus, export buttons |
-| `/project/:id/data` | Data & Code | file tree, script preview (highlighter), CSV preview, run history |
-| `/project/:id/artifacts` | Artifacts | figure gallery, report preview, table preview, provenance chain |
-| `/project/:id/review` | Review | citation / figure-provenance / data-source / reproducibility checks, warnings, limitations |
-| `/skills` | Skills | installed, recommended, install-from-GitHub, enable/disable, SKILL.md view |
-| `/settings` | Settings | model provider, API keys (masked), workspace path, runtime backend, approvals, theme |
-| `*` | NotFound | 404 |
+| `--bg` | warm cream `#F7F5EF` | app background |
+| `--surface` | white `#FFFFFF` | cards, panels |
+| `--border` | `#E7E3DA` | hairline borders |
+| `--text` | warm near-black `#2A2723` | body text |
+| `--muted` | `#8C877D` | secondary text |
+| `--accent` | rust/terracotta `#C15F3C` | send button, primary action |
+| `--link` | blue `#2A6FDB` | links, inline-code tokens |
+| `--warn` | amber `#C98A2B` | Reviewer Warn |
+| `--ok` | green `#4B8B5B` | Reviewer OK / success |
+| `--error` | soft red `#C0564B` | failures |
+| radius | 12–16px cards, 10px inputs | generous rounding |
 
-### 6.3 Key components (with props from `packages/shared` types)
+Fonts: serif display for wordmark + PDF facsimile; humanist sans (Inter) for UI; mono
+(JetBrains Mono) for code and inline tokens. Theme toggle in Settings, persisted to
+`localStorage`; first load respects `prefers-color-scheme`.
 
-- **PlanCard** — goal, steps, tools, expected artifacts, risks, auth-required actions;
-  buttons: Approve & Run · Edit Plan · Run Step-by-step · Save as Workflow (stubbed → toast).
-- **ToolCallCard** — name, status badge, input/output summary, duration, view-details,
-  copy-log. Status ∈ {Pending, Running, WaitingApproval, Success, Warning, Failed}.
-- **ApprovalDialog** — action description; options Allow Once · Always Allow for Project ·
-  Deny · View Details (Radix Dialog).
-- **CommandPalette** — ⌘K/Ctrl+K; actions: new project, search literature, run reviewer,
-  open settings, switch model, install skill, export report (navigate or toast).
-- **ArtifactViewer / MarkdownViewer / CodeViewer** — render fixtures.
+## 8. Mock data (three reference surfaces)
 
-## 7. Theming
+One mock **project** with several **sessions**, under `src/lib/mock/`, typed against
+`packages/shared`. Three sessions reproduce the screenshots so all block/inspector types
+are exercised and the result is screenshot-ready:
 
-CSS custom properties for the PRD §6.2 palette (light + dark). Light: warm-white bg,
-deep-indigo primary, teal accent, soft green/amber/red for success/warning/error. Dark:
-near-black/deep-navy bg, dark-slate cards, blue-violet primary, cyan accent. Toggle in
-TopBar/Settings, persisted to `localStorage` via Zustand; respects `prefers-color-scheme`
-on first load.
+1. **Figure canvas** (shot 1): a session showing a `FigureBlock` (UMAP placeholder image)
+   with an `AnnotationPopover`; inspector = `ArtifactInspector` (Python code, Inputs chips,
+   Review tab checked).
+2. **Hyperparameter screen** (shot 2): title + inline-code prose + `DataTable` (8 arms) +
+   `FigureBlock` + `RunningJobsOverlay` + `StatusLine`; inspector = `NotebookInspector`
+   (pandas/scanpy cell + output + kernel footer).
+3. **Literature review** (shot 3): user message + `StepSummaryRow` + `ToolCallRow` +
+   `ReviewerCard` (one Warn finding with monospace evidence) + agent acknowledgment;
+   inspector = `PdfInspector` (review.pdf facsimile). Aligns with the PRD BCI/lit-review demo.
 
-## 8. Mock data
-
-A single fully-populated **BCI-trends** fixture project under `src/lib/mock/`, matching
-the demo in PRD §8: a plan, ~40 corpus rows, three placeholder figures (static PNG/SVG),
-`report.md`, `review.md`, and a sequence of provenance events + a manifest. Typed against
-`packages/shared`. Doubles as the demo content and screenshot source.
+Content is illustrative (adapted to AI4S Workbench, not copied verbatim from Claude Science).
 
 ## 9. State & data flow
 
-- **Zustand** stores: `uiStore` (theme, sidebar/dock collapse, palette open), `projectStore`
-  (active project id, selected artifact). Mock data is imported synchronously from
-  `lib/mock`; no async layer this slice.
-- `lib/events` and `lib/api` are typed stubs (empty interfaces) so slice #2 can implement
-  them without restructuring.
+- **Zustand**: `uiStore` (theme, sidebar/inspector collapse, palette open),
+  `sessionStore` (active project/session id, selected artifact + inspector variant,
+  expanded step/reviewer rows). Mock imported synchronously; no async layer.
+- `lib/events`, `lib/api` are typed stubs so slice #2 implements them without restructuring.
 
 ## 10. Error & empty states
 
-Static UI, so minimal but designed-in: 404 route page; empty-state components for empty
-lists (no projects, no artifacts); disconnected states for the runtime/model status pills
-(foreshadowing real states); loading skeleton components exist even if mock data is
-synchronous, so slice #2 can reuse them.
+404 route; empty-state components (no sessions, no artifacts, no findings); disconnected
+runtime/model status pills; reusable loading-skeleton components (even though mock is sync)
+for slice #2.
 
 ## 11. Testing (TDD)
 
-Vitest + React Testing Library. Write tests first per superpowers TDD:
-
-- Each route renders its page with mock data without throwing.
-- `ToolCallCard` renders the correct badge for each status.
-- `PlanCard` renders all sections and buttons.
-- Theme toggle flips the `data-theme` attribute and persists.
-- CommandPalette opens on the shortcut and filters actions by query.
+Vitest + React Testing Library, tests first:
+- The session route renders each of the three mock sessions without throwing.
+- `ToolCallRow` renders the correct badge per status; `ReviewerCard` shows the finding
+  badge and expands/collapses.
+- `Composer` renders and the send button is the accent color; `AnnotationPopover` opens.
+- `InspectorShell` switches among Artifact / Notebook / PDF variants and Artifact tabs switch.
+- Theme toggle flips `data-theme` and persists; CommandPalette opens on ⌘K/Ctrl+K and filters.
 
 ## 12. Success criteria (verification)
 
 1. `pnpm install && pnpm --filter desktop dev` serves the app in a browser.
-2. Every route renders with mock data in **both** light and dark themes.
-3. ⌘K/Ctrl+K opens the command palette and filtering works.
-4. Zero console errors/warnings on navigation.
-5. `pnpm typecheck`, `pnpm lint`, and `pnpm test` all pass.
-6. The Workspace page is screenshot-ready for the README.
+2. All three mock sessions render, each with its correct inspector variant, matching the
+   screenshots' structure in the light paper theme.
+3. ⌘K/Ctrl+K opens the palette and filtering works.
+4. Zero console errors/warnings on navigation and inspector switching.
+5. `pnpm typecheck`, `pnpm lint`, `pnpm test` all pass.
+6. Each of the three surfaces is screenshot-ready for the README.
 
 ## 13. Explicitly out of scope / deferred
 
-Real Tauri shell (`src-tauri`), Monaco, charting library, TanStack Query, `packages/ui`
-and `packages/sdk` implementation, real agent/runtime, persistence, literature APIs,
-provenance writing, packaging/CI. Each is a later slice.
+Real Tauri shell, Monaco, charting lib, real pdf.js, TanStack Query, live notebook kernel,
+`packages/ui` / `packages/sdk` implementation, real agent/runtime/data, persistence,
+literature APIs, provenance writing, packaging/CI, polished dark theme. Each is a later slice.
