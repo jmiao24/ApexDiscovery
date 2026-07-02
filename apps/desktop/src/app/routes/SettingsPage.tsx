@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { useUiStore } from "@/lib/store";
 import { useRuntimeStore } from "@/lib/runtime";
+import { configureOpenCode, isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/cn";
+
+// Maps the UI provider label to OpenCode's provider id.
+const PROVIDER_ID: Record<string, string> = {
+  OpenRouter: "openrouter",
+  "OpenAI-compatible": "openai",
+  Anthropic: "anthropic",
+  "Local (Ollama)": "ollama",
+};
 
 /**
  * Settings. API credentials are editable and start empty (BYOK). The agent
@@ -18,6 +27,30 @@ export function SettingsPage() {
   const [model, setModel] = useState("");
   const [workspace, setWorkspace] = useState("~/AI4S Workbench/workspaces");
   const [backend, setBackend] = useState("Local (manual approval)");
+  const [saveMsg, setSaveMsg] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+
+  const onSave = async () => {
+    setSaving(true);
+    const res = await configureOpenCode({
+      provider: PROVIDER_ID[provider] ?? provider.toLowerCase(),
+      apiKey,
+      model,
+      baseUrl: baseUrl || undefined,
+    });
+    setSaving(false);
+    if (res.ok) {
+      setSaveMsg(`Saved to ${res.path}. Reconnect the runtime to apply.`);
+    } else if (res.reason === "not-desktop") {
+      setSaveMsg(
+        apiKey
+          ? "Saved in-app. Run the desktop app to write the key into OpenCode, or configure it with `opencode auth`."
+          : "Enter an API key first, or configure OpenCode with `opencode auth`.",
+      );
+    } else {
+      setSaveMsg(`Could not write config: ${res.message}`);
+    }
+  };
 
   return (
     <div className="h-full overflow-y-auto">
@@ -139,11 +172,18 @@ export function SettingsPage() {
         </Field>
 
         <div className="mt-8 flex items-center gap-3">
-          <button className="rounded-input bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90">
-            Save settings
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="rounded-input bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save settings"}
           </button>
           <span className="text-xs text-muted">
-            {apiKey ? "API key set for this session." : "No API key yet — you can add it anytime."}
+            {saveMsg ||
+              (isTauri
+                ? "Writes your key into OpenCode's config."
+                : "Desktop app writes the key into OpenCode; in the browser, use `opencode auth`.")}
           </span>
         </div>
       </div>
