@@ -232,6 +232,8 @@ export interface NotebookCell {
   language: string;
   code: string;
   output?: string;
+  /** Base64 PNG from a display_data/execute_result output (e.g. a matplotlib figure). */
+  image?: string;
 }
 
 export interface NotebookInspector {

@@ -25,6 +25,19 @@ describe("foldEvent", () => {
     expect(s.blocks[0]).toMatchObject({ kind: "tool-call", status: "success", title: "search (done)" });
   });
 
+  it("never blanks a tool row when the completed event reports an empty title", () => {
+    // Completed MCP tool parts carry title: "" — the tool name must survive.
+    const s = foldAll([
+      { type: "tool.updated", sessionId: S, callId: "c1", tool: "jupyter_insert_cell", status: "running" },
+      { type: "tool.updated", sessionId: S, callId: "c1", tool: "jupyter_insert_cell", status: "success", title: "" },
+    ]);
+    expect(s.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      status: "success",
+      title: "jupyter_insert_cell",
+    });
+  });
+
   it("surfaces a written file as an artifact block, deduped by path", () => {
     const s = foldAll([
       { type: "tool.updated", sessionId: S, callId: "c1", tool: "write", status: "running", input: { filePath: "fig.py" } },

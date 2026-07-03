@@ -152,6 +152,23 @@ describe("artifactBlockToInspector", () => {
     expect(insp.language).toBe("python");
   });
 
+  it("surfaces the notebook a jupyter MCP tool works on as a live artifact", () => {
+    const a = deriveArtifact(
+      write(
+        { notebook_name: "scatter-demo", notebook_path: "scatter-demo.ipynb", mode: "create" },
+        { tool: "jupyter_use_notebook" },
+      ),
+    );
+    expect(a).toMatchObject({
+      kind: "artifact",
+      path: "scatter-demo.ipynb",
+      artifact: "notebook",
+      tool: "jupyter_use_notebook",
+    });
+    // Cell-level tools carry no path — no artifact, no crash.
+    expect(deriveArtifact(write({ cell_index: 0 }, { tool: "jupyter_execute_cell" }))).toBeNull();
+  });
+
   it("routes .ipynb artifacts to the runnable notebook editor, others to file preview", () => {
     const nb = fileInspectorFromBlock({
       kind: "artifact",

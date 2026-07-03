@@ -361,7 +361,13 @@ export function foldEvent(state: FoldState, event: OpenCodeEvent): FoldState {
     }
     case "tool.updated": {
       const key = `tool:${event.callId}`;
-      const block: ThreadBlock = { kind: "tool-call", title: event.title ?? event.tool, status: event.status };
+      // Completed MCP tools report title as "" — fall back to the tool name,
+      // never render a blank row.
+      const block: ThreadBlock = {
+        kind: "tool-call",
+        title: event.title?.trim() || event.tool || "tool",
+        status: event.status,
+      };
       if (key in index) blocks[index[key]] = block;
       else {
         blocks.push(block);
@@ -420,7 +426,11 @@ export function historyToThread(messages: HistoryMessage[]): FoldState {
         }
         else if (p.type === "tool") {
           const status = mapToolStatus(p.state?.status);
-          blocks.push({ kind: "tool-call", title: p.state?.title ?? p.tool ?? "tool", status });
+          blocks.push({
+            kind: "tool-call",
+            title: p.state?.title?.trim() || p.tool || "tool",
+            status,
+          });
           const artifact = deriveArtifact({
             type: "tool.updated",
             sessionId: "",

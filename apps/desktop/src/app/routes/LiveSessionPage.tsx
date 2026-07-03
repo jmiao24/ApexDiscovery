@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Loader2, NotebookPen, PlugZap } from "lucide-react";
 import { useRuntimeStore } from "@/lib/runtime";
@@ -60,6 +60,20 @@ export function LiveSessionPage() {
       b.kind === "artifact" && b.filename.endsWith(".ipynb"),
   );
   const uniqueNotebooks = [...new Map(sessionNotebooks.map((b) => [b.path, b])).values()];
+
+  // When the agent starts working a notebook (Jupyter MCP), open it beside the
+  // chat automatically — once per notebook, so a manual close stays closed.
+  const autoOpened = useRef(new Set<string>());
+  useEffect(() => {
+    const agentNb = uniqueNotebooks.find(
+      (b) => b.tool.toLowerCase().includes("jupyter") && !autoOpened.current.has(b.path),
+    );
+    if (agentNb) {
+      autoOpened.current.add(agentNb.path);
+      openArtifact(agentNb);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uniqueNotebooks.length]);
 
   return (
     <div className="flex h-full min-w-0">

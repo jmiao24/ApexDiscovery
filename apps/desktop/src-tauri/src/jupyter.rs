@@ -179,6 +179,15 @@ pub fn start_jupyter(app: AppHandle, state: State<'_, JupyterState>) -> Result<J
     let meta = load_meta(&app).ok_or("Jupyter setup is incomplete (no server meta)")?;
     let workspace = workspace_dir(&app)?;
 
+    // Kill any orphaned jupyter-lab from a previous app run (a crash or force
+    // quit leaves one behind; two instances then fight over the fixed port).
+    #[cfg(unix)]
+    {
+        let pattern = format!("{}/bin/jupyter-lab", env_dir(&app)?.to_string_lossy());
+        let _ = std::process::Command::new("pkill").args(["-f", &pattern]).output();
+        std::thread::sleep(std::time::Duration::from_millis(400));
+    }
+
     let cmd = app
         .shell()
         .command(lab.to_string_lossy().to_string())

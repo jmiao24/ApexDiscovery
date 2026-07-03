@@ -44,6 +44,34 @@ describe("notebook-file", () => {
     expect(again[1].output).toBe("hello\n2");
   });
 
+  it("carries figure outputs (image/png) through parse and serialize", () => {
+    const withImage = JSON.stringify({
+      cells: [
+        {
+          cell_type: "code",
+          source: "plt.scatter(x, y)",
+          metadata: {},
+          execution_count: 1,
+          outputs: [
+            {
+              output_type: "display_data",
+              data: { "image/png": ["iVBORw0KGgo=\n"], "text/plain": ["<Figure>"] },
+              metadata: {},
+            },
+          ],
+        },
+      ],
+      metadata: {},
+      nbformat: 4,
+      nbformat_minor: 5,
+    });
+    const cells = parseIpynb(withImage);
+    expect(cells[0].image).toBe("iVBORw0KGgo=");
+    expect(cells[0].output).toBe("<Figure>");
+    const again = parseIpynb(serializeIpynb(cells));
+    expect(again[0].image).toBe("iVBORw0KGgo=");
+  });
+
   it("rejects non-notebook JSON and builds a valid empty notebook", () => {
     expect(() => parseIpynb("{}")).toThrow();
     const blank = parseIpynb(emptyIpynb());

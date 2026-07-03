@@ -144,9 +144,19 @@ function firstString(input: Record<string, unknown>, keys: string[]): string | u
  */
 export function deriveArtifact(event: ToolUpdatedEvent): ArtifactBlock | null {
   if (event.status !== "success") return null;
-  if (!WRITE_TOOLS.has((event.tool ?? "").toLowerCase())) return null;
-
+  const tool = (event.tool ?? "").toLowerCase();
   const input = event.input ?? {};
+
+  // Jupyter MCP tools name the notebook they operate on — surface it live.
+  if (tool.includes("jupyter")) {
+    const nb = firstString(input, ["notebook_path", "path", "document_id"]);
+    if (!nb || !nb.endsWith(".ipynb")) return null;
+    const filename = nb.split(/[\\/]/).pop() || nb;
+    return { kind: "artifact", path: nb, filename, artifact: "notebook", tool: event.tool };
+  }
+
+  if (!WRITE_TOOLS.has(tool)) return null;
+
   const path = firstString(input, PATH_KEYS);
   if (!path) return null;
 

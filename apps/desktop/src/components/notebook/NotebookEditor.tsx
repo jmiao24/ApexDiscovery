@@ -29,12 +29,16 @@ export function NotebookEditor({
   const [saved, setSaved] = useState(true);
   const cellsRef = useRef<NotebookCell[] | null>(null);
   cellsRef.current = cells;
+  const rawRef = useRef<string | null>(null);
+  const savedRef = useRef(true);
+  savedRef.current = saved;
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const f = await readArtifact(path);
       if (!f || f.encoding !== "utf8") throw new Error("could not read the notebook");
+      rawRef.current = f.data;
       setCells(parseIpynb(f.data));
       setSaved(true);
     } catch (e) {
@@ -46,11 +50,33 @@ export function NotebookEditor({
     void load();
   }, [load]);
 
+  // Follow the agent live: while the user isn't mid-edit, poll the file and
+  // reload when its content changed on disk (the agent writes via Jupyter).
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (!savedRef.current) return; // never clobber unsaved local edits
+      void (async () => {
+        try {
+          const f = await readArtifact(path);
+          if (f && f.encoding === "utf8" && rawRef.current !== null && f.data !== rawRef.current) {
+            rawRef.current = f.data;
+            setCells(parseIpynb(f.data));
+          }
+        } catch {
+          /* transient read failures are fine */
+        }
+      })();
+    }, 2000);
+    return () => clearInterval(t);
+  }, [path]);
+
   const save = useCallback(async () => {
     const current = cellsRef.current;
     if (!current) return;
     try {
-      await writeWorkspaceFile(path, serializeIpynb(current));
+      const out = serializeIpynb(current);
+      await writeWorkspaceFile(path, out);
+      rawRef.current = out; // our own write is not an external change
       setSaved(true);
     } catch (e) {
       toast.error(`Could not save: ${e instanceof Error ? e.message : String(e)}`);
@@ -188,6 +214,13 @@ export function NotebookEditor({
                 <pre className="mt-1.5 whitespace-pre-wrap rounded-input border border-border bg-surface-2 p-3 font-mono text-[12px] text-text">
                   {cell.output}
                 </pre>
+              )}
+              {cell.image && (
+                <img
+                  src={`data:image/png;base64,${cell.image}`}
+                  alt={`Cell ${cell.index} figure`}
+                  className="mt-1.5 max-w-full rounded-input border border-border bg-white p-2"
+                />
               )}
             </div>
           ))}
