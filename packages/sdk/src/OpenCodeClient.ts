@@ -41,6 +41,8 @@ export class OpenCodeClient {
   private abort: AbortController | null = null;
   private readonly eventListeners = new Set<EventListener>();
   private readonly statusListeners = new Set<StatusListener>();
+  /** messageID → role, learned from message.updated, to skip echoed user parts. */
+  private readonly roles = new Map<string, string>();
 
   constructor(opts: OpenCodeClientOptions = {}) {
     this.baseUrl = (opts.baseUrl ?? DEFAULT_OPENCODE_URL).replace(/\/$/, "");
@@ -222,9 +224,19 @@ export class OpenCodeClient {
   private normalize(raw: OpenCodeRawEvent): void {
     const props = raw.properties ?? {};
     switch (raw.type) {
+      case "message.updated": {
+        // Learn each message's role so we can skip the echoed user message parts.
+        const info = props.info as { id?: string; role?: string } | undefined;
+        if (info?.id && info.role) this.roles.set(info.id, info.role);
+        break;
+      }
       case "message.part.updated": {
-        const part = props.part as (OpenCodePart & { sessionID?: string }) | undefined;
+        const part = props.part as
+          | (OpenCodePart & { sessionID?: string; messageID?: string })
+          | undefined;
         if (!part) return;
+        // The user's own message is echoed here; the app already shows it locally.
+        if (part.messageID && this.roles.get(String(part.messageID)) === "user") return;
         const sessionId = String(part.sessionID ?? "");
         if (part.type === "text") {
           const t = part as { id: string; text: string };
