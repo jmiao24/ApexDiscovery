@@ -54,6 +54,11 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
       res.end(JSON.stringify([{ id: "ses_mock", title: "New session", slug: "mock" }]));
       return;
     }
+    if (req.method === "DELETE" && /^\/session\/[^/]+$/.test(url)) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end("true");
+      return;
+    }
     const mm = url.match(/^\/session\/([^/]+)\/message/);
     if (req.method === "GET" && mm) {
       res.writeHead(200, { "Content-Type": "application/json" });

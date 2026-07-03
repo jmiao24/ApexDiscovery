@@ -23,6 +23,19 @@ export async function startRuntime(): Promise<string | null> {
   return invoke<string>("start_runtime");
 }
 
+export interface ToolStatus {
+  name: string;
+  found: boolean;
+  version?: string | null;
+}
+
+/** Detect scientific/runtime tools on the user's system (desktop only). */
+export async function detectTools(): Promise<ToolStatus[]> {
+  if (!isTauri) return [];
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ToolStatus[]>("detect_tools");
+}
+
 /** Write the provider key/model into OpenCode's config via the Rust command. */
 export async function configureOpenCode(
   creds: OpenCodeCredentials,

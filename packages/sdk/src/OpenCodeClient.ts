@@ -128,6 +128,15 @@ export class OpenCodeClient {
     return arr.map((s) => ({ id: s.id, title: s.title ?? "Untitled", slug: s.slug }));
   }
 
+  /** Delete a session. */
+  async deleteSession(sessionId: string): Promise<void> {
+    const res = await this.fetchImpl(`${this.baseUrl}/session/${encodeURIComponent(sessionId)}`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`Failed to delete session (${res.status})`);
+  }
+
   /** Load a session's message history. */
   async getMessages(sessionId: string): Promise<HistoryMessage[]> {
     const res = await this.fetchImpl(

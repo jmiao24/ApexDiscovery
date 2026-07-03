@@ -6,7 +6,8 @@ import { BlockList } from "@/components/thread/BlockList";
 import { Composer } from "@/components/thread/Composer";
 import { cn } from "@/lib/cn";
 
-/** Live agent session backed by the OpenCode runtime (real sessions + history). */
+/** Live agent session backed by the OpenCode runtime. `/live` (no id) is a blank draft;
+ *  the session is created lazily on the first message, then the URL updates to /live/:id. */
 export function LiveSessionPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -20,41 +21,39 @@ export function LiveSessionPage() {
     connect,
     disconnect,
     openSession,
-    newSession,
+    startDraft,
     sendPrompt,
   } = useRuntimeStore();
 
   const connected = status === "ready";
   const connecting = status === "connecting";
 
-  // Open the routed session (loads its history); if none, jump to the newest.
   useEffect(() => {
-    if (sessionId) {
-      void openSession(sessionId);
-    } else if (sessions.length > 0) {
-      navigate(`/live/${sessions[0].id}`, { replace: true });
-    }
-  }, [sessionId, sessions, openSession, navigate]);
+    if (sessionId) void openSession(sessionId);
+    else startDraft(); // blank draft — no session created yet (#3)
+  }, [sessionId, openSession, startDraft]);
 
-  const startNew = async () => {
-    const id = await newSession();
-    if (id) navigate(`/live/${id}`);
+  const onSend = async (text: string) => {
+    const id = await sendPrompt(text);
+    if (id && !sessionId) navigate(`/live/${id}`); // reflect the freshly-created session
   };
 
   const thread = currentId ? threads[currentId] : undefined;
-  const title = sessions.find((s) => s.id === currentId)?.title ?? "New session";
-  const showEmpty = !currentId || (thread && thread.blocks.length === 0);
+  const title = sessions.find((s) => s.id === currentId)?.title;
+  const isEmpty = !thread || thread.blocks.length === 0;
 
   return (
     <div className="flex h-full min-w-0 flex-col">
       <div className="flex items-center gap-2 border-b border-border px-8 py-4">
-        <h1 className="truncate text-lg text-text">{currentId ? title : "Live session"}</h1>
+        <h1 className="truncate text-lg text-text">{sessionId && title ? title : "New session"}</h1>
         <div className="flex-1" />
         <ConnBadge status={status} />
         <button
-          onClick={startNew}
-          disabled={!connected}
-          className="flex items-center gap-1.5 rounded-input border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-2 disabled:opacity-40"
+          onClick={() => {
+            startDraft();
+            navigate("/live");
+          }}
+          className="flex items-center gap-1.5 rounded-input border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-2"
         >
           <Plus size={15} /> New
         </button>
@@ -96,9 +95,9 @@ export function LiveSessionPage() {
               {error}
             </div>
           )}
-          {connected && showEmpty && (
+          {connected && isEmpty && (
             <div className="py-10 text-center text-sm text-muted">
-              {currentId ? "Send a message to start this session." : "Start a new session to chat."}
+              Send a message to start a new conversation.
             </div>
           )}
           {thread && <BlockList blocks={thread.blocks} />}
@@ -108,15 +107,9 @@ export function LiveSessionPage() {
       <div className="border-t border-border px-8 py-4">
         <div className="mx-auto max-w-[760px]">
           <Composer
-            onSend={sendPrompt}
-            disabled={!connected || !currentId}
-            placeholder={
-              !connected
-                ? "Connect to chat"
-                : currentId
-                  ? "Ask anything"
-                  : "Start a new session first"
-            }
+            onSend={onSend}
+            disabled={!connected}
+            placeholder={connected ? "Ask anything" : "Connect to chat"}
           />
         </div>
       </div>

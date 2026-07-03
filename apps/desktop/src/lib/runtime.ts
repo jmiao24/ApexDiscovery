@@ -10,14 +10,23 @@ import {
   type ToolCallStatus,
 } from "@ai4s/sdk";
 import type { RuntimeStatus, ThreadBlock } from "@ai4s/shared";
-import { isTauri, startRuntime } from "./tauri";
+import { detectTools as probeTools, isTauri, startRuntime, type ToolStatus } from "./tauri";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const URL_KEY = "ai4s.opencodeUrl";
+const HIDDEN_KEY = "ai4s.hiddenExamples";
 
 function initialUrl(): string {
   if (typeof window === "undefined") return DEFAULT_OPENCODE_URL;
   return window.localStorage.getItem(URL_KEY) ?? DEFAULT_OPENCODE_URL;
+}
+function initialHidden(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(window.localStorage.getItem(HIDDEN_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
 }
 
 export interface Thread {
@@ -34,17 +43,23 @@ interface RuntimeState {
   threads: Record<string, Thread>;
   skills: SkillInfo[];
   agents: AgentInfo[];
+  tools: ToolStatus[];
+  hiddenExamples: string[];
   error: string | null;
   setServerUrl: (url: string) => void;
   loadCatalog: () => Promise<void>;
+  detectTools: () => Promise<void>;
   connect: () => Promise<void>;
   connectRetry: (tries?: number) => Promise<void>;
   bootstrap: () => Promise<void>;
   disconnect: () => void;
   refreshSessions: () => Promise<void>;
-  newSession: () => Promise<string | null>;
+  startDraft: () => void;
   openSession: (id: string) => Promise<void>;
-  sendPrompt: (text: string) => Promise<void>;
+  sendPrompt: (text: string) => Promise<string | null>;
+  deleteSession: (id: string) => Promise<void>;
+  hideExample: (id: string) => void;
+  installSkill: (text: string) => Promise<string | null>;
 }
 
 let client: OpenCodeClient | null = null;
@@ -58,6 +73,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   threads: {},
   skills: [],
   agents: [],
+  tools: [],
+  hiddenExamples: initialHidden(),
   error: null,
 
   setServerUrl: (serverUrl) => {
@@ -72,6 +89,14 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       set({ skills, agents });
     } catch {
       /* ignore transient failures */
+    }
+  },
+
+  detectTools: async () => {
+    try {
+      set({ tools: await probeTools() });
+    } catch {
+      /* ignore */
     }
   },
 
@@ -90,9 +115,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       set((s) => {
         const cur = s.threads[sid] ?? emptyThread();
         const folded = foldEvent({ blocks: cur.blocks, index: cur.index }, event);
-        return {
-          threads: { ...s.threads, [sid]: { ...cur, ...folded, loaded: true } },
-        };
+        return { threads: { ...s.threads, [sid]: { ...cur, ...folded, loaded: true } } };
       });
       if (event.type === "session.idle") void get().refreshSessions();
     });
@@ -115,6 +138,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   bootstrap: async () => {
+    void get().detectTools();
     if (!isTauri) return;
     try {
       const url = await startRuntime();
@@ -135,70 +159,116 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   refreshSessions: async () => {
     if (!client) return;
     try {
-      const sessions = await client.listSessions();
-      set({ sessions });
+      set({ sessions: await client.listSessions() });
     } catch {
       /* ignore transient list failures */
     }
   },
 
-  newSession: async () => {
-    if (!client) {
-      set({ error: "Not connected to the OpenCode runtime." });
-      return null;
-    }
-    try {
-      const id = await client.createSession();
-      set((s) => ({
-        threads: { ...s.threads, [id]: { ...emptyThread(), loaded: true } },
-        currentId: id,
-      }));
-      await get().refreshSessions();
-      return id;
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
-      return null;
-    }
-  },
+  // "New" opens a blank draft — no session is created until the first message (#3).
+  startDraft: () => set({ currentId: null }),
 
   openSession: async (id) => {
     set({ currentId: id });
-    const existing = get().threads[id];
-    if (existing?.loaded) return;
+    if (get().threads[id]?.loaded) return;
     if (!client) return;
     try {
       const messages = await client.getMessages(id);
-      set((s) => ({
-        threads: { ...s.threads, [id]: { ...historyToThread(messages), loaded: true } },
-      }));
+      set((s) => ({ threads: { ...s.threads, [id]: { ...historyToThread(messages), loaded: true } } }));
     } catch (err) {
       set({ error: err instanceof Error ? err.message : String(err) });
     }
   },
 
   sendPrompt: async (text) => {
-    const id = get().currentId;
-    if (!id) {
-      set({ error: "No active session." });
-      return;
-    }
-    set((s) => {
-      const cur = s.threads[id] ?? emptyThread();
-      return {
-        threads: {
-          ...s.threads,
-          [id]: { ...cur, loaded: true, blocks: [...cur.blocks, { kind: "user", text }] },
-        },
-      };
-    });
     if (!client) {
       set({ error: "Not connected to the OpenCode runtime." });
-      return;
+      return null;
     }
+    let id = get().currentId;
+    if (!id) {
+      // Lazy-create the session on the first message (#3).
+      try {
+        id = await client.createSession();
+      } catch (err) {
+        set({ error: err instanceof Error ? err.message : String(err) });
+        return null;
+      }
+      set((s) => ({
+        currentId: id,
+        threads: { ...s.threads, [id!]: { ...emptyThread(), loaded: true } },
+      }));
+      void get().refreshSessions();
+    }
+    const sid = id;
+    set((s) => {
+      const cur = s.threads[sid] ?? emptyThread();
+      return {
+        threads: { ...s.threads, [sid]: { ...cur, loaded: true, blocks: [...cur.blocks, { kind: "user", text }] } },
+      };
+    });
     try {
-      await client.sendPrompt(id, text);
+      await client.sendPrompt(sid, text);
     } catch (err) {
       set({ error: err instanceof Error ? err.message : String(err) });
+    }
+    return sid;
+  },
+
+  deleteSession: async (id) => {
+    if (client) {
+      try {
+        await client.deleteSession(id);
+      } catch (err) {
+        set({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    set((s) => {
+      const threads = { ...s.threads };
+      delete threads[id];
+      return {
+        sessions: s.sessions.filter((x) => x.id !== id),
+        threads,
+        currentId: s.currentId === id ? null : s.currentId,
+      };
+    });
+  },
+
+  hideExample: (id) => {
+    const next = Array.from(new Set([...get().hiddenExamples, id]));
+    if (typeof window !== "undefined") window.localStorage.setItem(HIDDEN_KEY, JSON.stringify(next));
+    set({ hiddenExamples: next });
+  },
+
+  // Install a skill by asking the agent (uses OpenCode's customize-opencode skill) (#1).
+  installSkill: async (text) => {
+    if (!client) {
+      set({ error: "Connect the runtime first to install skills." });
+      return null;
+    }
+    try {
+      const id = await client.createSession();
+      set((s) => ({ currentId: id, threads: { ...s.threads, [id]: { ...emptyThread(), loaded: true } } }));
+      await get().refreshSessions();
+      const prompt =
+        "Install the following as an OpenCode skill for this project. Use the " +
+        "customize-opencode skill. If it is a URL, fetch it; if it is Markdown, save it as " +
+        "a skill file under .opencode/skill/. Then reply with the installed skill's name.\n\n---\n" +
+        text;
+      set((s) => {
+        const cur = s.threads[id];
+        return {
+          threads: {
+            ...s.threads,
+            [id]: { ...cur, blocks: [...cur.blocks, { kind: "user", text: `Install skill:\n${text}` }] },
+          },
+        };
+      });
+      await client.sendPrompt(id, prompt);
+      return id;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+      return null;
     }
   },
 }));
@@ -224,11 +294,7 @@ export function foldEvent(state: FoldState, event: OpenCodeEvent): FoldState {
     }
     case "tool.updated": {
       const key = `tool:${event.callId}`;
-      const block: ThreadBlock = {
-        kind: "tool-call",
-        title: event.title ?? event.tool,
-        status: event.status,
-      };
+      const block: ThreadBlock = { kind: "tool-call", title: event.title ?? event.tool, status: event.status };
       if (key in index) blocks[index[key]] = block;
       else {
         blocks.push(block);
@@ -270,15 +336,9 @@ export function historyToThread(messages: HistoryMessage[]): FoldState {
       if (text) blocks.push({ kind: "user", text });
     } else {
       for (const p of m.parts) {
-        if (p.type === "text" && p.text?.trim()) {
-          blocks.push({ kind: "agent", markdown: p.text });
-        } else if (p.type === "tool") {
-          blocks.push({
-            kind: "tool-call",
-            title: p.state?.title ?? p.tool ?? "tool",
-            status: mapToolStatus(p.state?.status),
-          });
-        }
+        if (p.type === "text" && p.text?.trim()) blocks.push({ kind: "agent", markdown: p.text });
+        else if (p.type === "tool")
+          blocks.push({ kind: "tool-call", title: p.state?.title ?? p.tool ?? "tool", status: mapToolStatus(p.state?.status) });
       }
     }
   }

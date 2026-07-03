@@ -2,6 +2,7 @@
 // bundled OpenCode sidecar (isolated config/data + dedicated port; killed on exit).
 mod opencode_config;
 mod runtime;
+mod tools;
 
 use runtime::RuntimeState;
 use tauri::Manager;
@@ -14,7 +15,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             runtime::start_runtime,
             runtime::stop_runtime,
-            runtime::configure_opencode
+            runtime::configure_opencode,
+            tools::detect_tools
         ])
         .build(tauri::generate_context!())
         .expect("error while building AI4S Workbench")

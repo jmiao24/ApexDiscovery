@@ -1,36 +1,92 @@
-import { useEffect } from "react";
-import { Bot, Package, Puzzle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Bot, Boxes, Check, Package, Puzzle, X } from "lucide-react";
 import { useRuntimeStore } from "@/lib/runtime";
+import { cn } from "@/lib/cn";
 
 /**
- * Skills & agents — the REAL ones loaded by the OpenCode runtime (built-in +
- * project `.opencode/skill/` + user config). No hardcoded/fake list.
+ * Skills, agents, install-a-skill, and detected scientific environment — all real:
+ * skills/agents from the OpenCode runtime, environment from the host system.
  */
 export function SkillsPage() {
-  const { skills, agents, status, loadCatalog } = useRuntimeStore();
+  const navigate = useNavigate();
+  const { skills, agents, tools, status, loadCatalog, detectTools, installSkill } = useRuntimeStore();
   const connected = status === "ready";
+  const [text, setText] = useState("");
+  const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
     if (connected) void loadCatalog();
-  }, [connected, loadCatalog]);
+    void detectTools();
+  }, [connected, loadCatalog, detectTools]);
+
+  const onInstall = async () => {
+    if (!text.trim()) return;
+    setInstalling(true);
+    const id = await installSkill(text.trim());
+    setInstalling(false);
+    if (id) {
+      setText("");
+      navigate(`/live/${id}`); // watch the agent install it
+    }
+  };
 
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-8 py-8">
         <h1 className="font-serif text-2xl text-text">Skills &amp; Agents</h1>
         <p className="mt-1 text-sm text-muted">
-          Loaded live from the OpenCode runtime. Add skills as Markdown files under{" "}
+          Loaded live from the OpenCode runtime. Skills live as Markdown files under{" "}
           <span className="font-mono">.opencode/skill/</span> in your workspace or{" "}
           <span className="font-mono">~/.config/opencode</span>.
         </p>
 
-        {!connected && (
-          <div className="mt-6 rounded-card border border-border bg-surface p-5 text-sm text-muted">
-            Connect the runtime to list the skills and agents it has loaded.
+        {/* Install a skill (#1) */}
+        <Section title="Install a skill" icon={<Boxes size={15} />}>
+          <div className="p-4">
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Paste a skill (Markdown) or a GitHub URL — the agent installs it into .opencode/skill/"
+              rows={3}
+              className="w-full resize-y rounded-input border border-border bg-surface px-3 py-2 text-sm text-text outline-none placeholder:text-muted"
+            />
+            <div className="mt-2 flex items-center gap-3">
+              <button
+                onClick={onInstall}
+                disabled={!connected || !text.trim() || installing}
+                className="rounded-input bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-40"
+              >
+                {installing ? "Starting…" : "Install with agent"}
+              </button>
+              <span className="text-xs text-muted">
+                {connected
+                  ? "Opens a session and asks the agent to add it (customize-opencode)."
+                  : "Connect the runtime first."}
+              </span>
+            </div>
           </div>
-        )}
+        </Section>
 
-        {connected && (
+        {/* Environment (#2) */}
+        <Section title="Scientific environment" icon={<Package size={15} />}>
+          {tools.length === 0 && <Empty>Environment detection runs in the desktop app.</Empty>}
+          {tools.map((t) => (
+            <div key={t.name} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+              {t.found ? <Check size={15} className="text-ok" /> : <X size={15} className="text-muted" />}
+              <span className="w-24 text-text">{t.name}</span>
+              <span className="flex-1 truncate font-mono text-xs text-muted">
+                {t.found ? t.version ?? "found" : "not found"}
+              </span>
+            </div>
+          ))}
+          <p className="px-4 py-2 text-xs text-muted">
+            OpenCode runs code with whatever is installed here (e.g. Python via its shell tool).
+            Python/R/Jupyter are not bundled; install them or a Science Pack to enable analysis.
+          </p>
+        </Section>
+
+        {connected ? (
           <>
             <Section title={`Agents (${agents.length})`} icon={<Bot size={15} />}>
               {agents.length === 0 && <Empty>No agents reported.</Empty>}
@@ -38,7 +94,6 @@ export function SkillsPage() {
                 <RowItem key={a.name} name={a.name} desc={a.description} tag={a.mode} />
               ))}
             </Section>
-
             <Section title={`Skills (${skills.length})`} icon={<Puzzle size={15} />}>
               {skills.length === 0 && <Empty>No skills loaded yet.</Empty>}
               {skills.map((s) => (
@@ -46,6 +101,10 @@ export function SkillsPage() {
               ))}
             </Section>
           </>
+        ) : (
+          <div className="mt-6 rounded-card border border-border bg-surface p-5 text-sm text-muted">
+            Connect the runtime to list the skills and agents it has loaded.
+          </div>
         )}
       </div>
     </div>
@@ -59,15 +118,7 @@ function sourceOf(location?: string): string | undefined {
   return "user";
 }
 
-function Section({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
+function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="mt-6">
       <h2 className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted">
@@ -86,7 +137,7 @@ function RowItem({ name, desc, tag }: { name: string; desc: string; tag?: string
       <Package size={16} className="mt-0.5 shrink-0 text-muted" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium text-text">{name}</div>
-        <div className="line-clamp-2 text-xs text-muted">{desc}</div>
+        <div className={cn("text-xs text-muted", "line-clamp-2")}>{desc}</div>
       </div>
       {tag && (
         <span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted ring-1 ring-border">
