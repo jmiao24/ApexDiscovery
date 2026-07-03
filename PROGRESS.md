@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-03 02:20 · Published to GitHub: https://github.com/ai4s-research/open-science (public, master). Two commits: accumulated feature work (previews/artifact resolution/kernel) + the Open Science rebrand. Secret scan on pending changes came back clean; sidecar binaries and installers stay git-ignored.
+
 2026-07-03 02:10 · Rebranded to "Open Science" (slogan: "An open AI workbench for scientists — Your research partner for rigorous science"). README now opens with the banner (docs/assets/banner.webp) + new title/slogan; sidebar shows the cloud logo (src/assets/logo.webp) left of "Open Science"; productName/window title/index.html title renamed — bundles are now "Open Science.app" / "Open Science_0.1.0_aarch64.dmg". Deliberately unchanged: bundle identifier com.ai4s.workbench (renaming it would orphan the existing Application Support workspace/data) and internal @ai4s/* package names. AGENTS.md records the branding rule. 49 JS tests, tsc, packaged build green.
 
 2026-07-03 01:55 · Set the app icon from the user's cloud/terminal artwork (webp, 1254px, transparent corners verified, content plate ~82% of canvas — matches macOS icon proportions). Converted to 1024px PNG and ran `tauri icon`: regenerated icon.icns (Dock), icon.ico (Windows), and all png/Android/Windows-store sizes in src-tauri/icons/; repacked aarch64 .app/.dmg with the new icns embedded. Note: Finder/Dock may show a cached old icon until the app is moved/relaunched.
