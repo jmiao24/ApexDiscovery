@@ -4,28 +4,36 @@ Scientific skills, layered:
 
 ```text
 skills/
-  core/      # self-authored AI4S Workbench skills (in this repo)
-  external/  # curated third-party skills, e.g. K-Dense scientific-agent-skills
-  user/      # user-installed / custom skills
+  core/      # self-authored skills specific to this app (currently none)
+  external/  # third-party skill packs, fetched by script — git-ignored
+  user/      # user-installed / custom skills (live in the runtime workspace)
 ```
 
-Only `core/` is version-controlled here. `external/` and `user/` are installed at
-runtime into the profile / workspace.
+## Default pack: ai4s-skills (bundled into the installer)
 
-## Core skills (v0.1)
+The default scientific skills come from
+[ai4s-research/ai4s-skills](https://github.com/ai4s-research/ai4s-skills)
+(research-explorer, literature-survey, experiment-suite, paper-writer,
+integrity-auditor, mindmap-render, ai4s-agent).
 
-| Skill | Purpose |
-| --- | --- |
-| `reproducible-research` | Standardize project structure, artifacts, logs, reproducibility |
-| `literature-review` | Literature search, filtering, summarization |
-| `bibliometric-analysis` | Year trends, keywords, journal distribution, clustering |
-| `figure-provenance` | Every figure must trace to code and data |
-| `citation-reviewer` | Check citation format and sources |
-| `paper-to-report` | Generate a Markdown report |
+How they ship, end to end:
+
+1. `scripts/dev/fetch-skills.sh` (run locally and in CI) downloads the pack at a
+   pinned commit into `external/ai4s-skills/`.
+2. `tauri.conf.json` bundles that directory as an app resource (`resources/skills/`).
+3. On every sidecar start, `runtime.rs::deploy_bundled_skills` syncs the pack into
+   the app-private profile's global skills dir (`<xdg-config>/opencode/skills/`),
+   which OpenCode scans regardless of project detection. Bundled skill directories
+   are replaced on app upgrade; the workspace's own `.opencode/skills/` stays
+   reserved for user-installed skills. Skill listing must be workspace-scoped
+   (`GET /api/skill?directory=…`) — the SDK does this via its `directory` option.
+
+To bump the pack version, update `AI4S_SKILLS_COMMIT` in `fetch-skills.sh`.
 
 ## Third-party skills
 
-Do **not** enable all ~148 K-Dense skills by default. Use curated install, enable by
-domain, and always surface each skill's license, dependencies, and risk.
+Do **not** enable large third-party collections (e.g. ~148 K-Dense skills) by
+default. Use curated install, enable by domain, and always surface each skill's
+license, dependencies, and risk.
 
-Each skill directory should contain a `SKILL.md`.
+Each skill directory must contain a `SKILL.md`.

@@ -23,6 +23,122 @@ export async function startRuntime(): Promise<string | null> {
   return invoke<string>("start_runtime");
 }
 
+/**
+ * Pick local files via the native dialog and copy them into the agent
+ * workspace (desktop only). Returns the workspace file names; [] on cancel.
+ */
+export async function addFilesToWorkspace(): Promise<string[]> {
+  if (!isTauri) return [];
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string[]>("add_files_to_workspace");
+}
+
+/**
+ * Write text into the workspace as a file (desktop only), deduplicating the
+ * name on collision. Returns the actual file name written.
+ */
+export async function addTextToWorkspace(filename: string, content: string): Promise<string> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("add_text_to_workspace", { filename, content });
+}
+
+/**
+ * Explicitly import the user's OpenCode CLI login into the app's private
+ * runtime (desktop only). Returns false when no CLI login exists; the sidecar
+ * is restarted on success.
+ */
+export async function importOpenCodeLogin(): Promise<boolean> {
+  if (!isTauri) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<boolean>("import_opencode_login");
+}
+
+/** Remove a provider/mcp entry from the global OpenCode config (restarts the sidecar). */
+export async function removeConfigEntry(section: "provider" | "mcp", key: string): Promise<void> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("remove_config_entry", { section, key });
+}
+
+export interface JupyterStatus {
+  installed: boolean;
+  running: boolean;
+  url: string | null;
+  token: string | null;
+  mcp_command: string | null;
+}
+
+/** State of the app-managed Jupyter environment (desktop only). */
+export async function jupyterStatus(): Promise<JupyterStatus | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<JupyterStatus>("jupyter_status");
+}
+
+/** Provision the isolated Jupyter env via bundled uv (first run: minutes, ~hundreds of MB). */
+export async function setupJupyter(): Promise<void> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("setup_jupyter");
+}
+
+/** Start the managed headless jupyter-lab (idempotent). */
+export async function startJupyter(): Promise<JupyterStatus> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<JupyterStatus>("start_jupyter");
+}
+
+/** Auto-start Jupyter on launch when it was enabled before. Silent no-op otherwise. */
+export async function ensureJupyter(): Promise<void> {
+  try {
+    const s = await jupyterStatus();
+    if (s?.installed && !s.running) await startJupyter();
+  } catch {
+    /* Jupyter is optional — never block the app on it */
+  }
+}
+
+/** Open an http(s) URL in the system browser (never navigates the webview). */
+export async function openExternal(url: string): Promise<void> {
+  if (!/^https?:\/\//i.test(url)) return;
+  if (isTauri) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("open_url", { url });
+    } catch {
+      /* opening a link must never break the app */
+    }
+  } else {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
+export type SaveResult =
+  | { kind: "saved"; path: string }
+  | { kind: "canceled" }
+  | { kind: "not-desktop" };
+
+/** Save text via the native "Save As" dialog (desktop only). Throws on write failure. */
+export async function saveTextFile(filename: string, content: string): Promise<SaveResult> {
+  if (!isTauri) return { kind: "not-desktop" };
+  const { invoke } = await import("@tauri-apps/api/core");
+  const path = await invoke<string | null>("save_text_file", { filename, content });
+  return path ? { kind: "saved", path } : { kind: "canceled" };
+}
+
+/** The sidecar's workspace directory (desktop only; null in browser). */
+export async function workspacePath(): Promise<string | null> {
+  if (!isTauri) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<string>("workspace_path");
+  } catch {
+    return null;
+  }
+}
+
 export interface ToolStatus {
   name: string;
   found: boolean;

@@ -2,7 +2,7 @@
 // the user already has: it runs the *bundled* binary, on a *dedicated free port*,
 // with an *app-private* XDG config/data dir, and is killed on app exit.
 use std::net::TcpListener;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_shell::process::CommandChild;
@@ -30,9 +30,35 @@ fn xdg_config_home(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(runtime_root(app)?.join("xdg-config"))
 }
 
-/// The workspace OpenCode (and the notebook kernel) runs in — the agent's files live here.
+/// The workspace OpenCode (and the notebook kernel) runs in — the agent's and
+/// the user's project files live here. This is user-facing data, so it goes in
+/// the OS documents folder: ~/Documents/OpenScience (no space — the agent runs
+/// shell commands against this path, and unquoted spaces break them). Falls
+/// back to $HOME/Documents.
 pub fn workspace_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = runtime_root(app)?.join("workspace");
+    let docs = match app.path().document_dir() {
+        Ok(d) => d,
+        Err(_) => {
+            let home = std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .map_err(|_| "could not resolve a documents directory".to_string())?;
+            PathBuf::from(home).join("Documents")
+        }
+    };
+    let dir = docs.join("OpenScience");
+
+    // One-time migrations, oldest name last. A failed rename (e.g. cross-volume)
+    // keeps the existing location rather than splitting the user's files.
+    if !dir.exists() {
+        for old in [docs.join("Open Science"), runtime_root(app)?.join("workspace")] {
+            if old.is_dir() {
+                if std::fs::rename(&old, &dir).is_ok() {
+                    break;
+                }
+                return Ok(old);
+            }
+        }
+    }
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
 }
@@ -61,19 +87,115 @@ fn user_auth_source() -> Option<PathBuf> {
     candidates.into_iter().find(|p| p.exists())
 }
 
-/// Copy the user's OpenCode login into the app-private data dir so the bundled
-/// runtime uses the same credentials (e.g. free/oauth access). Sessions stay isolated.
-fn seed_auth(data_dir: &PathBuf) {
-    if let Some(src) = user_auth_source() {
-        let dst = data_dir.join("opencode").join("auth.json");
-        if let Some(parent) = dst.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        let _ = std::fs::copy(&src, &dst);
+/// Copy the user's OpenCode CLI login into the app-private data dir, EXPLICITLY
+/// (from the Settings page) — never silently. Returns false when there is no
+/// CLI login to import. Restarts the sidecar so it picks the credentials up.
+#[tauri::command]
+pub fn import_opencode_login(app: AppHandle, state: State<'_, RuntimeState>) -> Result<bool, String> {
+    let Some(src) = user_auth_source() else {
+        return Ok(false);
+    };
+    let dst = runtime_root(&app)?.join("xdg-data").join("opencode").join("auth.json");
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::copy(&src, &dst).map_err(|e| format!("copy failed: {e}"))?;
+
+    // Restart the running sidecar so /config/providers reflects the login.
+    if state.url.lock().unwrap().is_some() {
+        kill_child(&state);
+        let port = { *state.port.lock().unwrap().get_or_insert_with(free_port) };
+        let child = spawn_sidecar(&app, port)?;
+        *state.child.lock().unwrap() = Some(child);
+    }
+    Ok(true)
+}
+
+/// Deploy the bundled ai4s-skills pack (a Tauri resource) into the app-private
+/// profile's global skills dir (`<xdg-config>/opencode/skills/`), which OpenCode
+/// scans regardless of project detection. The workspace's own `.opencode/skills/`
+/// stays reserved for skills the user installs. Runs before every sidecar start
+/// so app upgrades refresh the pack.
+fn deploy_bundled_skills(app: &AppHandle) {
+    let src = match app
+        .path()
+        .resolve("skills", tauri::path::BaseDirectory::Resource)
+    {
+        Ok(p) if p.is_dir() => p,
+        _ => return, // dev run without `fetch-skills.sh` — nothing to deploy
+    };
+    let dst = match xdg_config_home(app) {
+        Ok(cfg) => cfg.join("opencode").join("skills"),
+        Err(_) => return,
+    };
+    if let Err(e) = sync_skill_pack(&src, &dst) {
+        eprintln!("failed to deploy bundled skills: {e}");
     }
 }
 
-fn free_port() -> u16 {
+/// Copy every skill directory under `src` into `dst`, replacing same-named
+/// directories (so bundled updates win) and leaving everything else in `dst`
+/// alone (user-installed skills keep their own directories).
+fn sync_skill_pack(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let target = dst.join(entry.file_name());
+        if target.exists() {
+            std::fs::remove_dir_all(&target)?;
+        }
+        copy_dir(&entry.path(), &target)?;
+    }
+    Ok(())
+}
+
+fn copy_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let to = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &to)?;
+        } else {
+            std::fs::copy(entry.path(), &to)?;
+        }
+    }
+    Ok(())
+}
+
+/// PATH for the sidecar (and everything the agent runs through it). Apps
+/// launched from Finder/Dock get a minimal PATH (`/usr/bin:/bin:…`), so the
+/// agent would not find the user's Python/conda/Homebrew tools. Prepend the
+/// well-known scientific tool locations that actually exist on this machine —
+/// the same order a terminal profile would produce.
+#[cfg(unix)]
+fn enriched_path() -> String {
+    let base = std::env::var("PATH").unwrap_or_default();
+    let home = std::env::var("HOME").unwrap_or_default();
+    let extras = [
+        format!("{home}/anaconda3/bin"),
+        format!("{home}/miniconda3/bin"),
+        "/opt/anaconda3/bin".to_string(),
+        "/opt/miniconda3/bin".to_string(),
+        format!("{home}/.pyenv/shims"),
+        "/opt/homebrew/bin".to_string(),
+        "/usr/local/bin".to_string(),
+        format!("{home}/.local/bin"),
+    ];
+    let mut parts: Vec<String> = extras
+        .into_iter()
+        .filter(|p| !base.split(':').any(|b| b == p) && std::path::Path::new(p).is_dir())
+        .collect();
+    if !base.is_empty() {
+        parts.push(base);
+    }
+    parts.join(":")
+}
+
+pub(crate) fn free_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
         .ok()
         .and_then(|l| l.local_addr().ok())
@@ -87,14 +209,14 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
     let data = root.join("xdg-data");
     let cache = root.join("xdg-cache");
     let state = root.join("xdg-state");
-    // Run OpenCode inside a small app workspace, NOT the app's cwd (which is `/` when
-    // launched from Finder) — otherwise it scans the whole filesystem root and is slow.
-    let workspace = root.join("workspace");
-    for d in [&cfg, &data, &cache, &state, &workspace] {
+    // Run OpenCode inside the user-facing workspace, NOT the app's cwd (which is `/`
+    // when launched from Finder) — otherwise it scans the whole filesystem root.
+    let workspace = workspace_dir(app)?;
+    for d in [&cfg, &data, &cache, &state] {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
-    // Share the user's OpenCode login (free credits) without touching their sessions.
-    seed_auth(&data);
+    // Ship the bundled scientific skills into the app-private OpenCode profile.
+    deploy_bundled_skills(app);
     let home = std::env::var("HOME").unwrap_or_default();
     let port_str = port.to_string();
 
@@ -118,6 +240,9 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
         .env("XDG_STATE_HOME", state.to_string_lossy().to_string())
         .env("HOME", home)
         .current_dir(workspace);
+    // GUI-launched apps get a minimal PATH; give the agent the user's real tools.
+    #[cfg(unix)]
+    let cmd = cmd.env("PATH", enriched_path());
 
     let (mut rx, child) = cmd.spawn().map_err(|e| format!("failed to spawn opencode: {e}"))?;
     // Drain events so the child's stdout/stderr buffer never blocks it.
@@ -143,6 +268,13 @@ pub fn start_runtime(app: AppHandle, state: State<'_, RuntimeState>) -> Result<S
     Ok(url)
 }
 
+/// The workspace directory the sidecar runs in — the frontend passes it to the
+/// SDK so skill discovery is scoped to the right OpenCode instance.
+#[tauri::command]
+pub fn workspace_path(app: AppHandle) -> Result<String, String> {
+    Ok(workspace_dir(&app)?.to_string_lossy().to_string())
+}
+
 /// Kill the bundled OpenCode if running.
 #[tauri::command]
 pub fn stop_runtime(state: State<'_, RuntimeState>) {
@@ -156,6 +288,129 @@ pub fn kill_child(state: &RuntimeState) {
     if let Some(child) = state.child.lock().unwrap().take() {
         let _ = child.kill();
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{remove_key_from_config, sync_skill_pack};
+    use std::fs;
+
+    #[test]
+    fn removes_only_the_named_config_entry() {
+        let cfg = r#"{"model":"a/b","provider":{"ollama":{"npm":"x"},"keep":{"npm":"y"}},"mcp":{"pw":{"type":"local"}}}"#;
+        let out = remove_key_from_config(cfg, "provider", "ollama").unwrap();
+        assert!(!out.contains("ollama"));
+        assert!(out.contains("keep"));
+        assert!(out.contains("\"model\": \"a/b\""));
+        let out2 = remove_key_from_config(cfg, "mcp", "pw").unwrap();
+        assert!(!out2.contains("\"pw\""));
+        // Absent key and non-JSON input are errors, not silent no-ops.
+        assert!(remove_key_from_config(cfg, "provider", "missing").is_err());
+        assert!(remove_key_from_config("// jsonc comment\n{}", "provider", "x").is_err());
+    }
+
+    fn write(path: &std::path::Path, content: &str) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
+    }
+
+    #[test]
+    fn sync_replaces_bundled_and_keeps_user_skills() {
+        let tmp = std::env::temp_dir().join(format!("skillsync-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let src = tmp.join("src");
+        let dst = tmp.join("dst");
+
+        // Bundled pack: one skill with a nested reference file, plus a top-level
+        // plain file (.commit) that must NOT be copied.
+        write(&src.join("paper-writer/SKILL.md"), "v2");
+        write(&src.join("paper-writer/references/guide.md"), "ref");
+        write(&src.join(".commit"), "abc123");
+
+        // Existing workspace: a stale copy of the bundled skill (with a file the
+        // new version no longer has) and a user-installed skill.
+        write(&dst.join("paper-writer/SKILL.md"), "v1");
+        write(&dst.join("paper-writer/obsolete.md"), "old");
+        write(&dst.join("my-skill/SKILL.md"), "user");
+
+        sync_skill_pack(&src, &dst).unwrap();
+
+        assert_eq!(fs::read_to_string(dst.join("paper-writer/SKILL.md")).unwrap(), "v2");
+        assert_eq!(
+            fs::read_to_string(dst.join("paper-writer/references/guide.md")).unwrap(),
+            "ref"
+        );
+        assert!(!dst.join("paper-writer/obsolete.md").exists(), "stale file must be gone");
+        assert_eq!(fs::read_to_string(dst.join("my-skill/SKILL.md")).unwrap(), "user");
+        assert!(!dst.join(".commit").exists(), "top-level files are not skills");
+
+        fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn sync_creates_destination_when_missing() {
+        let tmp = std::env::temp_dir().join(format!("skillsync-new-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let src = tmp.join("src");
+        write(&src.join("literature-survey/SKILL.md"), "s");
+
+        let dst = tmp.join("deep/nested/skills");
+        sync_skill_pack(&src, &dst).unwrap();
+        assert_eq!(
+            fs::read_to_string(dst.join("literature-survey/SKILL.md")).unwrap(),
+            "s"
+        );
+        fs::remove_dir_all(&tmp).unwrap();
+    }
+}
+
+/// Remove an entry from a map section of the app-private global OpenCode
+/// config ("provider" or "mcp") and restart the sidecar (PATCH /global/config
+/// cannot delete keys).
+#[tauri::command]
+pub fn remove_config_entry(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+    section: String,
+    key: String,
+) -> Result<(), String> {
+    if !matches!(section.as_str(), "provider" | "mcp") {
+        return Err(format!("section \"{section}\" is not removable"));
+    }
+    let dir = xdg_config_home(&app)?.join("opencode");
+    // The server writes opencode.jsonc; older configs may be opencode.json.
+    let path = ["opencode.jsonc", "opencode.json"]
+        .iter()
+        .map(|n| dir.join(n))
+        .find(|p| p.exists())
+        .ok_or("no global OpenCode config found")?;
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let out = remove_key_from_config(&text, &section, &key)?;
+    std::fs::write(&path, out).map_err(|e| e.to_string())?;
+
+    if state.url.lock().unwrap().is_some() {
+        kill_child(&state);
+        let port = { *state.port.lock().unwrap().get_or_insert_with(free_port) };
+        let child = spawn_sidecar(&app, port)?;
+        *state.child.lock().unwrap() = Some(child);
+    }
+    Ok(())
+}
+
+/// Drop `key` from the config JSON's `section` map, erroring when the config
+/// is not plain JSON or the key is absent.
+fn remove_key_from_config(text: &str, section: &str, key: &str) -> Result<String, String> {
+    let mut cfg: serde_json::Value =
+        serde_json::from_str(text).map_err(|e| format!("config is not plain JSON: {e}"))?;
+    let removed = cfg
+        .get_mut(section)
+        .and_then(|p| p.as_object_mut())
+        .map(|p| p.remove(key).is_some())
+        .unwrap_or(false);
+    if !removed {
+        return Err(format!("\"{key}\" is not in the config's {section} section"));
+    }
+    serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())
 }
 
 /// Write the provider key/model into the app-private OpenCode config and restart

@@ -7,10 +7,10 @@ export function ThreadView({ session }: { session: Session }) {
   const isExample = session.group === "Examples";
   return (
     <div className="flex h-full min-w-0 flex-col">
-      <div className="flex items-center gap-2 border-b border-border px-8 py-4">
-        <h1 className="truncate text-lg text-text">{session.title}</h1>
+      <div className="flex items-center gap-2 border-b border-border px-6 py-2.5">
+        <h1 className="truncate text-[13px] font-medium text-text">{session.title}</h1>
         {isExample && (
-          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted ring-1 ring-border">
+          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] text-muted ring-1 ring-border">
             Example · read-only
           </span>
         )}
@@ -20,7 +20,7 @@ export function ThreadView({ session }: { session: Session }) {
           <BlockList blocks={session.blocks} />
         </div>
       </div>
-      <div className="border-t border-border px-8 py-4">
+      <div className="px-8 pb-5 pt-2">
         <div className="mx-auto flex max-w-[760px] items-center gap-3 rounded-card border border-border bg-surface-2/60 px-4 py-3 text-sm text-muted">
           <Sparkles size={16} className="text-accent" />
           <span>This is a sample session. Start a live agent session to chat for real.</span>

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Loader2, Plug, PlugZap, Plus } from "lucide-react";
+import { Loader2, NotebookPen, PlugZap } from "lucide-react";
 import { useRuntimeStore } from "@/lib/runtime";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
@@ -22,7 +22,6 @@ export function LiveSessionPage() {
     error,
     activeArtifact,
     connect,
-    disconnect,
     openSession,
     startDraft,
     sendPrompt,
@@ -55,36 +54,43 @@ export function LiveSessionPage() {
   const title = sessions.find((s) => s.id === currentId)?.title;
   const isEmpty = !thread || thread.blocks.length === 0;
 
+  // Notebooks the agent touched in THIS session — the conversation ↔ notebook map.
+  const sessionNotebooks = (thread?.blocks ?? []).filter(
+    (b): b is Extract<typeof b, { kind: "artifact" }> =>
+      b.kind === "artifact" && b.filename.endsWith(".ipynb"),
+  );
+  const uniqueNotebooks = [...new Map(sessionNotebooks.map((b) => [b.path, b])).values()];
+
   return (
     <div className="flex h-full min-w-0">
       <div className="flex h-full min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-border px-8 py-4">
-          <h1 className="truncate text-lg text-text">{sessionId && title ? title : "New session"}</h1>
+        <div className="flex items-center gap-2 border-b border-border px-6 py-2.5">
+          <h1 className="truncate text-[13px] font-medium text-text">
+            {sessionId && title ? title : "New session"}
+          </h1>
           <div className="flex-1" />
           <ConnBadge status={status} />
-          <button
-            onClick={() => {
-              startDraft();
-              navigate("/live");
-            }}
-            className="flex items-center gap-1.5 rounded-input border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-2"
-          >
-            <Plus size={15} /> New
-          </button>
-          {connected ? (
+          {uniqueNotebooks.map((nb) => (
             <button
-              onClick={disconnect}
-              className="flex items-center gap-1.5 rounded-input border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-2"
+              key={nb.path}
+              onClick={() => openArtifact(nb)}
+              className={cn(
+                "flex items-center gap-1 rounded-input px-2 py-1 font-mono text-xs ring-1 ring-border hover:bg-surface-2",
+                activeArtifact?.path === nb.path ? "bg-surface-2 text-text" : "bg-surface text-muted",
+              )}
+              title={`Open ${nb.path} — the agent works on this notebook in this session`}
             >
-              <Plug size={15} /> Disconnect
+              <NotebookPen size={11} />
+              <span className="max-w-[180px] truncate">{nb.filename}</span>
             </button>
-          ) : (
+          ))}
+          {!connected && (
             <button
               onClick={connect}
               disabled={connecting}
-              className="flex items-center gap-1.5 rounded-input bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-input bg-accent px-2.5 py-1 text-xs font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
             >
-              {connecting ? <Loader2 size={15} className="animate-spin" /> : <PlugZap size={15} />}
+              {connecting ? <Loader2 size={13} className="animate-spin" /> : <PlugZap size={13} />}
               Connect
             </button>
           )}
@@ -118,7 +124,7 @@ export function LiveSessionPage() {
           </div>
         </div>
 
-        <div className="border-t border-border px-8 py-4">
+        <div className="px-8 pb-5 pt-2">
           <div className="mx-auto max-w-[760px]">
             <Composer
               onSend={onSend}
@@ -145,7 +151,7 @@ export function LiveSessionPage() {
 function ConnBadge({ status }: { status: string }) {
   const tone = status === "ready" ? "text-ok" : status === "error" ? "text-error" : "text-muted";
   return (
-    <span className={cn("flex items-center gap-1.5 text-sm", tone)}>
+    <span className={cn("flex items-center gap-1.5 text-xs", tone)}>
       <span
         className={cn(
           "h-1.5 w-1.5 rounded-full",

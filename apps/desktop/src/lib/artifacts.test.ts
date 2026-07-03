@@ -6,6 +6,7 @@ import {
   deriveArtifact,
   extractArtifactRefs,
   extToKind,
+  fileInspectorFromBlock,
   previewKind,
   refToArtifactBlock,
   resolveArtifactContent,
@@ -149,6 +150,26 @@ describe("artifactBlockToInspector", () => {
     });
     expect(insp.code).toBe("print(1)");
     expect(insp.language).toBe("python");
+  });
+
+  it("routes .ipynb artifacts to the runnable notebook editor, others to file preview", () => {
+    const nb = fileInspectorFromBlock({
+      kind: "artifact",
+      path: "analysis/run.ipynb",
+      filename: "run.ipynb",
+      artifact: "notebook",
+      tool: "write",
+    });
+    expect(nb).toEqual({ variant: "notebook-file", path: "analysis/run.ipynb" });
+
+    const file = fileInspectorFromBlock({
+      kind: "artifact",
+      path: "fig.png",
+      filename: "fig.png",
+      artifact: "figure",
+      tool: "write",
+    });
+    expect(file.variant).toBe("file");
   });
 
   it("shows a placeholder for a binary artifact", () => {

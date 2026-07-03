@@ -70,6 +70,50 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
       res.end(JSON.stringify({ data: [{ name: "customize-opencode", description: "Configure OpenCode.", location: "/builtin/customize-opencode.md" }] }));
       return;
     }
+    if (req.method === "GET" && url === "/config") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ model: "mock/mock-model" }));
+      return;
+    }
+    if (req.method === "PATCH" && (url === "/config" || url === "/global/config")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end("{}");
+      return;
+    }
+    if (req.method === "GET" && url === "/config/providers") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          providers: [
+            { id: "mock", name: "Mock Provider", models: { "mock-model": { name: "Mock Model" } } },
+          ],
+        }),
+      );
+      return;
+    }
+    if (req.method === "GET" && url === "/provider") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          all: [
+            { id: "mock", name: "Mock Provider", env: ["MOCK_API_KEY"] },
+            { id: "anthropic", name: "Anthropic", env: ["ANTHROPIC_API_KEY"] },
+          ],
+          connected: ["mock"],
+        }),
+      );
+      return;
+    }
+    if (req.method === "GET" && url === "/provider/auth") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ mock: [{ type: "api", label: "Manually enter API Key" }] }));
+      return;
+    }
+    if ((req.method === "PUT" || req.method === "DELETE") && url.startsWith("/auth/")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end("true");
+      return;
+    }
     if (req.method === "GET" && (url === "/agent" || url === "/api/agent")) {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify([{ name: "build", description: "Default agent.", mode: "primary" }]));

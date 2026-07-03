@@ -44,3 +44,6 @@ secrets/
 
 # Bundled sidecar binaries (fetched per-platform; too large for git)
 apps/desktop/src-tauri/binaries/
+
+# Third-party skill packs (fetched by scripts/dev/fetch-skills.sh)
+runtime/skills/external/

@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Files, Plus, Settings, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Files, NotebookPen, Plus, Settings, SlidersHorizontal, Trash2 } from "lucide-react";
 import type { Project } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
+import { isTauri } from "@/lib/tauri";
 import { useRuntimeStore } from "@/lib/runtime";
 import { StatusPills } from "./StatusPills";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import logo from "@/assets/logo.webp";
 
 interface Row {
@@ -30,33 +33,38 @@ export function Sidebar({ project }: { project: Project }) {
       .map((e) => ({ id: e.id, title: e.title, to: `/example/${e.id}`, kind: "example" as const })),
   ];
 
-  const onDelete = (row: Row) => {
-    if (row.kind === "session") {
-      if (window.confirm(`Delete session "${row.title}"? This cannot be undone.`)) {
-        void deleteSession(row.id);
-        if (location.pathname === row.to) navigate("/live");
-      }
-    } else {
-      hideExample(row.id);
-      if (location.pathname === row.to) navigate("/live");
-    }
+  const [pendingDelete, setPendingDelete] = useState<Row | null>(null);
+
+  const confirmDelete = () => {
+    const row = pendingDelete;
+    setPendingDelete(null);
+    if (!row) return;
+    if (row.kind === "session") void deleteSession(row.id);
+    else hideExample(row.id);
+    if (location.pathname === row.to) navigate("/live");
   };
 
+  // With the overlay titlebar (macOS), reserve a draggable strip at the top so
+  // the traffic lights don't overlap the logo and the window stays movable.
+  const overlayTitlebar = isTauri && navigator.userAgent.includes("Mac");
+
   return (
-    <aside className="flex h-full w-[272px] shrink-0 flex-col border-r border-border bg-surface">
-      <div className="px-5 pb-4 pt-5">
-        <div className="flex items-center gap-2">
-          <img src={logo} alt="" className="h-7 w-auto" />
-          <div className="font-serif text-[24px] font-semibold leading-none tracking-tight text-text">
+    <aside className="flex h-full w-[232px] shrink-0 flex-col border-r border-border bg-surface">
+      {overlayTitlebar && <div data-tauri-drag-region className="h-8 shrink-0" />}
+      <div className={cn("px-4 pb-3", overlayTitlebar ? "pt-1" : "pt-4")}>
+        <div className="flex items-baseline gap-1.5">
+          <img src={logo} alt="" className="h-[18px] w-auto self-center" />
+          <div className="font-serif text-[17px] font-semibold leading-none tracking-tight text-text">
             Open Science
           </div>
+          <span className="text-[10px] uppercase tracking-widest text-muted">Beta</span>
         </div>
-        <div className="mt-1 text-xs uppercase tracking-widest text-muted">Beta</div>
       </div>
 
       <nav className="flex flex-col px-3">
         <NavRow icon={<Plus size={16} />} label="New" onClick={startNew} />
         <NavRow icon={<SlidersHorizontal size={16} />} label="Customize" onClick={() => navigate("/settings")} />
+        <NavRow icon={<NotebookPen size={16} />} label="Notebooks" onClick={() => navigate("/notebooks")} />
         <NavRow icon={<Files size={16} />} label="Skills" onClick={() => navigate("/skills")} />
       </nav>
 
@@ -70,7 +78,7 @@ export function Sidebar({ project }: { project: Project }) {
             <NavLink
               to={row.to}
               className={cn(
-                "flex items-center gap-2 rounded-input py-1.5 pl-2 pr-8 text-sm hover:bg-surface-2",
+                "flex items-center gap-2 rounded-input py-1 pl-2 pr-8 text-[13px] hover:bg-surface-2",
                 location.pathname === row.to ? "bg-surface-2 text-text" : "text-text/90",
               )}
             >
@@ -88,7 +96,7 @@ export function Sidebar({ project }: { project: Project }) {
               )}
             </NavLink>
             <button
-              onClick={() => onDelete(row)}
+              onClick={() => setPendingDelete(row)}
               aria-label={`Delete ${row.title}`}
               className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 rounded p-1 text-muted hover:bg-border hover:text-error group-hover:block"
             >
@@ -101,14 +109,28 @@ export function Sidebar({ project }: { project: Project }) {
       <div className="border-t border-border px-3 py-3">
         <StatusPills />
         <button
-          className="mt-2 flex items-center gap-2 rounded-input px-2 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-text"
+          className="mt-2 flex items-center gap-2 rounded-input px-2 py-1 text-[13px] text-muted hover:bg-surface-2 hover:text-text"
           onClick={() => navigate("/settings")}
           aria-label="Settings"
         >
-          <Settings size={16} />
+          <Settings size={15} />
           <span>Settings</span>
         </button>
       </div>
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title={pendingDelete.kind === "session" ? "Delete session?" : "Hide example?"}
+          body={
+            pendingDelete.kind === "session"
+              ? `"${pendingDelete.title}" and its messages will be deleted. This cannot be undone.`
+              : `"${pendingDelete.title}" will be hidden from the sidebar.`
+          }
+          confirmLabel={pendingDelete.kind === "session" ? "Delete" : "Hide"}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </aside>
   );
 }
@@ -117,7 +139,7 @@ function NavRow({ icon, label, onClick }: { icon: React.ReactNode; label: string
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2 rounded-input px-2 py-1.5 text-sm text-text hover:bg-surface-2"
+      className="flex items-center gap-2 rounded-input px-2 py-1 text-[13px] text-text hover:bg-surface-2"
     >
       <span className="text-muted">{icon}</span>
       <span>{label}</span>

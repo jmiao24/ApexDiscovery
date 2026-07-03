@@ -161,7 +161,15 @@ export type Inspector =
   | ArtifactInspector
   | NotebookInspector
   | PdfInspector
-  | FilePreviewInspector;
+  | FilePreviewInspector
+  | NotebookFileInspector;
+
+/** A real .ipynb in the workspace, opened in the runnable notebook editor. */
+export interface NotebookFileInspector {
+  variant: "notebook-file";
+  /** Workspace-relative path of the notebook. */
+  path: string;
+}
 
 /** A workspace file surfaced for preview — the agent wrote it OR code produced it.
  *  Rendered by type: HTML → live iframe, PDF → pdf.js, image → <img>, text → code. */

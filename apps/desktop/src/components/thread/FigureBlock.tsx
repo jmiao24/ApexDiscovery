@@ -2,7 +2,7 @@ import { useState, type MouseEvent } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Download } from "lucide-react";
 import type { FigureAnnotation, FigureBlock as FigureBlockT } from "@ai4s/shared";
-import { downloadText } from "@/lib/download";
+import { saveTextWithFeedback } from "@/lib/download";
 
 /**
  * A figure the agent produced. Click anywhere on the image to drop a numbered
@@ -49,7 +49,7 @@ export function FigureBlock({
         <button
           className="ml-auto text-muted hover:text-text"
           aria-label="Download figure"
-          onClick={() => downloadText(`${block.title}.svg`, imageToText(block.src))}
+          onClick={() => void saveTextWithFeedback(`${block.title}.svg`, imageToText(block.src), "image/svg+xml")}
         >
           <Download size={15} />
         </button>

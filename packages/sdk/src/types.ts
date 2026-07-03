@@ -91,6 +91,68 @@ export interface OpenCodeClientOptions {
   username?: string;
   /** Inject fetch (defaults to global fetch; browser + node both have it). */
   fetchImpl?: typeof fetch;
+  /**
+   * Workspace directory the server should scope skill discovery to. OpenCode
+   * initializes per-directory instances lazily; without this, /api/skill can
+   * return an empty list until something else touches the workspace instance.
+   */
+  directory?: string;
+}
+
+// ---- Provider / model configuration (OpenCode-native, one source of truth) ----
+
+export interface ProviderModelInfo {
+  id: string;
+  name: string;
+}
+
+/** A provider OpenCode can use right now (auth present or public). */
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  models: ProviderModelInfo[];
+}
+
+/** Extra input an auth method needs before starting (e.g. Copilot deployment). */
+export interface AuthPrompt {
+  type: "select" | "text";
+  key: string;
+  message: string;
+  options?: Array<{ label: string; value: string; hint?: string }>;
+}
+
+export interface ProviderAuthMethod {
+  type: "oauth" | "api";
+  label: string;
+  prompts?: AuthPrompt[];
+}
+
+/** Catalog entry: a provider OpenCode knows how to talk to (not necessarily connected). */
+export interface ProviderCatalogEntry {
+  id: string;
+  name: string;
+  /** Env var(s) that would carry the API key, e.g. ["ANTHROPIC_API_KEY"]. */
+  env: string[];
+}
+
+export interface OAuthAuthorization {
+  url: string;
+  /** "auto" — callback completes on its own; "code" — the user pastes a code. */
+  method: "auto" | "code";
+  instructions: string;
+}
+
+// ---- MCP servers ----
+
+export type McpConfig =
+  | { type: "local"; command: string[]; enabled?: boolean; environment?: Record<string, string> }
+  | { type: "remote"; url: string; enabled?: boolean; headers?: Record<string, string> };
+
+export interface McpServer {
+  name: string;
+  /** e.g. "connected" | "failed" | "disabled" | "pending" */
+  status: string;
+  config?: McpConfig;
 }
 
 // ---- Raw OpenCode wire shapes (subset we consume) ----

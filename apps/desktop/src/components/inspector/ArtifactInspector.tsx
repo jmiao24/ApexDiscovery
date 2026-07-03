@@ -4,7 +4,7 @@ import type { ArtifactInspector as ArtifactInspectorT, ArtifactTab } from "@ai4s
 import { cn } from "@/lib/cn";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { resolveArtifactContent } from "@/lib/artifacts";
-import { downloadText } from "@/lib/download";
+import { saveTextWithFeedback } from "@/lib/download";
 
 const TABS: ArtifactTab[] = ["Code", "Execution Log", "Messages", "Environment", "Review"];
 
@@ -54,7 +54,7 @@ export function ArtifactInspector({
         <button
           className="text-muted hover:text-text"
           aria-label="Download"
-          onClick={() => downloadText(scriptName, content.code)}
+          onClick={() => void saveTextWithFeedback(scriptName, content.code)}
         >
           <Download size={16} />
         </button>
@@ -86,7 +86,7 @@ export function ArtifactInspector({
           <div className="space-y-3">
             <button
               className="flex items-center gap-2 rounded-input bg-link px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
-              onClick={() => downloadText(scriptName, content.code)}
+              onClick={() => void saveTextWithFeedback(scriptName, content.code)}
             >
               <Download size={15} /> Download script
             </button>

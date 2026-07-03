@@ -14,4 +14,12 @@ export {
   type SkillInfo,
   type AgentInfo,
   type HistoryMessage,
+  type ProviderInfo,
+  type ProviderModelInfo,
+  type ProviderAuthMethod,
+  type ProviderCatalogEntry,
+  type AuthPrompt,
+  type OAuthAuthorization,
+  type McpConfig,
+  type McpServer,
 } from "./types";

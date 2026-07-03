@@ -44,6 +44,26 @@ export async function openArtifactExternally(path: string): Promise<void> {
   await invoke("open_path", { path });
 }
 
+export interface NotebookEntry {
+  path: string;
+  /** Seconds since the epoch (newest first from the backend). */
+  modified: number;
+}
+
+/** All .ipynb files in the workspace, newest first (desktop only). */
+export async function listNotebooks(): Promise<NotebookEntry[]> {
+  if (!isTauri) return [];
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<NotebookEntry[]>("list_notebooks");
+}
+
+/** Write text to a workspace-relative path (desktop only; throws in browser). */
+export async function writeWorkspaceFile(path: string, content: string): Promise<void> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("write_workspace_file", { path, content });
+}
+
 /** Build a `data:` URL from a read artifact for <img>/<iframe>/pdf.js. */
 export function toDataUrl(f: ArtifactFile): string {
   if (f.encoding === "base64") return `data:${f.mime};base64,${f.data}`;

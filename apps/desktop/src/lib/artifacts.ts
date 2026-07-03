@@ -8,6 +8,7 @@ import type {
   ArtifactKind,
   ArtifactVersion,
   FilePreviewInspector,
+  NotebookFileInspector,
 } from "@ai4s/shared";
 
 const EXT_KIND: Record<string, ArtifactKind> = {
@@ -101,7 +102,11 @@ export function previewKind(ext: string): PreviewKind {
 }
 
 /** Build a previewable file-inspector from an artifact surfaced in the thread. */
-export function fileInspectorFromBlock(a: ArtifactBlock): FilePreviewInspector {
+export function fileInspectorFromBlock(
+  a: ArtifactBlock,
+): FilePreviewInspector | NotebookFileInspector {
+  // Notebooks open in the runnable editor, not the raw-JSON preview.
+  if (extOf(a.filename) === "ipynb") return { variant: "notebook-file", path: a.path };
   return {
     variant: "file",
     path: a.path,

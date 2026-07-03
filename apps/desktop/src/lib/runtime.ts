@@ -10,8 +10,16 @@ import {
   type ToolCallStatus,
 } from "@ai4s/sdk";
 import type { ArtifactBlock, RuntimeStatus, ThreadBlock } from "@ai4s/shared";
-import { detectTools as probeTools, isTauri, logDebug, startRuntime, type ToolStatus } from "./tauri";
+import {
+  detectTools as probeTools,
+  isTauri,
+  logDebug,
+  startRuntime,
+  workspacePath,
+  type ToolStatus,
+} from "./tauri";
 import { deriveArtifact } from "./artifacts";
+import { splitReview } from "./review";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const URL_KEY = "ai4s.opencodeUrl";
@@ -44,6 +52,8 @@ interface RuntimeState {
   threads: Record<string, Thread>;
   skills: SkillInfo[];
   agents: AgentInfo[];
+  /** Configured default model ("provider/model"), or null when unset. */
+  defaultModel: string | null;
   tools: ToolStatus[];
   hiddenExamples: string[];
   error: string | null;
@@ -70,6 +80,11 @@ interface RuntimeState {
 let client: OpenCodeClient | null = null;
 const emptyThread = (): Thread => ({ blocks: [], index: {}, loaded: false });
 
+/** The live OpenCode client (Settings talks to the runtime's config API directly). */
+export function getClient(): OpenCodeClient | null {
+  return client;
+}
+
 export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   status: "offline",
   serverUrl: initialUrl(),
@@ -78,6 +93,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   threads: {},
   skills: [],
   agents: [],
+  defaultModel: null,
   tools: [],
   hiddenExamples: initialHidden(),
   error: null,
@@ -94,8 +110,19 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   loadCatalog: async () => {
     if (!client) return;
     try {
-      const [skills, agents] = await Promise.all([client.listSkills(), client.listAgents()]);
-      set({ skills, agents });
+      const [firstSkills, agents, defaultModel] = await Promise.all([
+        client.listSkills(),
+        client.listAgents(),
+        client.getDefaultModel().catch(() => null),
+      ]);
+      let skills = firstSkills;
+      // The first workspace-scoped /api/skill call triggers OpenCode's lazy
+      // instance init and can answer before the scan finishes — retry once.
+      if (skills.length === 0) {
+        await sleep(1500);
+        skills = await client.listSkills();
+      }
+      set({ skills, agents, defaultModel });
     } catch {
       /* ignore transient failures */
     }
@@ -111,7 +138,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
 
   connect: async () => {
     get().disconnect();
-    const c = new OpenCodeClient({ baseUrl: get().serverUrl });
+    // Scope skill discovery to the sidecar's workspace (null in browser dev).
+    const directory = await workspacePath();
+    const c = new OpenCodeClient({ baseUrl: get().serverUrl, directory: directory ?? undefined });
     client = c;
     c.onStatus((status) => {
       void logDebug(`status → ${status}`);
@@ -281,7 +310,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       const prompt =
         "Install the following as an OpenCode skill for this project. Use the " +
         "customize-opencode skill. If it is a URL, fetch it; if it is Markdown, save it as " +
-        "a skill file under .opencode/skill/. Then reply with the installed skill's name.\n\n---\n" +
+        "a skill file under .opencode/skills/<name>/SKILL.md. Then reply with the installed skill's name.\n\n---\n" +
         text;
       set((s) => {
         const cur = s.threads[id];
@@ -312,11 +341,21 @@ export function foldEvent(state: FoldState, event: OpenCodeEvent): FoldState {
   const index = { ...state.index };
   switch (event.type) {
     case "text.updated": {
+      // A ```review fence in the agent's text becomes a structured reviewer card.
+      const { clean, review } = splitReview(event.text);
       const key = `text:${event.partId}`;
-      if (key in index) blocks[index[key]] = { kind: "agent", markdown: event.text };
+      if (key in index) blocks[index[key]] = { kind: "agent", markdown: clean };
       else {
-        blocks.push({ kind: "agent", markdown: event.text });
+        blocks.push({ kind: "agent", markdown: clean });
         index[key] = blocks.length - 1;
+      }
+      if (review) {
+        const rkey = `review:${event.partId}`;
+        if (rkey in index) blocks[index[rkey]] = review;
+        else {
+          blocks.push(review);
+          index[rkey] = blocks.length - 1;
+        }
       }
       return { blocks, index };
     }
@@ -374,7 +413,11 @@ export function historyToThread(messages: HistoryMessage[]): FoldState {
       if (text) blocks.push({ kind: "user", text });
     } else {
       for (const p of m.parts) {
-        if (p.type === "text" && p.text?.trim()) blocks.push({ kind: "agent", markdown: p.text });
+        if (p.type === "text" && p.text?.trim()) {
+          const { clean, review } = splitReview(p.text);
+          if (clean) blocks.push({ kind: "agent", markdown: clean });
+          if (review) blocks.push(review);
+        }
         else if (p.type === "tool") {
           const status = mapToolStatus(p.state?.status);
           blocks.push({ kind: "tool-call", title: p.state?.title ?? p.tool ?? "tool", status });

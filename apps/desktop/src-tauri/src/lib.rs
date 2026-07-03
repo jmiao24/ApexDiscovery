@@ -2,12 +2,14 @@
 // bundled OpenCode sidecar (isolated config/data + dedicated port; killed on exit).
 mod artifact_file;
 mod debug_log;
+mod jupyter;
 mod kernel;
 mod opencode_config;
 mod preview_server;
 mod runtime;
 mod tools;
 
+use jupyter::JupyterState;
 use kernel::KernelState;
 use preview_server::PreviewState;
 use runtime::RuntimeState;
@@ -26,18 +28,32 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(RuntimeState::default())
         .manage(KernelState::default())
+        .manage(JupyterState::default())
         .manage(PreviewState::default())
         .invoke_handler(tauri::generate_handler![
             runtime::start_runtime,
             runtime::stop_runtime,
+            runtime::workspace_path,
+            runtime::import_opencode_login,
+            runtime::remove_config_entry,
+            jupyter::jupyter_status,
+            jupyter::setup_jupyter,
+            jupyter::start_jupyter,
             runtime::configure_opencode,
             kernel::kernel_execute,
             kernel::kernel_reset,
             artifact_file::read_artifact,
             artifact_file::open_path,
             artifact_file::resolve_artifact,
+            artifact_file::save_text_file,
+            artifact_file::open_url,
+            artifact_file::add_files_to_workspace,
+            artifact_file::add_text_to_workspace,
+            artifact_file::list_notebooks,
+            artifact_file::write_workspace_file,
             preview_server::preview_url,
             tools::detect_tools,
             debug_log::log_debug
@@ -49,6 +65,7 @@ pub fn run() {
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 runtime::kill_child(&app.state::<RuntimeState>());
                 kernel::kill_kernel(&app.state::<KernelState>());
+                jupyter::kill_jupyter(&app.state::<JupyterState>());
             }
         });
 }

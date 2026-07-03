@@ -29,6 +29,9 @@ pub fn mime_for(ext: &str) -> (&'static str, bool) {
         "md" => ("text/markdown", true),
         "tex" => ("text/x-tex", true),
         "json" => ("application/json", true),
+        "ipynb" => ("application/x-ipynb+json", true),
+        "yaml" | "yml" => ("text/yaml", true),
+        "js" | "ts" | "sh" | "toml" | "log" => ("text/plain", true),
         "py" => ("text/x-python", true),
         "r" => ("text/x-r", true),
         "txt" => ("text/plain", true),
@@ -168,6 +171,187 @@ pub fn open_path(app: AppHandle, path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+pub struct NotebookEntry {
+    path: String,
+    /// Seconds since the epoch, for newest-first sorting in the UI.
+    modified: u64,
+}
+
+/// All .ipynb files in the workspace (same bounds/skips as the artifact search),
+/// newest first.
+#[tauri::command]
+pub fn list_notebooks(app: AppHandle) -> Result<Vec<NotebookEntry>, String> {
+    let root = workspace_dir(&app)?;
+    let root = root.canonicalize().map_err(|e| e.to_string())?;
+    let mut found = Vec::new();
+    let mut stack = vec![(root.clone(), 0usize)];
+    let mut seen = 0usize;
+    while let Some((dir, depth)) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            seen += 1;
+            if seen > SEARCH_MAX_ENTRIES {
+                stack.clear();
+                break;
+            }
+            let fname = entry.file_name();
+            let fname_str = fname.to_string_lossy();
+            if fname_str.starts_with('.') || fname_str == "node_modules" || fname_str == "__pycache__" {
+                continue;
+            }
+            let Ok(ft) = entry.file_type() else { continue };
+            if ft.is_dir() {
+                if depth < SEARCH_MAX_DEPTH {
+                    stack.push((entry.path(), depth + 1));
+                }
+            } else if ft.is_file() && fname_str.ends_with(".ipynb") {
+                let modified = entry
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                if let Ok(rel) = entry.path().strip_prefix(&root) {
+                    let parts: Vec<String> = rel
+                        .components()
+                        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                        .collect();
+                    found.push(NotebookEntry { path: parts.join("/"), modified });
+                }
+            }
+        }
+    }
+    found.sort_by(|a, b| b.modified.cmp(&a.modified));
+    Ok(found)
+}
+
+/// Write text to a workspace-relative path (used to save notebooks). Rejects
+/// absolute paths and any `..` component; missing parent dirs are created.
+#[tauri::command]
+pub fn write_workspace_file(app: AppHandle, path: String, content: String) -> Result<(), String> {
+    let rel = Path::new(&path);
+    if rel.is_absolute()
+        || rel
+            .components()
+            .any(|c| !matches!(c, std::path::Component::Normal(_)))
+    {
+        return Err("path must be a plain workspace-relative path".into());
+    }
+    let full = workspace_dir(&app)?.join(rel);
+    if let Some(parent) = full.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&full, content).map_err(|e| format!("write failed: {e}"))
+}
+
+/// Pick local files via the native open dialog and copy them into the agent
+/// workspace so the agent can read them. Returns workspace-relative names
+/// (deduplicated as name-1.ext, name-2.ext on collision); empty on cancel.
+#[tauri::command]
+pub async fn add_files_to_workspace(app: AppHandle) -> Result<Vec<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(picked) = app.dialog().file().blocking_pick_files() else {
+        return Ok(Vec::new()); // user cancelled
+    };
+    let ws = workspace_dir(&app)?;
+    let mut added = Vec::new();
+    for file in picked {
+        let src = file.into_path().map_err(|e| e.to_string())?;
+        let name = src
+            .file_name()
+            .ok_or("picked path has no file name")?
+            .to_string_lossy()
+            .to_string();
+        let dst_name = unique_name(&ws, &name);
+        std::fs::copy(&src, ws.join(&dst_name)).map_err(|e| format!("copy failed: {e}"))?;
+        added.push(dst_name);
+    }
+    Ok(added)
+}
+
+/// Write text content into the workspace under `filename` (deduplicated as
+/// name-1.ext on collision). Used when a long paste becomes a file. Returns
+/// the actual name written.
+#[tauri::command]
+pub fn add_text_to_workspace(
+    app: AppHandle,
+    filename: String,
+    content: String,
+) -> Result<String, String> {
+    let base = Path::new(&filename)
+        .file_name()
+        .ok_or("invalid file name")?
+        .to_string_lossy()
+        .to_string();
+    let ws = workspace_dir(&app)?;
+    let name = unique_name(&ws, &base);
+    std::fs::write(ws.join(&name), content).map_err(|e| format!("write failed: {e}"))?;
+    Ok(name)
+}
+
+/// First free variant of `name` in `dir`: name.ext, name-1.ext, name-2.ext, …
+fn unique_name(dir: &Path, name: &str) -> String {
+    if !dir.join(name).exists() {
+        return name.to_string();
+    }
+    let (stem, ext) = match name.rsplit_once('.') {
+        Some((s, e)) if !s.is_empty() => (s, Some(e)),
+        _ => (name, None),
+    };
+    for n in 1.. {
+        let candidate = match ext {
+            Some(e) => format!("{stem}-{n}.{e}"),
+            None => format!("{stem}-{n}"),
+        };
+        if !dir.join(&candidate).exists() {
+            return candidate;
+        }
+    }
+    unreachable!()
+}
+
+/// Open an http(s) URL in the user's default browser. The webview itself must
+/// never navigate away from the app, so external links land here instead.
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("only http(s) URLs can be opened".into());
+    }
+    #[cfg(target_os = "macos")]
+    let mut cmd = std::process::Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "start", ""]);
+        c
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut cmd = std::process::Command::new("xdg-open");
+    cmd.arg(&url);
+    cmd.spawn().map_err(|e| format!("open failed: {e}"))?;
+    Ok(())
+}
+
+/// Save text through a native "Save As" dialog. Returns the chosen path, or
+/// None if the user cancelled. Async so the blocking dialog never runs on the
+/// main thread.
+#[tauri::command]
+pub async fn save_text_file(
+    app: AppHandle,
+    filename: String,
+    content: String,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(choice) = app.dialog().file().set_file_name(&filename).blocking_save_file() else {
+        return Ok(None); // user cancelled
+    };
+    let path = choice.into_path().map_err(|e| e.to_string())?;
+    std::fs::write(&path, content).map_err(|e| format!("write failed: {e}"))?;
+    Ok(Some(path.to_string_lossy().to_string()))
+}
+
 /// Minimal std-only base64 (avoids adding a dependency).
 fn base64_encode(input: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -185,7 +369,28 @@ fn base64_encode(input: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{base64_encode, locate_under};
+    use super::{base64_encode, locate_under, unique_name};
+
+    #[test]
+    fn unique_name_dedupes_with_numeric_suffix() {
+        let dir = std::env::temp_dir().join(format!("ai4s-unique-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        assert_eq!(unique_name(&dir, "data.csv"), "data.csv");
+        std::fs::write(dir.join("data.csv"), "x").unwrap();
+        assert_eq!(unique_name(&dir, "data.csv"), "data-1.csv");
+        std::fs::write(dir.join("data-1.csv"), "x").unwrap();
+        assert_eq!(unique_name(&dir, "data.csv"), "data-2.csv");
+
+        // No extension, and dotfiles (no stem before the dot) keep their whole name.
+        std::fs::write(dir.join("README"), "x").unwrap();
+        assert_eq!(unique_name(&dir, "README"), "README-1");
+        std::fs::write(dir.join(".env"), "x").unwrap();
+        assert_eq!(unique_name(&dir, ".env"), ".env-1");
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn base64_matches_known_vectors() {

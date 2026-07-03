@@ -1,10 +1,16 @@
 import type {
   AgentInfo,
   HistoryMessage,
+  McpConfig,
+  McpServer,
+  OAuthAuthorization,
   OpenCodeClientOptions,
   OpenCodeEvent,
   OpenCodePart,
   OpenCodeRawEvent,
+  ProviderAuthMethod,
+  ProviderCatalogEntry,
+  ProviderInfo,
   RuntimeStatus,
   SessionMeta,
   SkillInfo,
@@ -37,6 +43,7 @@ export class OpenCodeClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly authHeader: string | null;
+  private readonly directory: string | null;
   private status: RuntimeStatus = "offline";
   private abort: AbortController | null = null;
   private es: EventSource | null = null;
@@ -54,6 +61,7 @@ export class OpenCodeClient {
     this.authHeader = opts.password
       ? "Basic " + btoa(`${opts.username ?? "opencode"}:${opts.password}`)
       : null;
+    this.directory = opts.directory ?? null;
   }
 
   getStatus(): RuntimeStatus {
@@ -194,12 +202,176 @@ export class OpenCodeClient {
     return arr.map((m) => ({ role: m.info.role, parts: m.parts ?? [] }));
   }
 
-  /** Real skills loaded by OpenCode (built-in + project + user). */
+  /** Real skills loaded by OpenCode (built-in + bundled + user). */
   async listSkills(): Promise<SkillInfo[]> {
-    const res = await this.fetchImpl(`${this.baseUrl}/api/skill`, { headers: this.headers() });
+    // Scope to the workspace: skill instances are created lazily per directory,
+    // and the unscoped endpoint answers from an instance that may have none.
+    const query = this.directory ? `?directory=${encodeURIComponent(this.directory)}` : "";
+    const res = await this.fetchImpl(`${this.baseUrl}/api/skill${query}`, {
+      headers: this.headers(),
+    });
     if (!res.ok) throw new Error(`Failed to list skills (${res.status})`);
     const body = (await res.json()) as { data?: SkillInfo[] };
     return body.data ?? [];
+  }
+
+  /** The configured default model ("provider/model"), or null when unset. */
+  async getDefaultModel(): Promise<string | null> {
+    const res = await this.fetchImpl(`${this.baseUrl}/config`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`Failed to read config (${res.status})`);
+    const cfg = (await res.json()) as { model?: string };
+    return cfg.model ?? null;
+  }
+
+  /** Set the default model in OpenCode's global (app-profile) config. */
+  async setDefaultModel(model: string): Promise<void> {
+    const res = await this.fetchImpl(`${this.baseUrl}/global/config`, {
+      method: "PATCH",
+      headers: this.headers(true),
+      body: JSON.stringify({ model }),
+    });
+    if (!res.ok) throw new Error(`Failed to set model (${res.status})`);
+  }
+
+  /** Providers OpenCode can use right now, with their models. */
+  async listProviders(): Promise<ProviderInfo[]> {
+    const res = await this.fetchImpl(`${this.baseUrl}/config/providers`, {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`Failed to list providers (${res.status})`);
+    const body = (await res.json()) as {
+      providers?: Array<{ id: string; name?: string; models?: Record<string, { name?: string }> }>;
+    };
+    return (body.providers ?? []).map((p) => ({
+      id: p.id,
+      name: p.name ?? p.id,
+      models: Object.entries(p.models ?? {}).map(([id, m]) => ({ id, name: m.name ?? id })),
+    }));
+  }
+
+  /**
+   * Register a custom endpoint (self-hosted / OpenAI-compatible / Anthropic-
+   * compatible / local Ollama) in OpenCode's global config. Applies live.
+   */
+  async addCustomProvider(
+    id: string,
+    opts: { name: string; npm: string; baseURL: string; apiKey?: string; models: string[] },
+  ): Promise<void> {
+    const models = Object.fromEntries(opts.models.map((m) => [m, { name: m }]));
+    const provider = {
+      [id]: {
+        name: opts.name,
+        npm: opts.npm,
+        options: { baseURL: opts.baseURL, ...(opts.apiKey ? { apiKey: opts.apiKey } : {}) },
+        models,
+      },
+    };
+    const res = await this.fetchImpl(`${this.baseUrl}/global/config`, {
+      method: "PATCH",
+      headers: this.headers(true),
+      body: JSON.stringify({ provider }),
+    });
+    if (!res.ok) throw new Error(`Failed to add the provider (${res.status})`);
+  }
+
+  /** Ids of custom providers defined in the global config (removable via the app). */
+  async listCustomProviderIds(): Promise<string[]> {
+    const res = await this.fetchImpl(`${this.baseUrl}/global/config`, { headers: this.headers() });
+    if (!res.ok) return [];
+    const cfg = (await res.json()) as { provider?: Record<string, unknown> };
+    return Object.keys(cfg.provider ?? {});
+  }
+
+  /** Configured MCP servers with live status, joined with their config. */
+  async listMcpServers(): Promise<McpServer[]> {
+    const [statusRes, cfgRes] = await Promise.all([
+      this.fetchImpl(`${this.baseUrl}/mcp`, { headers: this.headers() }),
+      this.fetchImpl(`${this.baseUrl}/global/config`, { headers: this.headers() }),
+    ]);
+    if (!statusRes.ok) throw new Error(`Failed to list MCP servers (${statusRes.status})`);
+    const status = (await statusRes.json()) as Record<string, { status?: string }>;
+    const cfg = cfgRes.ok
+      ? ((await cfgRes.json()) as { mcp?: Record<string, McpConfig> })
+      : { mcp: {} };
+    const names = new Set([...Object.keys(status), ...Object.keys(cfg.mcp ?? {})]);
+    return [...names].sort().map((name) => ({
+      name,
+      status: status[name]?.status ?? "pending",
+      config: cfg.mcp?.[name],
+    }));
+  }
+
+  /** Add (or update) an MCP server in the global config. Applies live. */
+  async addMcpServer(name: string, config: McpConfig): Promise<void> {
+    const res = await this.fetchImpl(`${this.baseUrl}/global/config`, {
+      method: "PATCH",
+      headers: this.headers(true),
+      body: JSON.stringify({ mcp: { [name]: config } }),
+    });
+    if (!res.ok) throw new Error(`Failed to add the MCP server (${res.status})`);
+  }
+
+  /** The full provider catalog (~150 entries) and which ids are connected. */
+  async listProviderCatalog(): Promise<{ all: ProviderCatalogEntry[]; connected: string[] }> {
+    const res = await this.fetchImpl(`${this.baseUrl}/provider`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`Failed to list the provider catalog (${res.status})`);
+    const body = (await res.json()) as {
+      all?: Array<{ id: string; name?: string; env?: string[] }>;
+      connected?: string[];
+    };
+    return {
+      all: (body.all ?? []).map((p) => ({ id: p.id, name: p.name ?? p.id, env: p.env ?? [] })),
+      connected: body.connected ?? [],
+    };
+  }
+
+  /** Every provider OpenCode knows how to connect, with its auth methods. */
+  async listAuthMethods(): Promise<Record<string, ProviderAuthMethod[]>> {
+    const res = await this.fetchImpl(`${this.baseUrl}/provider/auth`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`Failed to list auth methods (${res.status})`);
+    return (await res.json()) as Record<string, ProviderAuthMethod[]>;
+  }
+
+  /** Store an API key for a provider. */
+  async setProviderApiKey(providerID: string, key: string): Promise<void> {
+    const res = await this.fetchImpl(`${this.baseUrl}/auth/${encodeURIComponent(providerID)}`, {
+      method: "PUT",
+      headers: this.headers(true),
+      body: JSON.stringify({ type: "api", key }),
+    });
+    if (!res.ok) throw new Error(`Failed to save the key (${res.status})`);
+  }
+
+  /** Remove a provider's stored credentials. */
+  async removeProviderAuth(providerID: string): Promise<void> {
+    const res = await this.fetchImpl(`${this.baseUrl}/auth/${encodeURIComponent(providerID)}`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`Failed to disconnect (${res.status})`);
+  }
+
+  /** Start an OAuth login; returns the URL to open and how it completes. */
+  async oauthAuthorize(
+    providerID: string,
+    method: number,
+    inputs?: Record<string, string>,
+  ): Promise<OAuthAuthorization> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/provider/${encodeURIComponent(providerID)}/oauth/authorize`,
+      { method: "POST", headers: this.headers(true), body: JSON.stringify({ method, inputs }) },
+    );
+    if (!res.ok) throw new Error(`Failed to start the login (${res.status})`);
+    return (await res.json()) as OAuthAuthorization;
+  }
+
+  /** Complete an OAuth login (pass the pasted code for "code" flows). */
+  async oauthCallback(providerID: string, method: number, code?: string): Promise<void> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/provider/${encodeURIComponent(providerID)}/oauth/callback`,
+      { method: "POST", headers: this.headers(true), body: JSON.stringify({ method, code }) },
+    );
+    if (!res.ok) throw new Error(`Login did not complete (${res.status})`);
   }
 
   /** Real agents configured in OpenCode. */

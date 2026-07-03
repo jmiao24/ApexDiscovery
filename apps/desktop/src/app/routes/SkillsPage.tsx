@@ -34,11 +34,10 @@ export function SkillsPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-8 py-8">
-        <h1 className="font-serif text-2xl text-text">Skills &amp; Agents</h1>
+        <h1 className="font-serif text-xl text-text">Skills &amp; Agents</h1>
         <p className="mt-1 text-sm text-muted">
-          Loaded live from the OpenCode runtime. Skills live as Markdown files under{" "}
-          <span className="font-mono">.opencode/skill/</span> in your workspace or{" "}
-          <span className="font-mono">~/.config/opencode</span>.
+          Loaded live from the OpenCode runtime — the bundled ai4s-skills pack plus anything under{" "}
+          <span className="font-mono">.opencode/skills/</span> in your workspace.
         </p>
 
         {/* Install a skill (#1) */}
@@ -47,7 +46,7 @@ export function SkillsPage() {
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Paste a skill (Markdown) or a GitHub URL — the agent installs it into .opencode/skill/"
+              placeholder="Paste a skill (Markdown) or a GitHub URL — the agent installs it into .opencode/skills/"
               rows={3}
               className="w-full resize-y rounded-input border border-border bg-surface px-3 py-2 text-sm text-text outline-none placeholder:text-muted"
             />

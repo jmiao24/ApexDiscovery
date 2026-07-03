@@ -1,4 +1,4 @@
-import { Download, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { PdfInspector as PdfInspectorT } from "@ai4s/shared";
 
 export function PdfInspector({ data, onClose }: { data: PdfInspectorT; onClose: () => void }) {
@@ -8,9 +8,6 @@ export function PdfInspector({ data, onClose }: { data: PdfInspectorT; onClose: 
       <header className="flex items-center gap-2 border-b border-border px-4 py-3">
         <span className="text-sm font-medium text-text">{data.title}</span>
         <div className="flex-1" />
-        <button className="text-muted hover:text-text" aria-label="Download">
-          <Download size={16} />
-        </button>
         <button className="text-muted hover:text-text" aria-label="Close inspector" onClick={onClose}>
           <X size={16} />
         </button>

@@ -16,14 +16,19 @@ const MODEL_TONE: Record<ModelStatus, string> = {
 };
 
 export function StatusPills() {
-  // Runtime status is live from the OpenCode client. Model is disconnected until a key is set.
+  // Both live from the runtime: connection status + the configured default model.
   const runtime = useRuntimeStore((s) => s.status);
-  const model: ModelStatus = "disconnected";
+  const defaultModel = useRuntimeStore((s) => s.defaultModel);
+  const model: ModelStatus = defaultModel ? "connected" : "disconnected";
 
   return (
     <div className="flex flex-col gap-1 text-xs text-muted">
       <Pill dot={RUNTIME_TONE[runtime]} label="Runtime" value={runtime} />
-      <Pill dot={MODEL_TONE[model]} label="Model" value={model} />
+      <Pill
+        dot={MODEL_TONE[model]}
+        label="Model"
+        value={defaultModel ? defaultModel.split("/").pop()! : "not set"}
+      />
     </div>
   );
 }
