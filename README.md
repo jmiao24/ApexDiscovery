@@ -5,8 +5,8 @@
 > **An open AI workbench for scientists.** Your research partner for rigorous science.
 
 An open-source, **local-first**, **model-agnostic**, **reproducible** AI research
-workbench for macOS and Windows — an open-source alternative to Claude Science
-style products. It is not a chat box: it is a workbench that ties literature,
+workbench for macOS and Windows — an **open-source alternative to Claude Science**
+(Claude for Science) and similar AI-for-science products. It is not a chat box: it is a workbench that ties literature,
 code, figures, reports, and review into one auditable, reproducible workflow.
 
 Built on [Tauri 2](https://tauri.app), the [OpenCode](https://opencode.ai) agent
