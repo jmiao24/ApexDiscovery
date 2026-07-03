@@ -127,7 +127,11 @@ git-ignored and fetched by `scripts/dev/fetch-opencode.sh`). The Rust side
 - on a **dedicated free port** (not the default 4096);
 - with an **app-private** config/data dir via `XDG_CONFIG_HOME`/`XDG_DATA_HOME` under
   `~/Library/Application Support/com.ai4s.workbench/runtime/` (macOS) — so the user's
-  `~/.config/opencode` is never touched;
+  sessions/config are never touched;
+- but it **shares the user's login**: the user's `auth.json` (OpenCode credentials / free
+  access) is copied read-only into the sandbox at startup, so the bundled runtime can
+  reply out of the box without a separate login. We only read the user's auth file; we
+  never modify it or their sessions.
 - killed on app exit.
 
 The user's model provider key (entered in Settings) is written into that app-private

@@ -35,6 +35,37 @@ fn opencode_config_file(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(xdg_config_home(app)?.join("opencode").join("opencode.json"))
 }
 
+/// The user's existing OpenCode auth file (their login / free credits), if any.
+/// Read-only: we copy it into our sandbox so the bundled runtime can use the same
+/// login, but we never modify the user's file or sessions.
+fn user_auth_source() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+        if !xdg.is_empty() {
+            candidates.push(PathBuf::from(xdg).join("opencode").join("auth.json"));
+        }
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        candidates.push(PathBuf::from(&home).join(".local/share/opencode/auth.json"));
+    }
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        candidates.push(PathBuf::from(appdata).join("opencode").join("auth.json"));
+    }
+    candidates.into_iter().find(|p| p.exists())
+}
+
+/// Copy the user's OpenCode login into the app-private data dir so the bundled
+/// runtime uses the same credentials (e.g. free/oauth access). Sessions stay isolated.
+fn seed_auth(data_dir: &PathBuf) {
+    if let Some(src) = user_auth_source() {
+        let dst = data_dir.join("opencode").join("auth.json");
+        if let Some(parent) = dst.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::copy(&src, &dst);
+    }
+}
+
 fn free_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
         .ok()
@@ -52,6 +83,8 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
     for d in [&cfg, &data, &cache, &state] {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
+    // Share the user's OpenCode login (free credits) without touching their sessions.
+    seed_auth(&data);
     let home = std::env::var("HOME").unwrap_or_default();
     let port_str = port.to_string();
 
