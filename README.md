@@ -1,6 +1,8 @@
-# AI4S Workbench Desktop
+![Open Science — An open AI workbench for scientists](./docs/assets/banner.webp)
 
-> Open-source AI research workbench for reproducible science.
+# Open Science
+
+> **An open AI workbench for scientists.** Your research partner for rigorous science.
 
 An open-source, **local-first**, **model-agnostic**, **reproducible** AI research
 workbench for macOS and Windows — an open-source alternative to Claude Science
@@ -35,7 +37,7 @@ for the full spec.
 | `packages/shared/` | Shared types and utilities |
 | `packages/sdk/` | `OpenCodeClient` SDK wrapper (isolates the UI from the runtime) |
 | `runtime/manager/` | Local Runtime Manager: dependency checks, sidecar lifecycle, workspace, provenance |
-| `runtime/opencode-profile/` | The AI4S Workbench OpenCode profile (config + skills) |
+| `runtime/opencode-profile/` | The Open Science OpenCode profile (config + skills) |
 | `runtime/mcp/` | MCP server configurations (filesystem, paper-search, BioMCP, Zotero, …) |
 | `runtime/skills/` | Self-authored scientific skills (`core/`) |
 | `docs/` | `PRD.md`, `TECHNICAL_DESIGN.md` |

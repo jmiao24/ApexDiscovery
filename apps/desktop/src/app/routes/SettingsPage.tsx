@@ -25,7 +25,7 @@ export function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("");
-  const [workspace, setWorkspace] = useState("~/AI4S Workbench/workspaces");
+  const [workspace, setWorkspace] = useState("~/Open Science/workspaces");
   const [backend, setBackend] = useState("Local (manual approval)");
   const [saveMsg, setSaveMsg] = useState<string>("");
   const [saving, setSaving] = useState(false);
@@ -60,7 +60,7 @@ export function SettingsPage() {
       <div className="mx-auto max-w-2xl px-8 py-8">
         <h1 className="font-serif text-2xl text-text">Settings</h1>
 
-        <Field label="Agent runtime" hint="AI4S Workbench drives OpenCode (opencode serve) over its HTTP + SSE API.">
+        <Field label="Agent runtime" hint="Open Science drives OpenCode (opencode serve) over its HTTP + SSE API.">
           <div className="flex items-center gap-2">
             <input
               value={serverUrl}

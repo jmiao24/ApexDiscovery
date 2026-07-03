@@ -4,6 +4,7 @@ import type { Project } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 import { useRuntimeStore } from "@/lib/runtime";
 import { StatusPills } from "./StatusPills";
+import logo from "@/assets/logo.webp";
 
 interface Row {
   id: string;
@@ -44,8 +45,11 @@ export function Sidebar({ project }: { project: Project }) {
   return (
     <aside className="flex h-full w-[272px] shrink-0 flex-col border-r border-border bg-surface">
       <div className="px-5 pb-4 pt-5">
-        <div className="font-serif text-[26px] font-semibold leading-none tracking-tight text-text">
-          AI4S Workbench
+        <div className="flex items-center gap-2">
+          <img src={logo} alt="" className="h-7 w-auto" />
+          <div className="font-serif text-[24px] font-semibold leading-none tracking-tight text-text">
+            Open Science
+          </div>
         </div>
         <div className="mt-1 text-xs uppercase tracking-widest text-muted">Beta</div>
       </div>

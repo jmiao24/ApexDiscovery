@@ -1,4 +1,8 @@
-# AI4S Workbench Desktop
+# Open Science (desktop)
+
+Brand name: **Open Science** — "An open AI workbench for scientists. Your research
+partner for rigorous science." (Bundle identifier stays `com.ai4s.workbench` and
+internal `@ai4s/*` package names are unchanged — display branding only.)
 
 Project rules and working context for AI agents (Claude Code, Cursor, Codex, etc.).
 `CLAUDE.md` is a symlink to this file — edit only `AGENTS.md`.
