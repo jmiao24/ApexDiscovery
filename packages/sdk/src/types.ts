@@ -25,6 +25,10 @@ export interface ToolUpdatedEvent {
   tool: string;
   status: ToolCallStatus;
   title?: string;
+  /** Tool arguments (e.g. a write tool's `filePath` + `content`). */
+  input?: Record<string, unknown>;
+  /** Tool result text, when the tool returned one. */
+  output?: string;
 }
 export interface SessionIdleEvent {
   type: "session.idle";
@@ -71,7 +75,12 @@ export interface HistoryPart {
   type: string;
   text?: string;
   tool?: string;
-  state?: { status?: string; title?: string };
+  state?: {
+    status?: string;
+    title?: string;
+    input?: Record<string, unknown>;
+    output?: string;
+  };
 }
 
 export interface OpenCodeClientOptions {

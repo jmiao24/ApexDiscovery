@@ -20,13 +20,28 @@ const figureSession: Session = {
       title: "atlas_fig1a.png",
       src: umapAtlas,
       caption: "138 species · 5,672 cell types · one shared embedding",
-      annotation: { index: 1, note: "these labels are hard to see", x: 72, y: 64 },
+      annotations: [{ index: 1, note: "these labels are hard to see", x: 72, y: 64 }],
     },
   ],
   inspector: {
     variant: "artifact",
     title: "atlas_fig1a.png",
-    versions: [{ label: "v1" }, { label: "v2" }],
+    filename: "make_atlas_fig.py",
+    versions: [
+      {
+        label: "v1",
+        reviewPassed: false,
+        code: `apply_nature_style()
+centroids = pd.read_csv("fig4_atlas_centroids_m138.csv")
+callouts  = pd.read_csv("fig4_atlas_callouts.csv")
+
+HERO = {"neuron": "#5b9bd5", "muscle": "#bcbd22", "immune": "#2ca02c"}
+# v1: hero palette only — insets and Arial styling not added yet`,
+        executionLog:
+          "$ python make_atlas_fig.py\n[ok] loaded 5,672 centroids\n[ok] wrote atlas_fig1a.png (v1)  1.0 MB  1600x1050\nfinished in 7.1s",
+      },
+      { label: "v2", reviewPassed: true },
+    ],
     activeVersion: "v2",
     reviewPassed: true,
     inputs: ["fig4_atlas_callouts.csv", "fig4_atlas_centroids_m138.csv"],

@@ -2,8 +2,10 @@ import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Loader2, Plug, PlugZap, Plus } from "lucide-react";
 import { useRuntimeStore } from "@/lib/runtime";
-import { BlockList } from "@/components/thread/BlockList";
+import { fileInspectorFromBlock } from "@/lib/artifacts";
+import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
 import { Composer } from "@/components/thread/Composer";
+import { InspectorShell } from "@/components/inspector/InspectorShell";
 import { cn } from "@/lib/cn";
 
 /** Live agent session backed by the OpenCode runtime. `/live` (no id) is a blank draft;
@@ -18,11 +20,14 @@ export function LiveSessionPage() {
     currentId,
     threads,
     error,
+    activeArtifact,
     connect,
     disconnect,
     openSession,
     startDraft,
     sendPrompt,
+    openArtifact,
+    closeArtifact,
   } = useRuntimeStore();
 
   const connected = status === "ready";
@@ -38,81 +43,101 @@ export function LiveSessionPage() {
     if (id && !sessionId) navigate(`/live/${id}`); // reflect the freshly-created session
   };
 
+  // Interactions from the thread/inspector fold back into the conversation as follow-up prompts.
+  const handlers: BlockHandlers = {
+    onArtifactOpen: openArtifact,
+    onFigureComment: (a, title) =>
+      void sendPrompt(`On the figure ${title}, at (${a.x.toFixed(0)}%, ${a.y.toFixed(0)}%): ${a.note}`),
+  };
+  const onEvaluate = (expr: string) => void sendPrompt(`Evaluate in the notebook kernel:\n\`\`\`python\n${expr}\n\`\`\``);
+
   const thread = currentId ? threads[currentId] : undefined;
   const title = sessions.find((s) => s.id === currentId)?.title;
   const isEmpty = !thread || thread.blocks.length === 0;
 
   return (
-    <div className="flex h-full min-w-0 flex-col">
-      <div className="flex items-center gap-2 border-b border-border px-8 py-4">
-        <h1 className="truncate text-lg text-text">{sessionId && title ? title : "New session"}</h1>
-        <div className="flex-1" />
-        <ConnBadge status={status} />
-        <button
-          onClick={() => {
-            startDraft();
-            navigate("/live");
-          }}
-          className="flex items-center gap-1.5 rounded-input border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-2"
-        >
-          <Plus size={15} /> New
-        </button>
-        {connected ? (
+    <div className="flex h-full min-w-0">
+      <div className="flex h-full min-w-0 flex-1 flex-col">
+        <div className="flex items-center gap-2 border-b border-border px-8 py-4">
+          <h1 className="truncate text-lg text-text">{sessionId && title ? title : "New session"}</h1>
+          <div className="flex-1" />
+          <ConnBadge status={status} />
           <button
-            onClick={disconnect}
+            onClick={() => {
+              startDraft();
+              navigate("/live");
+            }}
             className="flex items-center gap-1.5 rounded-input border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-2"
           >
-            <Plug size={15} /> Disconnect
+            <Plus size={15} /> New
           </button>
-        ) : (
-          <button
-            onClick={connect}
-            disabled={connecting}
-            className="flex items-center gap-1.5 rounded-input bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
-          >
-            {connecting ? <Loader2 size={15} className="animate-spin" /> : <PlugZap size={15} />}
-            Connect
-          </button>
-        )}
-      </div>
+          {connected ? (
+            <button
+              onClick={disconnect}
+              className="flex items-center gap-1.5 rounded-input border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-2"
+            >
+              <Plug size={15} /> Disconnect
+            </button>
+          ) : (
+            <button
+              onClick={connect}
+              disabled={connecting}
+              className="flex items-center gap-1.5 rounded-input bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
+            >
+              {connecting ? <Loader2 size={15} className="animate-spin" /> : <PlugZap size={15} />}
+              Connect
+            </button>
+          )}
+        </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-[760px] flex-col gap-4 px-8 py-6">
-          {!connected && (
-            <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-              <div className="text-sm font-medium text-text">OpenCode runtime</div>
-              <p className="mt-1 text-sm text-muted">
-                The desktop app runs a bundled OpenCode automatically. In the browser, start one with{" "}
-                <span className="font-mono">opencode serve</span> and connect.
-              </p>
-              <div className="mt-3 rounded-input bg-surface-2 px-3 py-2 font-mono text-xs text-text">
-                {serverUrl}
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto flex max-w-[760px] flex-col gap-4 px-8 py-6">
+            {!connected && (
+              <div className="rounded-card border border-border bg-surface p-5 shadow-card">
+                <div className="text-sm font-medium text-text">OpenCode runtime</div>
+                <p className="mt-1 text-sm text-muted">
+                  The desktop app runs a bundled OpenCode automatically. In the browser, start one with{" "}
+                  <span className="font-mono">opencode serve</span> and connect.
+                </p>
+                <div className="mt-3 rounded-input bg-surface-2 px-3 py-2 font-mono text-xs text-text">
+                  {serverUrl}
+                </div>
               </div>
-            </div>
-          )}
-          {error && (
-            <div className="rounded-input border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
-              {error}
-            </div>
-          )}
-          {connected && isEmpty && (
-            <div className="py-10 text-center text-sm text-muted">
-              Send a message to start a new conversation.
-            </div>
-          )}
-          {thread && <BlockList blocks={thread.blocks} />}
+            )}
+            {error && (
+              <div className="rounded-input border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
+                {error}
+              </div>
+            )}
+            {connected && isEmpty && (
+              <div className="py-10 text-center text-sm text-muted">
+                Send a message to start a new conversation.
+              </div>
+            )}
+            {thread && <BlockList blocks={thread.blocks} handlers={handlers} />}
+          </div>
+        </div>
+
+        <div className="border-t border-border px-8 py-4">
+          <div className="mx-auto max-w-[760px]">
+            <Composer
+              onSend={onSend}
+              disabled={!connected}
+              placeholder={connected ? "Ask anything" : "Connect to chat"}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="border-t border-border px-8 py-4">
-        <div className="mx-auto max-w-[760px]">
-          <Composer
-            onSend={onSend}
-            disabled={!connected}
-            placeholder={connected ? "Ask anything" : "Connect to chat"}
+      {activeArtifact && (
+        <div className="hidden w-[46%] max-w-[720px] shrink-0 lg:block">
+          <InspectorShell
+            inspector={fileInspectorFromBlock(activeArtifact)}
+            onClose={closeArtifact}
+            onEvaluate={onEvaluate}
           />
         </div>
-      </div>
+      )}
     </div>
   );
 }

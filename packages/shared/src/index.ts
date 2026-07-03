@@ -35,6 +35,7 @@ export type ThreadBlock =
   | ReviewerBlock
   | DataTableBlock
   | FigureBlock
+  | ArtifactBlock
   | RunningJobsBlock
   | StatusLineBlock;
 
@@ -103,7 +104,8 @@ export interface FigureBlock {
   /** Image URL / data URI; a placeholder this slice. */
   src: string;
   caption?: string;
-  annotation?: FigureAnnotation;
+  /** Reviewer/user pins dropped on the figure. */
+  annotations?: FigureAnnotation[];
 }
 
 export interface FigureAnnotation {
@@ -112,6 +114,28 @@ export interface FigureAnnotation {
   /** Percent position of the pin within the image. */
   x: number;
   y: number;
+}
+
+/** File the agent produced, surfaced as a traceable artifact in the thread. */
+export type ArtifactKind =
+  | "figure"
+  | "script"
+  | "report"
+  | "table"
+  | "notebook"
+  | "data";
+
+export interface ArtifactBlock {
+  kind: "artifact";
+  /** Workspace-relative path the tool wrote. */
+  path: string;
+  filename: string;
+  artifact: ArtifactKind;
+  /** Tool that produced it, e.g. "write" / "edit". */
+  tool: string;
+  /** Text content when the producing tool carried it (write/edit); absent for binary. */
+  content?: string;
+  language?: string;
 }
 
 export interface RunningJob {
@@ -133,10 +157,32 @@ export interface StatusLineBlock {
 
 // ---- Inspector (right pane) ----
 
-export type Inspector = ArtifactInspector | NotebookInspector | PdfInspector;
+export type Inspector =
+  | ArtifactInspector
+  | NotebookInspector
+  | PdfInspector
+  | FilePreviewInspector;
+
+/** A workspace file surfaced for preview — the agent wrote it OR code produced it.
+ *  Rendered by type: HTML → live iframe, PDF → pdf.js, image → <img>, text → code. */
+export interface FilePreviewInspector {
+  variant: "file";
+  path: string;
+  filename: string;
+  artifact: ArtifactKind;
+  language?: string;
+  /** Inline text content when known (write/edit tools); else loaded from disk. */
+  content?: string;
+}
 
 export interface ArtifactVersion {
   label: string; // "v1", "v2"
+  /** Per-version overrides; fall back to the inspector-level fields when absent. */
+  code?: string;
+  executionLog?: string;
+  messages?: string[];
+  environment?: string;
+  reviewPassed?: boolean;
 }
 
 export type ArtifactTab =
@@ -157,6 +203,8 @@ export type ArtifactType =
 export interface ArtifactInspector {
   variant: "artifact";
   title: string;
+  /** Name used when downloading the script (defaults to `title`). */
+  filename?: string;
   versions: ArtifactVersion[];
   activeVersion: string;
   reviewPassed?: boolean;

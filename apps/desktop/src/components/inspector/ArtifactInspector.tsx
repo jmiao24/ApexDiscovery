@@ -3,6 +3,8 @@ import { Check, ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 import type { ArtifactInspector as ArtifactInspectorT, ArtifactTab } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
+import { resolveArtifactContent } from "@/lib/artifacts";
+import { downloadText } from "@/lib/download";
 
 const TABS: ArtifactTab[] = ["Code", "Execution Log", "Messages", "Environment", "Review"];
 
@@ -14,18 +16,46 @@ export function ArtifactInspector({
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<ArtifactTab>("Code");
+  const [versionIdx, setVersionIdx] = useState(() =>
+    Math.max(0, data.versions.findIndex((v) => v.label === data.activeVersion)),
+  );
+
+  const activeLabel = data.versions[versionIdx]?.label ?? data.activeVersion;
+  const content = resolveArtifactContent(data, activeLabel);
+  const scriptName = data.filename ?? data.title;
+
+  const step = (delta: number) =>
+    setVersionIdx((i) => Math.min(data.versions.length - 1, Math.max(0, i + delta)));
 
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-border px-4 py-3">
         <span className="truncate text-sm font-medium text-text">{data.title}</span>
         <div className="ml-2 flex items-center gap-1 text-muted">
-          <ChevronLeft size={15} />
-          <span className="rounded bg-surface-2 px-1.5 text-xs">{data.activeVersion}</span>
-          <ChevronRight size={15} />
+          <button
+            className="disabled:opacity-30 hover:text-text"
+            aria-label="Previous version"
+            onClick={() => step(-1)}
+            disabled={versionIdx === 0}
+          >
+            <ChevronLeft size={15} />
+          </button>
+          <span className="rounded bg-surface-2 px-1.5 text-xs">{activeLabel}</span>
+          <button
+            className="disabled:opacity-30 hover:text-text"
+            aria-label="Next version"
+            onClick={() => step(1)}
+            disabled={versionIdx >= data.versions.length - 1}
+          >
+            <ChevronRight size={15} />
+          </button>
         </div>
         <div className="flex-1" />
-        <button className="text-muted hover:text-text" aria-label="Download">
+        <button
+          className="text-muted hover:text-text"
+          aria-label="Download"
+          onClick={() => downloadText(scriptName, content.code)}
+        >
           <Download size={16} />
         </button>
         <button className="text-muted hover:text-text" aria-label="Close inspector" onClick={onClose}>
@@ -46,7 +76,7 @@ export function ArtifactInspector({
             )}
           >
             {t}
-            {t === "Review" && data.reviewPassed && <Check size={13} className="text-ok" />}
+            {t === "Review" && content.reviewPassed && <Check size={13} className="text-ok" />}
           </button>
         ))}
       </nav>
@@ -54,7 +84,10 @@ export function ArtifactInspector({
       <div className="flex-1 overflow-y-auto p-4">
         {tab === "Code" && (
           <div className="space-y-3">
-            <button className="flex items-center gap-2 rounded-input bg-link px-3 py-1.5 text-sm font-medium text-white">
+            <button
+              className="flex items-center gap-2 rounded-input bg-link px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+              onClick={() => downloadText(scriptName, content.code)}
+            >
               <Download size={15} /> Download script
             </button>
             {data.inputs.length > 0 && (
@@ -70,25 +103,31 @@ export function ArtifactInspector({
                 ))}
               </div>
             )}
-            <CodeViewer code={data.code} language={data.language} startLine={data.codeStartLine} />
+            <CodeViewer code={content.code} language={data.language} startLine={data.codeStartLine} />
           </div>
         )}
-        {tab === "Execution Log" && <Pre text={data.executionLog ?? "No execution log."} />}
+        {tab === "Execution Log" && <Pre text={content.executionLog ?? "No execution log."} />}
         {tab === "Messages" && (
           <ul className="space-y-2">
-            {(data.messages ?? []).map((m, i) => (
+            {(content.messages ?? []).map((m, i) => (
               <li key={i} className="rounded-input bg-surface-2 px-3 py-2 text-sm text-text">
                 {m}
               </li>
             ))}
+            {(content.messages ?? []).length === 0 && (
+              <li className="text-sm text-muted">No messages for this version.</li>
+            )}
           </ul>
         )}
-        {tab === "Environment" && <Pre text={data.environment ?? "No environment info."} />}
-        {tab === "Review" && (
-          <div className="flex items-center gap-2 text-sm text-ok">
-            <Check size={16} /> Review passed — figure traces to code and inputs.
-          </div>
-        )}
+        {tab === "Environment" && <Pre text={content.environment ?? "No environment info."} />}
+        {tab === "Review" &&
+          (content.reviewPassed ? (
+            <div className="flex items-center gap-2 text-sm text-ok">
+              <Check size={16} /> Review passed — {activeLabel} traces to code and inputs.
+            </div>
+          ) : (
+            <div className="text-sm text-muted">{activeLabel} has not passed review yet.</div>
+          ))}
       </div>
     </div>
   );

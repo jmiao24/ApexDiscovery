@@ -9,8 +9,9 @@ import {
   type SkillInfo,
   type ToolCallStatus,
 } from "@ai4s/sdk";
-import type { RuntimeStatus, ThreadBlock } from "@ai4s/shared";
+import type { ArtifactBlock, RuntimeStatus, ThreadBlock } from "@ai4s/shared";
 import { detectTools as probeTools, isTauri, logDebug, startRuntime, type ToolStatus } from "./tauri";
+import { deriveArtifact } from "./artifacts";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const URL_KEY = "ai4s.opencodeUrl";
@@ -46,6 +47,10 @@ interface RuntimeState {
   tools: ToolStatus[];
   hiddenExamples: string[];
   error: string | null;
+  /** Artifact opened in the live inspector pane, if any. */
+  activeArtifact: ArtifactBlock | null;
+  openArtifact: (a: ArtifactBlock) => void;
+  closeArtifact: () => void;
   setServerUrl: (url: string) => void;
   loadCatalog: () => Promise<void>;
   detectTools: () => Promise<void>;
@@ -76,6 +81,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   tools: [],
   hiddenExamples: initialHidden(),
   error: null,
+  activeArtifact: null,
+
+  openArtifact: (activeArtifact) => set({ activeArtifact }),
+  closeArtifact: () => set({ activeArtifact: null }),
 
   setServerUrl: (serverUrl) => {
     if (typeof window !== "undefined") window.localStorage.setItem(URL_KEY, serverUrl);
@@ -319,6 +328,16 @@ export function foldEvent(state: FoldState, event: OpenCodeEvent): FoldState {
         blocks.push(block);
         index[key] = blocks.length - 1;
       }
+      // Surface a file the agent wrote as a traceable artifact (deduped by path).
+      const artifact = deriveArtifact(event);
+      if (artifact) {
+        const akey = `artifact:${artifact.path}`;
+        if (akey in index) blocks[index[akey]] = artifact;
+        else {
+          blocks.push(artifact);
+          index[akey] = blocks.length - 1;
+        }
+      }
       return { blocks, index };
     }
     case "session.idle":
@@ -356,8 +375,20 @@ export function historyToThread(messages: HistoryMessage[]): FoldState {
     } else {
       for (const p of m.parts) {
         if (p.type === "text" && p.text?.trim()) blocks.push({ kind: "agent", markdown: p.text });
-        else if (p.type === "tool")
-          blocks.push({ kind: "tool-call", title: p.state?.title ?? p.tool ?? "tool", status: mapToolStatus(p.state?.status) });
+        else if (p.type === "tool") {
+          const status = mapToolStatus(p.state?.status);
+          blocks.push({ kind: "tool-call", title: p.state?.title ?? p.tool ?? "tool", status });
+          const artifact = deriveArtifact({
+            type: "tool.updated",
+            sessionId: "",
+            callId: "",
+            tool: p.tool ?? "",
+            status,
+            input: p.state?.input,
+            output: p.state?.output,
+          });
+          if (artifact) blocks.push(artifact);
+        }
       }
     }
   }

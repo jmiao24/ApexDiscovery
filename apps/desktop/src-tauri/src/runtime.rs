@@ -30,6 +30,13 @@ fn xdg_config_home(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(runtime_root(app)?.join("xdg-config"))
 }
 
+/// The workspace OpenCode (and the notebook kernel) runs in — the agent's files live here.
+pub fn workspace_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = runtime_root(app)?.join("workspace");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
 /// Path OpenCode reads when XDG_CONFIG_HOME points at our private dir.
 fn opencode_config_file(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(xdg_config_home(app)?.join("opencode").join("opencode.json"))

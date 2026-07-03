@@ -1,10 +1,15 @@
 // AI4S Workbench — Tauri 2 entry. Hosts the React frontend and supervises the
 // bundled OpenCode sidecar (isolated config/data + dedicated port; killed on exit).
+mod artifact_file;
 mod debug_log;
+mod kernel;
 mod opencode_config;
+mod preview_server;
 mod runtime;
 mod tools;
 
+use kernel::KernelState;
+use preview_server::PreviewState;
 use runtime::RuntimeState;
 use tauri::Manager;
 
@@ -22,10 +27,18 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_shell::init())
         .manage(RuntimeState::default())
+        .manage(KernelState::default())
+        .manage(PreviewState::default())
         .invoke_handler(tauri::generate_handler![
             runtime::start_runtime,
             runtime::stop_runtime,
             runtime::configure_opencode,
+            kernel::kernel_execute,
+            kernel::kernel_reset,
+            artifact_file::read_artifact,
+            artifact_file::open_path,
+            artifact_file::resolve_artifact,
+            preview_server::preview_url,
             tools::detect_tools,
             debug_log::log_debug
         ])
@@ -35,6 +48,7 @@ pub fn run() {
             // Ensure the bundled OpenCode is killed when the app exits.
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 runtime::kill_child(&app.state::<RuntimeState>());
+                kernel::kill_kernel(&app.state::<KernelState>());
             }
         });
 }

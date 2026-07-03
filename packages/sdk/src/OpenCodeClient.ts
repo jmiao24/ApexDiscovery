@@ -286,7 +286,12 @@ export class OpenCodeClient {
           const tp = part as {
             callID: string;
             tool: string;
-            state?: { status?: string; title?: string };
+            state?: {
+              status?: string;
+              title?: string;
+              input?: Record<string, unknown>;
+              output?: string;
+            };
           };
           this.emit({
             type: "tool.updated",
@@ -295,6 +300,8 @@ export class OpenCodeClient {
             tool: tp.tool,
             status: mapToolStatus(tp.state?.status ?? "pending"),
             title: tp.state?.title,
+            input: tp.state?.input,
+            output: typeof tp.state?.output === "string" ? tp.state.output : undefined,
           });
         }
         break;

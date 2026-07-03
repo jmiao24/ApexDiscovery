@@ -25,6 +25,18 @@ describe("foldEvent", () => {
     expect(s.blocks[0]).toMatchObject({ kind: "tool-call", status: "success", title: "search (done)" });
   });
 
+  it("surfaces a written file as an artifact block, deduped by path", () => {
+    const s = foldAll([
+      { type: "tool.updated", sessionId: S, callId: "c1", tool: "write", status: "running", input: { filePath: "fig.py" } },
+      { type: "tool.updated", sessionId: S, callId: "c1", tool: "write", status: "success", input: { filePath: "fig.py", content: "print(1)" } },
+    ]);
+    const artifacts = s.blocks.filter((b) => b.kind === "artifact");
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]).toMatchObject({ kind: "artifact", filename: "fig.py", artifact: "script", content: "print(1)" });
+    // The tool-call row is still present alongside the artifact.
+    expect(s.blocks.some((b) => b.kind === "tool-call")).toBe(true);
+  });
+
   it("keeps distinct parts as separate blocks in arrival order", () => {
     const s = foldAll([
       { type: "text.updated", sessionId: S, partId: "p1", text: "planning" },
