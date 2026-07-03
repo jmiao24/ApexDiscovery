@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { useUiStore } from "@/lib/store";
 import { renderAt } from "@/test/render";
 
-const base = "/project/cross-species/session";
+const base = "/example";
 
 describe("SessionPage", () => {
   beforeEach(() => useUiStore.setState({ inspectorOpen: true }));

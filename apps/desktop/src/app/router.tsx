@@ -5,21 +5,16 @@ import { LiveSessionPage } from "./routes/LiveSessionPage";
 import { SkillsPage } from "./routes/SkillsPage";
 import { SettingsPage } from "./routes/SettingsPage";
 import { NotFound } from "./routes/NotFound";
-import { defaultSessionId, mockProject } from "@/lib/mock";
 
 export const routes: RouteObject[] = [
   {
     path: "/",
     element: <AppShell />,
     children: [
-      {
-        index: true,
-        element: (
-          <Navigate to={`/project/${mockProject.id}/session/${defaultSessionId}`} replace />
-        ),
-      },
-      { path: "project/:projectId/session/:sessionId", element: <SessionPage /> },
+      { index: true, element: <Navigate to="/live" replace /> },
       { path: "live", element: <LiveSessionPage /> },
+      { path: "live/:sessionId", element: <LiveSessionPage /> },
+      { path: "example/:sessionId", element: <SessionPage /> },
       { path: "skills", element: <SkillsPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <NotFound /> },

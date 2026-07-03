@@ -10,4 +10,8 @@ export {
   type OpenCodeClientOptions,
   type RuntimeStatus,
   type ToolCallStatus,
+  type SessionMeta,
+  type SkillInfo,
+  type AgentInfo,
+  type HistoryMessage,
 } from "./types";

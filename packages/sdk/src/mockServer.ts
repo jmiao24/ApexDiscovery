@@ -14,13 +14,21 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
   const send = (res: ServerResponse, obj: unknown) =>
     res.write(`data: ${JSON.stringify(obj)}\n\n`);
 
+  const messages: Record<string, Array<{ info: unknown; parts: unknown[] }>> = {};
+
   const streamTurn = (sessionID: string) => {
     const push = (obj: unknown) => clients.forEach((c) => send(c, obj));
-    push({ type: "message.part.updated", properties: { part: { id: "p1", type: "text", text: "Planning the analysis. " } } });
-    push({ type: "message.part.updated", properties: { part: { id: "c1", type: "tool", callID: "c1", tool: "literature-search", state: { status: "running", title: "literature-search (OpenAlex)" } } } });
-    push({ type: "message.part.updated", properties: { part: { id: "c1", type: "tool", callID: "c1", tool: "literature-search", state: { status: "completed", title: "literature-search (OpenAlex, PubMed)" } } } });
-    push({ type: "message.part.updated", properties: { part: { id: "p2", type: "text", text: "Wrote data/corpus.csv and drafted report.md." } } });
+    const P = (part: Record<string, unknown>) =>
+      push({ type: "message.part.updated", properties: { part: { sessionID, ...part } } });
+    P({ id: "p1", type: "text", text: "Planning the analysis. " });
+    P({ id: "c1", type: "tool", callID: "c1", tool: "literature-search", state: { status: "running", title: "literature-search (OpenAlex)" } });
+    P({ id: "c1", type: "tool", callID: "c1", tool: "literature-search", state: { status: "completed", title: "literature-search (OpenAlex, PubMed)" } });
+    P({ id: "p2", type: "text", text: "Wrote data/corpus.csv and drafted report.md." });
     push({ type: "session.idle", properties: { sessionID } });
+    messages[sessionID] = [
+      { info: { role: "user" }, parts: [{ type: "text", text: "run a literature review" }] },
+      { info: { role: "assistant" }, parts: [{ type: "text", text: "Planning the analysis. Wrote data/corpus.csv." }] },
+    ];
   };
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -38,7 +46,28 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
     }
     if (req.method === "POST" && /^\/session\/?$/.test(url)) {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ id: "ses_mock" }));
+      res.end(JSON.stringify({ id: "ses_mock", title: "New session", slug: "mock" }));
+      return;
+    }
+    if (req.method === "GET" && /^\/session\/?$/.test(url)) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([{ id: "ses_mock", title: "New session", slug: "mock" }]));
+      return;
+    }
+    const mm = url.match(/^\/session\/([^/]+)\/message/);
+    if (req.method === "GET" && mm) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(messages[decodeURIComponent(mm[1])] ?? []));
+      return;
+    }
+    if (req.method === "GET" && url.startsWith("/api/skill")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ data: [{ name: "customize-opencode", description: "Configure OpenCode.", location: "/builtin/customize-opencode.md" }] }));
+      return;
+    }
+    if (req.method === "GET" && (url === "/agent" || url === "/api/agent")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([{ name: "build", description: "Default agent.", mode: "primary" }]));
       return;
     }
     const m = url.match(/^\/session\/([^/]+)\/prompt_async/);

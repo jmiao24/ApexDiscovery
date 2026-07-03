@@ -1,21 +1,63 @@
-import { Loader2, Plug, PlugZap } from "lucide-react";
+import { useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Loader2, Plug, PlugZap, Plus } from "lucide-react";
 import { useRuntimeStore } from "@/lib/runtime";
 import { BlockList } from "@/components/thread/BlockList";
 import { Composer } from "@/components/thread/Composer";
 import { cn } from "@/lib/cn";
 
-/** Live agent session backed by the OpenCode runtime (packages/sdk). */
+/** Live agent session backed by the OpenCode runtime (real sessions + history). */
 export function LiveSessionPage() {
-  const { status, serverUrl, blocks, error, connect, disconnect, sendPrompt } = useRuntimeStore();
+  const { sessionId } = useParams();
+  const navigate = useNavigate();
+  const {
+    status,
+    serverUrl,
+    sessions,
+    currentId,
+    threads,
+    error,
+    connect,
+    disconnect,
+    openSession,
+    newSession,
+    sendPrompt,
+  } = useRuntimeStore();
+
   const connected = status === "ready";
   const connecting = status === "connecting";
 
+  // Open the routed session (loads its history); if none, jump to the newest.
+  useEffect(() => {
+    if (sessionId) {
+      void openSession(sessionId);
+    } else if (sessions.length > 0) {
+      navigate(`/live/${sessions[0].id}`, { replace: true });
+    }
+  }, [sessionId, sessions, openSession, navigate]);
+
+  const startNew = async () => {
+    const id = await newSession();
+    if (id) navigate(`/live/${id}`);
+  };
+
+  const thread = currentId ? threads[currentId] : undefined;
+  const title = sessions.find((s) => s.id === currentId)?.title ?? "New session";
+  const showEmpty = !currentId || (thread && thread.blocks.length === 0);
+
   return (
     <div className="flex h-full min-w-0 flex-col">
-      <div className="flex items-center gap-3 border-b border-border px-8 py-4">
-        <h1 className="text-lg text-text">New session</h1>
+      <div className="flex items-center gap-2 border-b border-border px-8 py-4">
+        <h1 className="truncate text-lg text-text">{currentId ? title : "Live session"}</h1>
         <div className="flex-1" />
         <ConnBadge status={status} />
+        <button
+          onClick={startNew}
+          disabled={!connected}
+          className="flex items-center gap-1.5 rounded-input border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-2 disabled:opacity-40"
+        >
+          <Plus size={15} /> New
+        </button>
         {connected ? (
           <button
             onClick={disconnect}
@@ -37,20 +79,16 @@ export function LiveSessionPage() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-[760px] flex-col gap-4 px-8 py-6">
-          {!connected && blocks.length === 0 && (
+          {!connected && (
             <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-              <div className="text-sm font-medium text-text">Connect to the OpenCode runtime</div>
+              <div className="text-sm font-medium text-text">OpenCode runtime</div>
               <p className="mt-1 text-sm text-muted">
-                AI4S Workbench drives the agent through OpenCode (`opencode serve`) over its
-                HTTP + SSE API. Point it at a running server, then send a prompt to start a live session.
+                The desktop app runs a bundled OpenCode automatically. In the browser, start one with{" "}
+                <span className="font-mono">opencode serve</span> and connect.
               </p>
               <div className="mt-3 rounded-input bg-surface-2 px-3 py-2 font-mono text-xs text-text">
                 {serverUrl}
               </div>
-              <p className="mt-2 text-xs text-muted">
-                Not running yet? Start it with <span className="font-mono">opencode serve</span>, or
-                set the URL in Settings. Example sessions in the sidebar are read-only.
-              </p>
             </div>
           )}
           {error && (
@@ -58,7 +96,12 @@ export function LiveSessionPage() {
               {error}
             </div>
           )}
-          <BlockList blocks={blocks} />
+          {connected && showEmpty && (
+            <div className="py-10 text-center text-sm text-muted">
+              {currentId ? "Send a message to start this session." : "Start a new session to chat."}
+            </div>
+          )}
+          {thread && <BlockList blocks={thread.blocks} />}
         </div>
       </div>
 
@@ -66,7 +109,14 @@ export function LiveSessionPage() {
         <div className="mx-auto max-w-[760px]">
           <Composer
             onSend={sendPrompt}
-            placeholder={connected ? "Ask anything" : "Connect to send — or browse the samples"}
+            disabled={!connected || !currentId}
+            placeholder={
+              !connected
+                ? "Connect to chat"
+                : currentId
+                  ? "Ask anything"
+                  : "Start a new session first"
+            }
           />
         </div>
       </div>
@@ -75,8 +125,7 @@ export function LiveSessionPage() {
 }
 
 function ConnBadge({ status }: { status: string }) {
-  const tone =
-    status === "ready" ? "text-ok" : status === "error" ? "text-error" : "text-muted";
+  const tone = status === "ready" ? "text-ok" : status === "error" ? "text-error" : "text-muted";
   return (
     <span className={cn("flex items-center gap-1.5 text-sm", tone)}>
       <span

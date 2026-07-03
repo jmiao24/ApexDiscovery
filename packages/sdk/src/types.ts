@@ -14,11 +14,13 @@ export const DEFAULT_OPENCODE_URL = "http://127.0.0.1:4096";
 
 export interface TextUpdatedEvent {
   type: "text.updated";
+  sessionId: string;
   partId: string;
   text: string;
 }
 export interface ToolUpdatedEvent {
   type: "tool.updated";
+  sessionId: string;
   callId: string;
   tool: string;
   status: ToolCallStatus;
@@ -26,9 +28,11 @@ export interface ToolUpdatedEvent {
 }
 export interface SessionIdleEvent {
   type: "session.idle";
+  sessionId: string;
 }
 export interface RuntimeErrorEvent {
   type: "error";
+  sessionId?: string;
   message: string;
 }
 
@@ -37,6 +41,38 @@ export type OpenCodeEvent =
   | ToolUpdatedEvent
   | SessionIdleEvent
   | RuntimeErrorEvent;
+
+// ---- REST shapes the app consumes ----
+
+export interface SessionMeta {
+  id: string;
+  title: string;
+  slug?: string;
+}
+
+export interface SkillInfo {
+  name: string;
+  description: string;
+  location?: string;
+}
+
+export interface AgentInfo {
+  name: string;
+  description: string;
+  mode?: string;
+}
+
+/** A message loaded from history (GET /session/:id/message). */
+export interface HistoryMessage {
+  role: "user" | "assistant";
+  parts: HistoryPart[];
+}
+export interface HistoryPart {
+  type: string;
+  text?: string;
+  tool?: string;
+  state?: { status?: string; title?: string };
+}
 
 export interface OpenCodeClientOptions {
   /** Base URL of a running `opencode serve`, e.g. http://127.0.0.1:4096 */

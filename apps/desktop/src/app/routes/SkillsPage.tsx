@@ -1,65 +1,78 @@
-import { Check, Github, Package } from "lucide-react";
+import { useEffect } from "react";
+import { Bot, Package, Puzzle } from "lucide-react";
+import { useRuntimeStore } from "@/lib/runtime";
 
-interface SkillItem {
-  name: string;
-  desc: string;
-  installed: boolean;
-  /** GitHub repo path for the source, if external. */
-  repo?: string;
-}
-
-const CORE: SkillItem[] = [
-  { name: "reproducible-research", desc: "Standardize project structure, artifacts, logs.", installed: true },
-  { name: "literature-review", desc: "Search, filter, and summarize literature.", installed: true },
-  { name: "bibliometric-analysis", desc: "Year trends, keywords, journals, clustering.", installed: true },
-  { name: "figure-provenance", desc: "Figures must trace to code and data.", installed: true },
-  { name: "citation-reviewer", desc: "Check citation format and sources.", installed: true },
-  { name: "paper-to-report", desc: "Generate a Markdown report.", installed: true },
-];
-
-const RECOMMENDED: SkillItem[] = [
-  {
-    name: "K-Dense scientific-agent-skills",
-    desc: "~148 curated scientific skills. Install by domain.",
-    installed: false,
-    repo: "K-Dense-AI/scientific-agent-skills",
-  },
-];
-
+/**
+ * Skills & agents — the REAL ones loaded by the OpenCode runtime (built-in +
+ * project `.opencode/skill/` + user config). No hardcoded/fake list.
+ */
 export function SkillsPage() {
+  const { skills, agents, status, loadCatalog } = useRuntimeStore();
+  const connected = status === "ready";
+
+  useEffect(() => {
+    if (connected) void loadCatalog();
+  }, [connected, loadCatalog]);
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-8 py-8">
-        <h1 className="font-serif text-2xl text-text">Skills</h1>
+        <h1 className="font-serif text-2xl text-text">Skills &amp; Agents</h1>
         <p className="mt-1 text-sm text-muted">
-          Curated install — enable by domain, review license and dependencies first.
+          Loaded live from the OpenCode runtime. Add skills as Markdown files under{" "}
+          <span className="font-mono">.opencode/skill/</span> in your workspace or{" "}
+          <span className="font-mono">~/.config/opencode</span>.
         </p>
 
-        <Section title="Installed">
-          {CORE.map((s) => (
-            <SkillRow key={s.name} item={s} />
-          ))}
-        </Section>
+        {!connected && (
+          <div className="mt-6 rounded-card border border-border bg-surface p-5 text-sm text-muted">
+            Connect the runtime to list the skills and agents it has loaded.
+          </div>
+        )}
 
-        <Section title="Recommended">
-          {RECOMMENDED.map((s) => (
-            <SkillRow key={s.name} item={s} />
-          ))}
-        </Section>
+        {connected && (
+          <>
+            <Section title={`Agents (${agents.length})`} icon={<Bot size={15} />}>
+              {agents.length === 0 && <Empty>No agents reported.</Empty>}
+              {agents.map((a) => (
+                <RowItem key={a.name} name={a.name} desc={a.description} tag={a.mode} />
+              ))}
+            </Section>
 
-        <p className="mt-6 text-xs text-muted">
-          Core skills live in <span className="font-mono">runtime/skills/core</span> and ship with the
-          app. External skills open their source repo — curated install lands in a later release.
-        </p>
+            <Section title={`Skills (${skills.length})`} icon={<Puzzle size={15} />}>
+              {skills.length === 0 && <Empty>No skills loaded yet.</Empty>}
+              {skills.map((s) => (
+                <RowItem key={s.name} name={s.name} desc={s.description} tag={sourceOf(s.location)} />
+              ))}
+            </Section>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function sourceOf(location?: string): string | undefined {
+  if (!location) return undefined;
+  if (location.includes("/builtin/")) return "built-in";
+  if (location.includes("/.opencode/")) return "project";
+  return "user";
+}
+
+function Section({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <section className="mt-6">
-      <h2 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted">{title}</h2>
+      <h2 className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted">
+        {icon} {title}
+      </h2>
       <div className="divide-y divide-border overflow-hidden rounded-card border border-border bg-surface">
         {children}
       </div>
@@ -67,28 +80,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function SkillRow({ item }: { item: SkillItem }) {
+function RowItem({ name, desc, tag }: { name: string; desc: string; tag?: string }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3">
-      <Package size={16} className="text-muted" />
+    <div className="flex items-start gap-3 px-4 py-3">
+      <Package size={16} className="mt-0.5 shrink-0 text-muted" />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-text">{item.name}</div>
-        <div className="truncate text-xs text-muted">{item.desc}</div>
+        <div className="truncate text-sm font-medium text-text">{name}</div>
+        <div className="line-clamp-2 text-xs text-muted">{desc}</div>
       </div>
-      {item.installed ? (
-        <span className="flex items-center gap-1 text-xs text-ok">
-          <Check size={14} /> Enabled
+      {tag && (
+        <span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted ring-1 ring-border">
+          {tag}
         </span>
-      ) : (
-        <a
-          href={item.repo ? `https://github.com/${item.repo}` : "#"}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-1 rounded-input border border-border px-3 py-1 text-xs font-medium text-text hover:bg-surface-2"
-        >
-          <Github size={13} /> View source
-        </a>
       )}
     </div>
   );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <div className="px-4 py-6 text-center text-sm text-muted">{children}</div>;
 }

@@ -1,9 +1,13 @@
 import type {
+  AgentInfo,
+  HistoryMessage,
   OpenCodeClientOptions,
   OpenCodeEvent,
   OpenCodePart,
   OpenCodeRawEvent,
   RuntimeStatus,
+  SessionMeta,
+  SkillInfo,
   ToolCallStatus,
 } from "./types";
 import { DEFAULT_OPENCODE_URL } from "./types";
@@ -116,6 +120,43 @@ export class OpenCodeClient {
     return json.id;
   }
 
+  /** List existing sessions (conversation history), newest first. */
+  async listSessions(): Promise<SessionMeta[]> {
+    const res = await this.fetchImpl(`${this.baseUrl}/session`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`Failed to list sessions (${res.status})`);
+    const arr = (await res.json()) as Array<{ id: string; title?: string; slug?: string }>;
+    return arr.map((s) => ({ id: s.id, title: s.title ?? "Untitled", slug: s.slug }));
+  }
+
+  /** Load a session's message history. */
+  async getMessages(sessionId: string): Promise<HistoryMessage[]> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/session/${encodeURIComponent(sessionId)}/message`,
+      { headers: this.headers() },
+    );
+    if (!res.ok) throw new Error(`Failed to load messages (${res.status})`);
+    const arr = (await res.json()) as Array<{
+      info: { role: "user" | "assistant" };
+      parts: HistoryMessage["parts"];
+    }>;
+    return arr.map((m) => ({ role: m.info.role, parts: m.parts ?? [] }));
+  }
+
+  /** Real skills loaded by OpenCode (built-in + project + user). */
+  async listSkills(): Promise<SkillInfo[]> {
+    const res = await this.fetchImpl(`${this.baseUrl}/api/skill`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`Failed to list skills (${res.status})`);
+    const body = (await res.json()) as { data?: SkillInfo[] };
+    return body.data ?? [];
+  }
+
+  /** Real agents configured in OpenCode. */
+  async listAgents(): Promise<AgentInfo[]> {
+    const res = await this.fetchImpl(`${this.baseUrl}/agent`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`Failed to list agents (${res.status})`);
+    return (await res.json()) as AgentInfo[];
+  }
+
   /** Send a prompt into a session; output streams back via onEvent (SSE). */
   async sendPrompt(sessionId: string, text: string): Promise<void> {
     const res = await this.fetchImpl(
@@ -173,11 +214,12 @@ export class OpenCodeClient {
     const props = raw.properties ?? {};
     switch (raw.type) {
       case "message.part.updated": {
-        const part = props.part as OpenCodePart | undefined;
+        const part = props.part as (OpenCodePart & { sessionID?: string }) | undefined;
         if (!part) return;
+        const sessionId = String(part.sessionID ?? "");
         if (part.type === "text") {
           const t = part as { id: string; text: string };
-          this.emit({ type: "text.updated", partId: t.id, text: t.text ?? "" });
+          this.emit({ type: "text.updated", sessionId, partId: t.id, text: t.text ?? "" });
         } else if (part.type === "tool") {
           const tp = part as {
             callID: string;
@@ -186,6 +228,7 @@ export class OpenCodeClient {
           };
           this.emit({
             type: "tool.updated",
+            sessionId,
             callId: tp.callID,
             tool: tp.tool,
             status: mapToolStatus(tp.state?.status ?? "pending"),
@@ -195,7 +238,7 @@ export class OpenCodeClient {
         break;
       }
       case "session.idle":
-        this.emit({ type: "session.idle" });
+        this.emit({ type: "session.idle", sessionId: String(props.sessionID ?? "") });
         break;
       case "session.error": {
         const err = props.error as
@@ -204,7 +247,11 @@ export class OpenCodeClient {
         // OpenCode nests the human-readable message at error.data.message.
         const full = err?.data?.message ?? err?.message ?? err?.name ?? "session error";
         // Keep the first line — OpenCode appends a stack trace to some errors.
-        this.emit({ type: "error", message: full.split("\n")[0] });
+        this.emit({
+          type: "error",
+          sessionId: String(props.sessionID ?? ""),
+          message: full.split("\n")[0],
+        });
         break;
       }
       default:
