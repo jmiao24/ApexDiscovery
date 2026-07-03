@@ -35,7 +35,7 @@ for the full spec.
 | `packages/shared/` | Shared types and utilities |
 | `packages/sdk/` | `OpenCodeClient` SDK wrapper (isolates the UI from the runtime) |
 | `runtime/manager/` | Local Runtime Manager: dependency checks, sidecar lifecycle, workspace, provenance |
-| `runtime/hermes-profile/` | The AI4S Workbench Hermes profile distribution |
+| `runtime/opencode-profile/` | The AI4S Workbench OpenCode profile (config + skills) |
 | `runtime/mcp/` | MCP server configurations (filesystem, paper-search, BioMCP, Zotero, …) |
 | `runtime/skills/` | Self-authored scientific skills (`core/`) |
 | `docs/` | `PRD.md`, `TECHNICAL_DESIGN.md` |

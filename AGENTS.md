@@ -25,7 +25,7 @@ local workspace + SQLite + JSONL provenance.
 
 - `apps/desktop/` — Tauri + React desktop shell (`src/` frontend, `src-tauri/` Rust).
 - `packages/` — `ui`, `shared`, `sdk` (the `OpenCodeClient` wrapper).
-- `runtime/` — `manager`, `hermes-profile`, `mcp`, `skills`.
+- `runtime/` — `manager`, `opencode-profile`, `mcp`, `skills`.
 - `docs/` — product and technical specs.
 - `examples/bci-trends/` — the built-in demo project.
 - `scripts/` — release and dev scripts.

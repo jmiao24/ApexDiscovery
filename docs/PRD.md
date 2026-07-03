@@ -1,5 +1,11 @@
 # AI4S Workbench Desktop — Product Requirements
 
+> **Status (v0.1, 2026-07-02).** The runtime is **OpenCode**, bundled as an isolated
+> sidecar (one-click, auto-started, does not touch a user's own OpenCode). Built: the
+> three-column workbench UI, real multi-session chat with history, a real Skills/Agents
+> view, BYOK key config, and a macOS installer. Literature search, provenance/reviewer,
+> code-execution backends, and Science Packs below are the target scope, not all shipped.
+
 ## 1. Positioning
 
 **AI4S Workbench Desktop** is an open-source AI research workbench with macOS /
@@ -62,7 +68,7 @@ Versus ordinary AI paper tools, AI4S Workbench is different because it is:
    database connectors into one workbench; an open-source Claude Science alternative.
 3. **Grad / PhD / postdoc students** — topic surveys, paper reading, experiment data
    analysis, submission material prep.
-4. **Open-source AI agent users** — already using Hermes, Codex, Claude Code, Cursor,
+4. **Open-source AI agent users** — already using OpenCode, Codex, Claude Code, Cursor,
    MCP, Agent Skills; want a research-focused desktop product.
 
 ### 3.2 Non-target users (Phase 1)
@@ -100,7 +106,7 @@ Every important artifact must be traceable:
 ### 4.4 Human-in-the-loop
 
 High-risk actions — file writes, command execution, dependency installs, network
-access, file deletion, remote compute — require user approval. Hermes itself provides
+access, file deletion, remote compute — require user approval. The bundled OpenCode runtime provides
 dangerous-command approval, container isolation, MCP credential filtering, and
 cross-session isolation.
 
@@ -116,7 +122,7 @@ After downloading and first opening, the user enters onboarding:
 2. Enter an API key.
 3. Choose a workspace directory.
 4. Detect the local runtime environment.
-5. Install or connect the Hermes runtime.
+5. Use the bundled OpenCode runtime (auto-started; no separate install).
 6. Create the first research project.
 
 First launch must clearly tell the user: data is stored locally by default; the agent
@@ -170,15 +176,19 @@ search logs; record data-source limits.
 
 #### 5.1.6 Skills library
 
-Three kinds of skills:
+The Skills page lists the **real** skills and agents the OpenCode runtime has loaded
+(built-in + project `.opencode/skill/` + user config) — no hardcoded catalog. Skill
+sources, layered:
 
-1. **Self-authored AI4S Workbench skills** — `literature-review`,
-   `reproducible-analysis`, `citation-reviewer`, `figure-provenance`, `paper-to-report`.
-2. **Third-party scientific skills** — K-Dense `scientific-agent-skills` (optional install).
-3. **User custom skills** — install from GitHub, import locally, enable / disable.
+1. **OpenCode built-in** skills/agents (shipped with the runtime).
+2. **Self-authored AI4S skills** — planned: `literature-review`, `reproducible-analysis`,
+   `citation-reviewer`, `figure-provenance`, `paper-to-report` (Markdown skills under
+   `runtime/skills/core`, loaded from the workspace `.opencode/skill/`).
+3. **Third-party scientific skills** — e.g. K-Dense `scientific-agent-skills` (curated
+   install, a later feature).
 
 K-Dense `scientific-agent-skills` is a collection for science/research; its README
-describes ~148 skills and compatibility with Claude Code, Codex, Cursor, Hermes, and
+describes ~148 skills and compatibility with Claude Code, Codex, Cursor, OpenCode, and
 other Agent Skills hosts.
 
 #### 5.1.7 Code execution
@@ -193,8 +203,9 @@ v1 languages: Python, Shell (R later).
 | Modal | Cloud execution (later) |
 | Jupyter Kernel | Notebook-style persistent kernel (later) |
 
-Hermes supports local, Docker, SSH, Modal, Daytona, and Singularity terminal
-backends, so the desktop can start with local / Docker and expand later.
+OpenCode runs tools locally inside the bundled runtime by default; Docker sandbox and
+SSH / Modal remote execution are optional advanced backends, so the desktop starts local
+and expands later.
 
 #### 5.1.8 Artifact panel
 
@@ -326,7 +337,7 @@ Outputs: `plan.md`, `data/corpus.csv`, `scripts/analyze.py`, `figures/year_trend
 
 ## 9. Roadmap
 
-- **v0.1 Desktop MVP** — macOS / Windows installers, local workspace, Hermes runtime,
+- **v0.1 Desktop MVP** — macOS / Windows installers, local workspace, bundled OpenCode runtime,
   model config, agent chat, plan approval, literature search, Python analysis, artifact
   panel, `provenance.jsonl`, basic reviewer, BCI demo.
 - **v0.2 Research Workflows** — K-Dense skills installer, PDF parsing, citation checker,
@@ -364,6 +375,6 @@ complete example results; clear license; separate note for third-party skill lic
 ## 11. One-liner
 
 **AI4S Workbench Desktop is an open-source research agent workbench with macOS and
-Windows installers that uses Hermes, MCP, scientific skills, and a reproducible
+Windows installers that uses OpenCode, MCP, scientific skills, and a reproducible
 artifact system to weave literature, code, figures, reports, and review into one
 local-first scientific workflow.**

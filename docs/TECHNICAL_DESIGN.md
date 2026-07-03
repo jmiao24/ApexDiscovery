@@ -1,5 +1,13 @@
 # AI4S Workbench Desktop — Technical Design
 
+> **Implementation status (v0.1, 2026-07-02).** Built and verified: Tauri 2 shell + React
+> UI; **OpenCode** bundled as an isolated sidecar (auto-started, app-private config/data,
+> dedicated port); `OpenCodeClient` over HTTP + SSE; real multi-session chat with history;
+> Skills page backed by OpenCode's real skills/agents; macOS `.dmg`; cross-platform CI.
+> Planned (not yet built): self-authored scientific skills, MCP connectors, provenance/
+> reviewer engine, literature search, Jupyter runtime, remote compute. This document is the
+> target design; sections mixing built vs planned are noted inline.
+
 ## 1. Technical goals
 
 A high-performance, open-source research workbench with macOS / Windows installers.
@@ -14,12 +22,12 @@ AI4S Workbench Desktop
 ├── Desktop Shell: Tauri 2
 ├── Frontend: React + TypeScript + Vite
 ├── UI System: Tailwind CSS + Radix UI / shadcn-style components
-├── Local Service: Rust commands + Node/Python sidecars
-├── Agent Runtime: Hermes Agent
-├── Agent Protocol: Hermes TUI Gateway JSON-RPC / OpenAI-compatible API Server
-├── Skills Layer: AI4S skills + K-Dense scientific-agent-skills
+├── Local Service: Rust commands + bundled OpenCode sidecar
+├── Agent Runtime: OpenCode (bundled single-binary sidecar)
+├── Agent Protocol: OpenCode HTTP + SSE API (opencode serve)
+├── Skills Layer: OpenCode skills/agents + optional third-party scientific skills
 ├── MCP Layer: filesystem / paper-search / BioMCP / Zotero / GitHub / custom
-├── Execution Layer: Hermes terminal backend + optional Jupyter Kernel Gateway
+├── Execution Layer: OpenCode agents/tools + optional Jupyter Kernel Gateway
 ├── Storage: Local workspace + SQLite + JSONL provenance
 └── Packaging: Tauri DMG / APP / NSIS / MSI
 ```
@@ -71,55 +79,60 @@ capabilities only, not heavy computation.
 
 ## 5. Agent runtime
 
-### 5.1 Recommendation
+### 5.1 Choice: OpenCode (bundled)
 
-Use **Hermes**. It has CLI / TUI / API / ACP integration paths; supports MCP; supports
-skills; supports multiple terminal backends; has approval / sandbox / session / memory
-capabilities; and can serve as an open-source agent alternative to Claude Code.
+The agent runtime is **OpenCode** (`anomalyco/opencode`, MIT), pinned to a stable
+release (`OPENCODE_VERSION`, currently 1.17.13). It is distributed as a **single
+binary**, which makes it ideal to bundle as a desktop sidecar — no Python/Node runtime
+to package. It supports MCP, skills, and agents, is model-agnostic (BYOK), and serves as
+an open-source coding/agent runtime in the spirit of Claude Code.
 
-Hermes offers three external protocols: ACP, TUI Gateway JSON-RPC, and an
-OpenAI-compatible HTTP API Server. The TUI Gateway suits a custom desktop/web host
-because it exposes sessions, slash commands, approvals, and streaming events.
+OpenCode exposes an HTTP + SSE server (`opencode serve`) that a GUI can drive directly —
+sessions, prompts, streaming assistant/tool output, skills, and agents.
 
-### 5.2 Desktop ↔ Hermes communication
+### 5.2 Desktop ↔ OpenCode communication
 
-| Approach | Notes | Phase |
-| --- | --- | --- |
-| TUI Gateway JSON-RPC | Most complete; best for a custom desktop app | v0.1 |
-| OpenAI-compatible API Server | Simple; quick chat wiring | v0.1 fallback |
-| ACP | Best for IDE-type products | later |
-| Python in-process | Heavy coupling; not for v1 | later |
+The app talks to OpenCode over its HTTP + SSE API, wrapped by `packages/sdk`
+(`OpenCodeClient`). Key endpoints:
 
-v1 flow:
+| Endpoint | Use |
+| --- | --- |
+| `POST /session` · `GET /session` | Create / list sessions (conversation history) |
+| `GET /session/:id/message` | Load a session's history |
+| `POST /session/:id/prompt_async` | Send a prompt |
+| `GET /event` (SSE) | Stream `message.part.updated` (text/tool), `session.idle`, `session.error` |
+| `GET /api/skill` · `GET /agent` | Real loaded skills / agents |
 
-```text
-Tauri App starts Hermes Gateway sidecar
-↓
-Frontend sends prompt via JSON-RPC / WebSocket
-↓
-Hermes returns message.delta / tool.start / approval.request / tool.complete
-↓
-Frontend renders streaming messages, tool cards, approval dialogs, artifact status
-```
-
-### 5.3 Hermes profile distribution
-
-AI4S Workbench should not merely "call Hermes" — it should bundle a dedicated Hermes
-profile distribution:
+Flow:
 
 ```text
-distribution.yaml
-SOUL.md
-config.yaml
-mcp.json
-skills/
-workflows/
-templates/
+App launch → Rust starts the bundled `opencode serve` (dedicated free port)
+↓
+OpenCodeClient opens GET /event (SSE) and creates/loads sessions
+↓
+Prompt → POST /session/:id/prompt_async
+↓
+SSE streams message.part.updated / session.idle → folded into thread blocks by part/call id
+↓
+Frontend renders streaming messages, tool cards, and per-session history
 ```
 
-A profile distribution packages personality, skills, cron jobs, MCP connections, and
-config as a Git repo installable in one command — without carrying the user's own
-memories, sessions, or API keys.
+### 5.3 Bundling & isolation (no interference)
+
+OpenCode is bundled as a Tauri **sidecar** (`externalBin`, one binary per target triple,
+git-ignored and fetched by `scripts/dev/fetch-opencode.sh`). The Rust side
+(`src-tauri/src/runtime.rs`) starts it so it never collides with a user's own OpenCode:
+
+- runs the **bundled** binary (not the user's `PATH`);
+- on a **dedicated free port** (not the default 4096);
+- with an **app-private** config/data dir via `XDG_CONFIG_HOME`/`XDG_DATA_HOME` under
+  `~/Library/Application Support/com.ai4s.workbench/runtime/` (macOS) — so the user's
+  `~/.config/opencode` is never touched;
+- killed on app exit.
+
+The user's model provider key (entered in Settings) is written into that app-private
+`opencode.json` by the `configure_opencode` Rust command, and the sidecar is restarted
+to pick it up. Keys never enter the user's global OpenCode config, logs, or git.
 
 ## 6. Skills & MCP
 
@@ -146,9 +159,11 @@ skills/
 
 ### 6.3 Third-party skills
 
-v1 supports installing `K-Dense-AI/scientific-agent-skills` (large set; compatible with
-Cursor, Claude Code, Codex, Hermes). Do **not** enable all ~148 skills by default: use
-curated install, enable by domain, and show license, dependencies, and risk.
+`K-Dense-AI/scientific-agent-skills` (large set; compatible with Cursor, Claude Code,
+Codex, OpenCode) can be added later. Do **not** enable all ~148 skills by default: use
+curated install, enable by domain, and show license, dependencies, and risk. (Curated
+third-party install is a later feature; today the Skills page lists the real skills
+OpenCode has loaded — built-in + project `.opencode/skill/` + user config.)
 
 ### 6.4 MCP servers
 
@@ -161,17 +176,19 @@ BioMCP and Zotero follow.
 
 ```text
 Execution Layer
-├── Hermes local backend
-├── Hermes Docker backend
-├── Hermes SSH backend
-├── Hermes Modal backend
-└── Jupyter Kernel Gateway backend
+├── OpenCode tools (local, in the bundled runtime)
+├── Docker sandbox            (optional, advanced)
+├── SSH / Modal remote        (optional, advanced — later)
+└── Jupyter Kernel Gateway    (later)
 ```
 
-Hermes already supports local, Docker, SSH, Modal, Daytona, and Singularity backends.
+OpenCode executes its tools locally within the bundled runtime, gated by its permission
+system. Heavier/remote execution (Docker sandbox, SSH, Modal) is optional and belongs in
+an advanced "Remote Compute" area, never the default path.
 
-**v1 default:** local backend + manual approval; Docker optional. Do not hard-depend on
-Docker Desktop in v1 — it raises the install barrier significantly.
+**v1 default:** local execution + manual approval for high-risk actions. Do not
+hard-depend on Docker Desktop or WSL in v1 — that raises the install barrier and is not
+consumer-grade.
 
 **v0.3 Jupyter Kernel Gateway** for a more notebook-like experience:
 
@@ -193,15 +210,15 @@ lightweight installer + a first-launch Runtime Manager + on-demand scientific en
 
 ### 8.2 Responsibilities
 
-Detect Hermes; detect Python / uv / Node / Git; create the workspace; create isolated
+Detect OpenCode; detect Python / uv / Node / Git; create the workspace; create isolated
 environments; install base Python packages; manage scientific tool dependencies; start
-the Hermes Gateway; start an optional Jupyter Gateway; monitor runtime health.
+the OpenCode server; start an optional Jupyter Gateway; monitor runtime health.
 
 ### 8.3 Runtime directory
 
 ```text
 ~/.ai4s-workbench/
-  config/  runtime/{hermes,python,node}/  profiles/ai4s-workbench/
+  config/  runtime/{opencode,python,node}/  profiles/ai4s-workbench/
   workspaces/  logs/  cache/  secrets/
 ```
 
@@ -296,8 +313,8 @@ it cannot auto-upload files; it cannot silently install dependencies.
 | Connect remote server | Require approval |
 | Access files outside workspace | Require approval |
 
-Hermes supports manual / smart / off approval modes; manual is the default. The desktop
-must never default to `off`.
+OpenCode has a per-tool permission system (allow / ask / deny per agent). The desktop
+maps high-risk actions to "ask" and must never blanket-allow them.
 
 ### 11.3 API keys
 
@@ -348,14 +365,14 @@ uploads to a GitHub Release.
 
 ```text
 User opens app → Tauri starts → Frontend loads → Runtime Manager checks dependencies
-→ Start Hermes Gateway sidecar → Connect to Gateway → Load projects → Ready
+→ Start OpenCode sidecar → Connect to Gateway → Load projects → Ready
 ```
 
 ### 13.2 Agent task
 
 ```text
-User submits task → Frontend sends prompt to Hermes Gateway → Hermes creates plan
-→ Frontend renders plan approval card → User approves → Hermes executes tools
+User submits task → Frontend sends prompt to OpenCode → OpenCode plans
+→ Frontend renders plan approval card → User approves → OpenCode executes tools
 → Tool events stream back → Runtime writes artifacts → Provenance service records events
 → Reviewer runs checks → Frontend updates artifact/review panels
 ```
@@ -372,7 +389,7 @@ task workers.
 
 ### 14.2 Runtime
 
-Persistent Hermes Gateway; reused project sessions; incremental file index; artifact
+Persistent OpenCode server; reused project sessions; incremental file index; artifact
 hash cache; per-project reused Python env; literature metadata cache; cached PDF parse
 results; figure preview thumbnails.
 
@@ -384,14 +401,14 @@ Runtime ready: < 10s
 First agent response: < 5s after runtime ready
 ```
 
-Strategy: UI first, runtime after; show runtime-loading state on Home; a failed Hermes
+Strategy: UI first, runtime after; show runtime-loading state on Home; a failed OpenCode
 connection must not block the UI; first-time dependency install happens in onboarding.
 
 ## 15. Error handling
 
 ### 15.1 Runtime errors
 
-Hermes not installed; Gateway start failure; port in use; missing API key; model
+OpenCode not started; Gateway start failure; port in use; missing API key; model
 connection failure; workspace permission denied; broken Python env; Docker unavailable;
 MCP server start failure. Each must provide: a human-readable explanation, collapsible
 technical details, a one-click fix button, and a copy-logs button.
@@ -410,16 +427,16 @@ Monorepo:
 ai4s-workbench/
   apps/desktop/{src,src-tauri}/
   packages/{ui,shared,sdk}/
-  runtime/{manager,hermes-profile,mcp,skills}/
+  runtime/{manager,opencode-profile,mcp,skills}/
   docs/{PRD.md,TECHNICAL_DESIGN.md}
   examples/bci-trends/
-  scripts/{release,dev}/
+  scripts/{release,dev}/     # dev/fetch-opencode.sh fetches the pinned sidecar
 ```
 
-- `apps/desktop` — Tauri + React desktop app.
-- `runtime/manager` — local runtime manager (detect deps, start sidecar, manage ports
-  and workspace, write provenance, collect logs).
-- `runtime/hermes-profile` — the AI4S Workbench Hermes profile.
+- `apps/desktop` — Tauri + React desktop app; `src-tauri/src/runtime.rs` supervises the
+  bundled OpenCode sidecar (`OpenCodeClient` lives in `packages/sdk`).
+- `runtime/manager` — local runtime manager (detect deps, workspace, provenance, logs).
+- `runtime/opencode-profile` — the AI4S Workbench OpenCode config/skills bundle.
 - `runtime/skills` — self-authored scientific skills.
 - `examples` — the complete demo project.
 
@@ -432,8 +449,8 @@ ai4s-workbench/
 3. Build a static onboarding page.
 4. Build a static project workspace page.
 5. Build tool-call card / artifact card / approval dialog.
-6. Connect the Hermes Gateway (or mock the event stream first).
-7. Write the Hermes profile.
+6. Bundle + auto-start OpenCode; connect via `OpenCodeClient` (HTTP + SSE).
+7. Ship the OpenCode config/skills bundle.
 8. Write the 3 core skills.
 9. Build static artifacts for the BCI demo.
 10. Draft the GitHub Actions build.
@@ -441,16 +458,16 @@ ai4s-workbench/
 ### 17.2 v0.1 must deliver
 
 macOS app runs; Windows app runs; README has screenshots; a complete demo; API key
-config; open a workspace; communicate with Hermes (or at least a mock + documented
-integration path); show plan / tool / artifact / review; export `report.md`.
+config; open a workspace; a bundled OpenCode the app auto-starts and drives (sessions,
+streaming, history, skills); show plan / tool / artifact / review; export `report.md`.
 
 ## 18. Technical risks
 
-### 18.1 Hermes desktop integration
+### 18.1 OpenCode desktop integration
 
-Risk: Hermes API / Gateway interface changes. Mitigation: wrap a `HermesClient`; never
-call Hermes directly from the UI; support the API Server fallback; pin the Hermes
-version; maintain the profile distribution independently.
+Risk: OpenCode API changes across versions. Mitigation: wrap `OpenCodeClient`; never call
+OpenCode directly from the UI; **pin the OpenCode version** (`OPENCODE_VERSION`); bundle
+the pinned binary so the app is not affected by the user's own OpenCode.
 
 ### 18.2 Windows environment complexity
 
@@ -460,33 +477,33 @@ Python early; provide a portable fallback; code-sign for formal releases.
 
 ### 18.3 Installer size
 
-Risk: bundling Python, Node, Hermes, and scientific packages makes the installer huge.
-Mitigation: keep the app body light; install runtime on demand; install science
-dependencies per profile; defer Docker / Jupyter.
+Risk: bundling a large runtime and scientific packages makes the installer huge.
+Mitigation: OpenCode is a single ~44 MB-installer sidecar (cheap to bundle); keep the app
+body light; install heavy scientific dependencies on demand as optional Science Packs;
+defer Docker / Jupyter.
 
 ### 18.4 Agent safety
 
 Risk: the agent runs commands, reads/writes files, accesses the network. Mitigation:
 manual approval by default; workspace allowlist; isolated local secrets; dangerous-
-command dialogs; recommend the Docker backend; full provenance recording.
+command dialogs; optional Docker sandbox; full provenance recording.
 
-## 19. Final recommended stack
+## 19. Final stack
 
 ```text
 Tauri 2
 React + TypeScript + Vite
 Tailwind + Radix UI
-Hermes Agent as runtime
-Hermes TUI Gateway JSON-RPC
-AI4S Hermes Profile Distribution
-K-Dense scientific-agent-skills curated integration
+OpenCode as agent runtime (bundled single-binary sidecar, pinned OPENCODE_VERSION)
+OpenCode HTTP + SSE API via OpenCodeClient (packages/sdk)
+OpenCode skills/agents + optional third-party scientific skills
 Local workspace + SQLite + JSONL provenance
-NSIS / DMG installer
-GitHub Releases
+DMG / NSIS / MSI installers via GitHub Actions
+GitHub Releases (self-contained; sidecar fetched at build time)
 ```
 
 One line:
 
-**Use Tauri for a high-performance modern desktop shell, Hermes as the Claude Code
-alternative layer, scientific skills and MCP as the research capability layer, and
-provenance/reviewer as the real moat of an open-source Claude Science alternative.**
+**Use Tauri for a high-performance modern desktop shell, a bundled+isolated OpenCode as
+the Claude Code alternative layer, scientific skills and MCP as the research capability
+layer, and provenance/reviewer as the real moat of an open-source Claude Science alternative.**
