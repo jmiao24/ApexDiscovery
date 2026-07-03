@@ -1,0 +1,240 @@
+// Artifact provenance (P0-3): every agent write of a workspace file appends a
+// version record to <workspace>/.openscience/provenance.jsonl — append-only,
+// one JSON object per line, so any artifact can reveal its generating code,
+// environment, and originating conversation, per version.
+use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::AppHandle;
+
+use crate::runtime::workspace_dir;
+
+const STORE_DIR: &str = ".openscience";
+const STORE_FILE: &str = "provenance.jsonl";
+/// Per-record content cap: keeps the store bounded; larger writes are truncated.
+const CONTENT_CAP: usize = 100_000;
+
+/// Serializes appends so two tool events can't interleave lines or race versions.
+#[derive(Default)]
+pub struct ProvenanceState(pub Mutex<()>);
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProvenanceRecord {
+    /// Workspace-relative artifact path with `/` separators.
+    pub path: String,
+    /// 1-based version, assigned on append.
+    pub version: u32,
+    /// Seconds since the epoch (the frontend formats it).
+    pub ts: u64,
+    /// Tool that produced this version, e.g. "write".
+    pub tool: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Text the tool wrote (capped); absent for binary or indirect writes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log: Option<String>,
+}
+
+/// Normalize an artifact path (absolute or relative, from tool input) to a
+/// workspace-relative `/`-separated key. Paths escaping the workspace are rejected.
+fn normalize_rel(root: &Path, path: &str) -> Result<String, String> {
+    let p = Path::new(path);
+    let rel: PathBuf = if p.is_absolute() {
+        let stripped = match (p.canonicalize(), root.canonicalize()) {
+            // Prefer canonical forms (resolves /var vs /private/var on macOS)…
+            (Ok(full), Ok(root_c)) => full.strip_prefix(&root_c).map(Path::to_path_buf),
+            // …but the file may not exist yet — fall back to a lexical strip.
+            _ => p.strip_prefix(root).map(Path::to_path_buf),
+        };
+        stripped.map_err(|_| "path is outside the workspace".to_string())?
+    } else {
+        p.to_path_buf()
+    };
+    if rel.as_os_str().is_empty()
+        || rel.components().any(|c| !matches!(c, Component::Normal(_)))
+    {
+        return Err("path must stay inside the workspace".into());
+    }
+    Ok(rel
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/"))
+}
+
+fn store_file(root: &Path) -> PathBuf {
+    root.join(STORE_DIR).join(STORE_FILE)
+}
+
+/// All records in the store. Unparseable lines are skipped, never fatal — the
+/// store must survive a corrupt line without losing the rest of the history.
+fn read_all(file: &Path) -> Vec<ProvenanceRecord> {
+    let Ok(text) = std::fs::read_to_string(file) else {
+        return Vec::new();
+    };
+    text.lines()
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect()
+}
+
+fn cap_content(mut c: String) -> String {
+    if c.len() > CONTENT_CAP {
+        let mut end = CONTENT_CAP;
+        while !c.is_char_boundary(end) {
+            end -= 1;
+        }
+        c.truncate(end);
+        c.push_str("\n… [truncated]");
+    }
+    c
+}
+
+/// Append one version record for `path`, assigning the next version number.
+pub fn append_record(
+    root: &Path,
+    path: &str,
+    tool: &str,
+    session_id: Option<String>,
+    model: Option<String>,
+    content: Option<String>,
+    log: Option<String>,
+) -> Result<ProvenanceRecord, String> {
+    let rel = normalize_rel(root, path)?;
+    let file = store_file(root);
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("provenance dir failed: {e}"))?;
+    }
+    let version = read_all(&file)
+        .iter()
+        .filter(|r| r.path == rel)
+        .map(|r| r.version)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    let record = ProvenanceRecord {
+        path: rel,
+        version,
+        ts: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        tool: tool.to_string(),
+        session_id,
+        model,
+        content: content.map(cap_content),
+        log,
+    };
+    let line = serde_json::to_string(&record).map_err(|e| e.to_string())?;
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&file)
+        .map_err(|e| format!("provenance open failed: {e}"))?;
+    writeln!(f, "{line}").map_err(|e| format!("provenance write failed: {e}"))?;
+    Ok(record)
+}
+
+/// All recorded versions of one artifact, oldest first.
+pub fn versions_for(root: &Path, path: &str) -> Result<Vec<ProvenanceRecord>, String> {
+    let rel = normalize_rel(root, path)?;
+    let mut v: Vec<ProvenanceRecord> = read_all(&store_file(root))
+        .into_iter()
+        .filter(|r| r.path == rel)
+        .collect();
+    v.sort_by_key(|r| r.version);
+    Ok(v)
+}
+
+#[tauri::command]
+pub fn record_provenance(
+    app: AppHandle,
+    state: tauri::State<ProvenanceState>,
+    path: String,
+    tool: String,
+    session_id: Option<String>,
+    model: Option<String>,
+    content: Option<String>,
+    log: Option<String>,
+) -> Result<ProvenanceRecord, String> {
+    let _guard = state.0.lock().map_err(|_| "provenance lock poisoned")?;
+    append_record(&workspace_dir(&app)?, &path, &tool, session_id, model, content, log)
+}
+
+#[tauri::command]
+pub fn list_provenance(app: AppHandle, path: String) -> Result<Vec<ProvenanceRecord>, String> {
+    versions_for(&workspace_dir(&app)?, &path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{append_record, cap_content, normalize_rel, versions_for, CONTENT_CAP};
+
+    fn temp_root(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("ai4s-prov-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn versions_increment_per_path_and_round_trip() {
+        let root = temp_root("versions");
+        let r1 = append_record(&root, "fig/plot.py", "write", Some("ses_1".into()), Some("m".into()), Some("print(1)".into()), None).unwrap();
+        let r2 = append_record(&root, "fig/plot.py", "edit", Some("ses_1".into()), None, Some("print(2)".into()), None).unwrap();
+        let other = append_record(&root, "report.md", "write", None, None, None, Some("wrote report.md".into())).unwrap();
+        assert_eq!((r1.version, r2.version, other.version), (1, 2, 1));
+
+        let v = versions_for(&root, "fig/plot.py").unwrap();
+        assert_eq!(v.len(), 2);
+        assert_eq!(v[0].content.as_deref(), Some("print(1)"));
+        assert_eq!(v[1].tool, "edit");
+        assert_eq!(v[1].session_id.as_deref(), Some("ses_1"));
+        assert!(v[1].ts > 0);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn absolute_paths_normalize_and_escapes_are_rejected() {
+        let root = temp_root("norm");
+        // Absolute path under the workspace → same key as the relative form.
+        let abs = root.join("a/b.txt");
+        append_record(&root, abs.to_str().unwrap(), "write", None, None, None, None).unwrap();
+        let v = versions_for(&root, "a/b.txt").unwrap();
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].path, "a/b.txt");
+
+        assert!(normalize_rel(&root, "../outside.txt").is_err());
+        assert!(normalize_rel(&root, "/etc/hosts").is_err());
+        assert!(normalize_rel(&root, "").is_err());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn corrupt_lines_are_skipped_and_content_is_capped() {
+        let root = temp_root("corrupt");
+        append_record(&root, "x.py", "write", None, None, None, None).unwrap();
+        // A corrupt line must not lose the rest of the history.
+        use std::io::Write;
+        let file = root.join(".openscience/provenance.jsonl");
+        let mut f = std::fs::OpenOptions::new().append(true).open(&file).unwrap();
+        writeln!(f, "not json").unwrap();
+        append_record(&root, "x.py", "write", None, None, None, None).unwrap();
+        let v = versions_for(&root, "x.py").unwrap();
+        assert_eq!(v.iter().map(|r| r.version).collect::<Vec<_>>(), vec![1, 2]);
+
+        let big = "é".repeat(CONTENT_CAP); // multi-byte: cap must respect char boundaries
+        let capped = cap_content(big);
+        assert!(capped.len() <= CONTENT_CAP + 20);
+        assert!(capped.ends_with("[truncated]"));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+}

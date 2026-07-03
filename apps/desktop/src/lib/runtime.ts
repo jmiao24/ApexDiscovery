@@ -19,6 +19,7 @@ import {
   type ToolStatus,
 } from "./tauri";
 import { deriveArtifact } from "./artifacts";
+import { provenanceInputFromEvent, recordProvenance } from "./provenance";
 import { splitReview } from "./review";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -79,6 +80,8 @@ interface RuntimeState {
 
 let client: OpenCodeClient | null = null;
 const emptyThread = (): Thread => ({ blocks: [], index: {}, loaded: false });
+/** Tool calls already written to provenance — success events can repeat per callId. */
+const recordedProvenance = new Set<string>();
 
 /** The live OpenCode client (Settings talks to the runtime's config API directly). */
 export function getClient(): OpenCodeClient | null {
@@ -159,6 +162,14 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         const folded = foldEvent({ blocks: cur.blocks, index: cur.index }, event);
         return { threads: { ...s.threads, [sid]: { ...cur, ...folded, loaded: true } } };
       });
+      // A completed live write becomes a provenance version (once per call).
+      if (event.type === "tool.updated" && !recordedProvenance.has(event.callId)) {
+        const input = provenanceInputFromEvent(event);
+        if (input) {
+          recordedProvenance.add(event.callId);
+          void recordProvenance(input, sid, get().defaultModel);
+        }
+      }
       if (event.type === "session.idle") void get().refreshSessions();
     });
     try {

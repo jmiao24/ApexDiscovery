@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Code2, Eye, ExternalLink, Loader2, X } from "lucide-react";
+import { Code2, Eye, ExternalLink, History, Loader2, X } from "lucide-react";
 import type { FilePreviewInspector as FilePreviewInspectorT } from "@ai4s/shared";
 import { extOf, previewKind, type PreviewKind } from "@/lib/artifacts";
 import { base64ToBytes, openArtifactExternally, previewUrl, readArtifact } from "@/lib/artifactFile";
 import { parseTableFile } from "@/lib/csv";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
+import { ProvenancePanel } from "./ProvenancePanel";
 import { TablePreview } from "./TablePreview";
 import { DocxView, PptxView, XlsxView } from "./OfficePreview";
 import { cn } from "@/lib/cn";
@@ -35,6 +36,7 @@ export function FilePreviewInspector({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"preview" | "code">(kind === "text" ? "code" : "preview");
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +95,15 @@ export function FilePreviewInspector({
         )}
         <div className="flex-1" />
         <button
+          className={cn(showHistory ? "text-text" : "text-muted hover:text-text")}
+          aria-label="History"
+          title="History — every recorded version with its code and conversation"
+          aria-pressed={showHistory}
+          onClick={() => setShowHistory((v) => !v)}
+        >
+          <History size={16} />
+        </button>
+        <button
           className="text-muted hover:text-text"
           aria-label="Open externally"
           title="Open in the default app"
@@ -106,13 +117,14 @@ export function FilePreviewInspector({
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto bg-surface-2">
-        {loading && (
+        {showHistory && <ProvenancePanel path={data.path} language={data.language} />}
+        {!showHistory && loading && (
           <div className="flex items-center gap-2 p-4 text-sm text-muted">
             <Loader2 size={15} className="animate-spin" /> Loading {data.filename}…
           </div>
         )}
-        {!loading && error && <div className="p-4 text-sm text-muted">{error}</div>}
-        {!loading && !error && (
+        {!showHistory && !loading && error && <div className="p-4 text-sm text-muted">{error}</div>}
+        {!showHistory && !loading && !error && (
           <Body
             kind={kind}
             url={url}

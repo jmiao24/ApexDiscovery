@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowLeft, Loader2, NotebookPen, Play, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, History, Loader2, NotebookPen, Play, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type { NotebookCell } from "@ai4s/shared";
 import { readArtifact, writeWorkspaceFile } from "@/lib/artifactFile";
+import { ProvenancePanel } from "@/components/inspector/ProvenancePanel";
 import { parseIpynb, serializeIpynb } from "@/lib/notebook-file";
 import { formatExecResult, kernelExecute } from "@/lib/kernel";
 import { toast } from "@/lib/toast";
@@ -27,6 +28,7 @@ export function NotebookEditor({
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState<number | null>(null);
   const [saved, setSaved] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
   const cellsRef = useRef<NotebookCell[] | null>(null);
   cellsRef.current = cells;
   const rawRef = useRef<string | null>(null);
@@ -148,6 +150,15 @@ export function NotebookEditor({
           Shift/⌘+Enter runs a cell · shared with the agent
         </span>
         <button
+          className={cn(showHistory ? "text-text" : "text-muted hover:text-text")}
+          aria-label="History"
+          title="History — every recorded version with its code and conversation"
+          aria-pressed={showHistory}
+          onClick={() => setShowHistory((v) => !v)}
+        >
+          <History size={14} />
+        </button>
+        <button
           className="text-muted hover:text-text"
           aria-label="Reload from disk"
           title="Reload (pick up the agent's changes)"
@@ -162,7 +173,12 @@ export function NotebookEditor({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      {showHistory && (
+        <div className="flex-1 overflow-y-auto bg-surface-2">
+          <ProvenancePanel path={path} language="python" />
+        </div>
+      )}
+      <div className={cn("flex-1 overflow-y-auto", showHistory && "hidden")}>
         <div className="mx-auto max-w-3xl px-6 py-5">
           {error && <div className="text-sm text-error">{error}</div>}
           {!error && !cells && (

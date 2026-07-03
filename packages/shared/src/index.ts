@@ -265,16 +265,26 @@ export interface PdfSection {
   body: string;
 }
 
-// ---- Provenance / citations (used by later slices; typed now) ----
+// ---- Provenance / citations ----
 
-export interface ProvenanceEvent {
-  eventId: string;
-  stepId: string;
-  type: string;
+/** One recorded write of an artifact — a line in `.openscience/provenance.jsonl`.
+ *  Every agent write appends one, so any artifact can reveal its generating
+ *  code, environment, and originating conversation, per version. */
+export interface ProvenanceRecord {
+  /** Workspace-relative artifact path with `/` separators. */
+  path: string;
+  /** 1-based version, assigned on append. */
+  version: number;
+  /** Seconds since the epoch. */
+  ts: number;
+  /** Tool that produced this version, e.g. "write". */
   tool: string;
-  inputFiles: string[];
-  outputFiles: string[];
-  status: "success" | "warning" | "failed";
+  sessionId?: string;
+  /** Model configured when the version was recorded. */
+  model?: string;
+  /** Text the tool wrote (capped); absent for binary or indirect writes. */
+  content?: string;
+  log?: string;
 }
 
 export interface Citation {

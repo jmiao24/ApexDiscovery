@@ -75,9 +75,11 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
   logs. Records are stable and versioned (`provenance.jsonl`).
 - **Acceptance.** For any artifact, one click reveals its generating code +
   environment + inputs + originating conversation turn; re-running reproduces it.
-- **Status.** Basic provenance + artifact panel exist; notebooks open in a
-  runnable editor tied to session. Gap: versioned artifact tabs with real
-  per-version data (already the #1 item in the internal gap table).
+- **Status.** Shipped: every agent write appends a version record to
+  `.openscience/provenance.jsonl` (code, tool, model, session, timestamp); the
+  artifact History panel reveals per-version data + a link back to the
+  originating conversation. Gap: environment capture beyond the model (packages,
+  kernel), and re-run-to-reproduce.
 
 ### P0-4 · Reviewer agent — traceable claims, not "no hallucinations"
 
@@ -244,7 +246,7 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 |---|---|---|---|
 | P0-1 | Full workflow end to end (not chat) | P0 | Partial |
 | P0-2 | Local data + local compute | P0 | Mostly done (R pending) |
-| P0-3 | Artifact provenance / reproducibility | P0 | Partial (versioning gap) |
+| P0-3 | Artifact provenance / reproducibility | P0 | Versioned records + History UI shipped; re-run pending |
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | Partial |
 | P1-1 | Multi-discipline from day one | P1 | Pluggable; non-bio demo pending |
 | P1-2 | Domain + literature connectors | P1 | MCP done; science set pending |

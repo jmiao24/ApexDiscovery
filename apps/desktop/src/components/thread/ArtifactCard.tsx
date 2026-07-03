@@ -8,6 +8,7 @@ import {
   SquareArrowOutUpRight,
 } from "lucide-react";
 import type { ArtifactBlock, ArtifactKind } from "@ai4s/shared";
+import { cn } from "@/lib/cn";
 
 const ICON: Record<ArtifactKind, React.ReactNode> = {
   figure: <ImageIcon size={15} />,
@@ -27,7 +28,14 @@ export function ArtifactCard({
   onOpen?: (a: ArtifactBlock) => void;
 }) {
   return (
-    <div className="flex items-center gap-2.5 rounded-input border border-border bg-surface px-3 py-2.5 text-sm">
+    <div
+      className={cn(
+        "flex items-center gap-2.5 rounded-input border border-border bg-surface px-3 py-2.5 text-sm",
+        onOpen && "cursor-pointer hover:bg-surface-2",
+      )}
+      onClick={onOpen ? () => onOpen(block) : undefined}
+      role={onOpen ? "button" : undefined}
+    >
       <span className="shrink-0 text-accent">{ICON[block.artifact]}</span>
       <span className="truncate font-medium text-text">{block.filename}</span>
       <span className="shrink-0 rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted ring-1 ring-border">
@@ -36,12 +44,9 @@ export function ArtifactCard({
       <span className="shrink-0 truncate text-xs text-muted">· via {block.tool}</span>
       <div className="flex-1" />
       {onOpen && (
-        <button
-          className="flex shrink-0 items-center gap-1 rounded-input px-2 py-1 text-xs text-link hover:bg-surface-2"
-          onClick={() => onOpen(block)}
-        >
+        <span className="flex shrink-0 items-center gap-1 rounded-input px-2 py-1 text-xs text-link">
           <SquareArrowOutUpRight size={13} /> Open
-        </button>
+        </span>
       )}
     </div>
   );

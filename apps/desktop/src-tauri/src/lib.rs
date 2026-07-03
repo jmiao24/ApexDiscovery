@@ -6,12 +6,14 @@ mod jupyter;
 mod kernel;
 mod opencode_config;
 mod preview_server;
+mod provenance;
 mod runtime;
 mod tools;
 
 use jupyter::JupyterState;
 use kernel::KernelState;
 use preview_server::PreviewState;
+use provenance::ProvenanceState;
 use runtime::RuntimeState;
 use tauri::Manager;
 
@@ -33,6 +35,7 @@ pub fn run() {
         .manage(KernelState::default())
         .manage(JupyterState::default())
         .manage(PreviewState::default())
+        .manage(ProvenanceState::default())
         .invoke_handler(tauri::generate_handler![
             runtime::start_runtime,
             runtime::stop_runtime,
@@ -54,6 +57,8 @@ pub fn run() {
             artifact_file::add_text_to_workspace,
             artifact_file::list_notebooks,
             artifact_file::write_workspace_file,
+            provenance::record_provenance,
+            provenance::list_provenance,
             preview_server::preview_url,
             tools::detect_tools,
             debug_log::log_debug
