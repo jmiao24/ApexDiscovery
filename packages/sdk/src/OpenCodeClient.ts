@@ -39,6 +39,8 @@ export class OpenCodeClient {
   private readonly authHeader: string | null;
   private status: RuntimeStatus = "offline";
   private abort: AbortController | null = null;
+  private es: EventSource | null = null;
+  private readonly customFetch: boolean;
   private readonly eventListeners = new Set<EventListener>();
   private readonly statusListeners = new Set<StatusListener>();
   /** messageID → role, learned from message.updated, to skip echoed user parts. */
@@ -46,6 +48,7 @@ export class OpenCodeClient {
 
   constructor(opts: OpenCodeClientOptions = {}) {
     this.baseUrl = (opts.baseUrl ?? DEFAULT_OPENCODE_URL).replace(/\/$/, "");
+    this.customFetch = !!opts.fetchImpl;
     // Bind to globalThis — an unbound `fetch` reference throws "Illegal invocation" in browsers.
     this.fetchImpl = (opts.fetchImpl ?? globalThis.fetch).bind(globalThis);
     this.authHeader = opts.password
@@ -72,9 +75,45 @@ export class OpenCodeClient {
     return h;
   }
 
-  /** Open the SSE event stream. Resolves once the server acknowledges (server.connected). */
+  /** Open the SSE event stream. Resolves once the server acknowledges. */
   connect(): Promise<void> {
     this.setStatus("connecting");
+
+    // Prefer EventSource in a real webview/browser (reliable SSE, incl. macOS WKWebView).
+    // Fall back to streaming fetch for node/tests or when custom auth headers are needed.
+    const canUseEventSource =
+      !this.customFetch && !this.authHeader && typeof EventSource !== "undefined";
+    if (canUseEventSource) {
+      return new Promise((resolve, reject) => {
+        let opened = false;
+        const es = new EventSource(`${this.baseUrl}/event`);
+        this.es = es;
+        es.onopen = () => {
+          opened = true;
+          this.setStatus("ready");
+          resolve();
+        };
+        es.onmessage = (ev) => {
+          try {
+            this.normalize(JSON.parse(ev.data) as OpenCodeRawEvent);
+          } catch {
+            /* ignore malformed frame */
+          }
+        };
+        es.onerror = () => {
+          if (!opened) {
+            this.setStatus("error");
+            es.close();
+            this.es = null;
+            reject(new Error("Could not open OpenCode event stream"));
+          } else {
+            // EventSource auto-reconnects; reflect the transient state.
+            this.setStatus("connecting");
+          }
+        };
+      });
+    }
+
     this.abort = new AbortController();
     return new Promise((resolve, reject) => {
       let opened = false;
@@ -105,6 +144,8 @@ export class OpenCodeClient {
   }
 
   close(): void {
+    this.es?.close();
+    this.es = null;
     this.abort?.abort();
     this.abort = null;
     this.setStatus("offline");
