@@ -11,6 +11,15 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Single instance MUST be the first plugin. A second launch (or a reinstall
+        // while the app is still running) focuses the existing window instead of
+        // starting a second OpenCode on the same data dir (which deadlocks the DB).
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .manage(RuntimeState::default())
         .invoke_handler(tauri::generate_handler![
