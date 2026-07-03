@@ -186,13 +186,17 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     }
   },
 
-  connectRetry: async (tries = 30) => {
+  // First boot can be slow far beyond the process spawn: on a fresh install
+  // macOS TCC ("access Documents") blocks the sidecar until the user answers,
+  // so the window must cover minutes, not seconds — giving up early strands
+  // the user on an error screen that a single manual Connect would fix.
+  connectRetry: async (tries = 120) => {
     set({ status: "connecting" });
     for (let i = 0; i < tries; i++) {
       await get().connect();
       if (get().status === "ready") return;
       set({ status: "connecting" }); // mask transient failures while the sidecar boots
-      await sleep(500);
+      await sleep(1000);
     }
     set({ status: "error" });
   },
