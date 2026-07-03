@@ -41,3 +41,6 @@ secrets/
 *.app
 *.exe
 *.msi
+
+# Bundled sidecar binaries (fetched per-platform; too large for git)
+apps/desktop/src-tauri/binaries/

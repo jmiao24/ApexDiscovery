@@ -1,22 +1,9 @@
-// Writes the user's model provider + API key + model into OpenCode's config
-// (`~/.config/opencode/opencode.json`), merging with any existing config, so a
-// running `opencode serve` uses the key the user entered in Settings.
+// Pure merge of provider credentials/model into OpenCode config JSON.
+// Used by the runtime command, which writes it into an app-private config dir.
 use serde_json::{json, Value};
-use std::path::PathBuf;
-
-/// Path to OpenCode's global config file, honoring XDG_CONFIG_HOME.
-fn config_path() -> Result<PathBuf, String> {
-    let base = std::env::var("XDG_CONFIG_HOME")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("HOME").ok().map(|h| format!("{h}/.config")))
-        .or_else(|| std::env::var("USERPROFILE").ok().map(|h| format!("{h}/.config")))
-        .ok_or_else(|| "could not resolve a config home directory".to_string())?;
-    Ok(PathBuf::from(base).join("opencode").join("opencode.json"))
-}
 
 /// Merge provider credentials/model into existing OpenCode config JSON.
-/// Pure and unit-tested; empty fields are left untouched.
+/// Empty fields are left untouched; existing unrelated keys are preserved.
 pub fn merge_config(
     existing: &str,
     provider: &str,
@@ -39,9 +26,7 @@ pub fn merge_config(
     }
 
     if !provider.is_empty() {
-        let providers = obj
-            .entry("provider")
-            .or_insert_with(|| json!({}));
+        let providers = obj.entry("provider").or_insert_with(|| json!({}));
         if !providers.is_object() {
             *providers = json!({});
         }
@@ -70,24 +55,6 @@ pub fn merge_config(
     }
 
     serde_json::to_string_pretty(&root).map_err(|e| e.to_string())
-}
-
-/// Tauri command: persist the provider key/model to OpenCode's config. Returns the path written.
-#[tauri::command]
-pub fn configure_opencode(
-    provider: String,
-    api_key: String,
-    model: String,
-    base_url: Option<String>,
-) -> Result<String, String> {
-    let path = config_path()?;
-    let existing = std::fs::read_to_string(&path).unwrap_or_default();
-    let merged = merge_config(&existing, &provider, &api_key, &model, base_url.as_deref())?;
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(&path, merged).map_err(|e| e.to_string())?;
-    Ok(path.to_string_lossy().to_string())
 }
 
 #[cfg(test)]

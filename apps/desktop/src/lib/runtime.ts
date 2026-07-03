@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { OpenCodeClient, DEFAULT_OPENCODE_URL, type OpenCodeEvent } from "@ai4s/sdk";
 import type { RuntimeStatus, ThreadBlock } from "@ai4s/shared";
+import { isTauri, startRuntime } from "./tauri";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const URL_KEY = "ai4s.opencodeUrl";
 
@@ -18,6 +21,8 @@ interface RuntimeState {
   error: string | null;
   setServerUrl: (url: string) => void;
   connect: () => Promise<void>;
+  connectRetry: (tries?: number) => Promise<void>;
+  bootstrap: () => Promise<void>;
   disconnect: () => void;
   sendPrompt: (text: string) => Promise<void>;
 }
@@ -57,6 +62,28 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     } catch (err) {
       set({ error: err instanceof Error ? err.message : String(err), status: "error" });
     }
+  },
+
+  // Retry connect while the sidecar is still coming up (or restarting).
+  connectRetry: async (tries = 12) => {
+    for (let i = 0; i < tries; i++) {
+      await get().connect();
+      if (get().status === "ready") return;
+      await sleep(500);
+    }
+  },
+
+  // Desktop only: start the bundled OpenCode, point at it, and connect.
+  bootstrap: async () => {
+    if (!isTauri) return;
+    try {
+      const url = await startRuntime();
+      if (url) set({ serverUrl: url });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+    await get().connectRetry();
   },
 
   disconnect: () => {

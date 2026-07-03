@@ -16,6 +16,13 @@ export type ConfigureResult =
   | { ok: false; reason: "not-desktop" }
   | { ok: false; reason: "error"; message: string };
 
+/** Start the bundled OpenCode sidecar (desktop only). Returns its base URL. */
+export async function startRuntime(): Promise<string | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("start_runtime");
+}
+
 /** Write the provider key/model into OpenCode's config via the Rust command. */
 export async function configureOpenCode(
   creds: OpenCodeCredentials,

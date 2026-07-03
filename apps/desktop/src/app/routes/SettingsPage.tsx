@@ -40,7 +40,10 @@ export function SettingsPage() {
     });
     setSaving(false);
     if (res.ok) {
-      setSaveMsg(`Saved to ${res.path}. Reconnect the runtime to apply.`);
+      // The Rust side restarts the sidecar; reconnect so it reloads the new key.
+      setSaveMsg("Saved. Restarting the runtime with your key…");
+      await useRuntimeStore.getState().connectRetry();
+      setSaveMsg("Saved and applied — the runtime is using your key.");
     } else if (res.reason === "not-desktop") {
       setSaveMsg(
         apiKey
