@@ -1,5 +1,6 @@
 // AI4S Workbench — Tauri 2 entry. Hosts the React frontend and supervises the
 // bundled OpenCode sidecar (isolated config/data + dedicated port; killed on exit).
+mod debug_log;
 mod opencode_config;
 mod runtime;
 mod tools;
@@ -16,7 +17,8 @@ pub fn run() {
             runtime::start_runtime,
             runtime::stop_runtime,
             runtime::configure_opencode,
-            tools::detect_tools
+            tools::detect_tools,
+            debug_log::log_debug
         ])
         .build(tauri::generate_context!())
         .expect("error while building AI4S Workbench")

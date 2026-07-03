@@ -10,7 +10,7 @@ import {
   type ToolCallStatus,
 } from "@ai4s/sdk";
 import type { RuntimeStatus, ThreadBlock } from "@ai4s/shared";
-import { detectTools as probeTools, isTauri, startRuntime, type ToolStatus } from "./tauri";
+import { detectTools as probeTools, isTauri, logDebug, startRuntime, type ToolStatus } from "./tauri";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const URL_KEY = "ai4s.opencodeUrl";
@@ -104,8 +104,12 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     get().disconnect();
     const c = new OpenCodeClient({ baseUrl: get().serverUrl });
     client = c;
-    c.onStatus((status) => set({ status }));
+    c.onStatus((status) => {
+      void logDebug(`status → ${status}`);
+      set({ status });
+    });
     c.onEvent((event) => {
+      void logDebug(`event ← ${event.type}${"sessionId" in event ? " " + event.sessionId : ""}`);
       if (event.type === "error") {
         set({ error: event.message });
         return;
@@ -120,12 +124,16 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       if (event.type === "session.idle") void get().refreshSessions();
     });
     try {
+      void logDebug(`connect → ${get().serverUrl}`);
       await c.connect();
+      void logDebug("connect OK");
       set({ error: null });
       await get().refreshSessions();
       await get().loadCatalog();
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err), status: "error" });
+      const msg = err instanceof Error ? err.message : String(err);
+      void logDebug(`connect FAILED: ${msg}`);
+      set({ error: msg, status: "error" });
     }
   },
 
@@ -143,11 +151,15 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   bootstrap: async () => {
     void get().detectTools();
     if (!isTauri) return;
+    void logDebug("bootstrap: starting bundled runtime");
     try {
       const url = await startRuntime();
+      void logDebug(`bootstrap: runtime at ${url}`);
       if (url) set({ serverUrl: url });
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      const msg = err instanceof Error ? err.message : String(err);
+      void logDebug(`bootstrap FAILED: ${msg}`);
+      set({ error: msg });
       return;
     }
     await get().connectRetry();
@@ -211,9 +223,13 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       };
     });
     try {
+      void logDebug(`sendPrompt → ${sid}`);
       await client.sendPrompt(sid, text);
+      void logDebug("sendPrompt OK");
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      const msg = err instanceof Error ? err.message : String(err);
+      void logDebug(`sendPrompt FAILED: ${msg}`);
+      set({ error: msg });
     }
     return sid;
   },

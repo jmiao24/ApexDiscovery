@@ -36,6 +36,17 @@ export async function detectTools(): Promise<ToolStatus[]> {
   return invoke<ToolStatus[]>("detect_tools");
 }
 
+/** Append a diagnostic line to <app-data>/debug.log (desktop only; no-op in browser). */
+export async function logDebug(message: string): Promise<void> {
+  if (!isTauri) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("log_debug", { message });
+  } catch {
+    /* never let diagnostics break the app */
+  }
+}
+
 /** Write the provider key/model into OpenCode's config via the Rust command. */
 export async function configureOpenCode(
   creds: OpenCodeCredentials,
