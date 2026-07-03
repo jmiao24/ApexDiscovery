@@ -61,8 +61,9 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
   provider. Persistent kernels keep variables/dataframes/models in memory to
   avoid reloads.
 - **Status.** Shipped for local Python kernel + Jupyter sidecar (isolated env,
-  workspace-scoped). Gap: R kernel, and an explicit "nothing left this machine"
-  data-flow statement in the UI.
+  workspace-scoped); Settings now carries a plain-language "Privacy & data
+  flow" card stating what stays local vs. what the model provider sees. Gap: R
+  kernel.
 
 ### P0-3 · Provenance / reproducibility for every artifact
 
@@ -226,8 +227,10 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 - **Acceptance.** A user can read, in the app, exactly what leaves the machine
   for their chosen provider; audit confirms keys/data never enter provenance,
   logs, or exports.
-- **Status.** Keychain + workspace sandbox + approval mode shipped. Gap: the
-  plain-language data-flow disclosure surface.
+- **Status.** Workspace sandbox + approval mode shipped; the plain-language
+  data-flow disclosure card is live in Settings. Gap (correction): provider
+  credentials currently live in an app-private `auth.json` (mode 600, managed
+  by OpenCode) — NOT the OS keychain; moving them to the keychain remains open.
 
 ### P2-4 · Beta stability & guardrails
 
@@ -249,7 +252,7 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 | # | Requirement | Tier | Status |
 |---|---|---|---|
 | P0-1 | Full workflow end to end (not chat) | P0 | Partial |
-| P0-2 | Local data + local compute | P0 | Mostly done (R pending) |
+| P0-2 | Local data + local compute | P0 | Done incl. data-flow card (R kernel pending) |
 | P0-3 | Artifact provenance / reproducibility | P0 | Versioned records + History UI shipped; re-run pending |
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | Skill + tagged/dismissible findings shipped |
 | P1-1 | Multi-discipline from day one | P1 | Pluggable; non-bio demo pending |
@@ -259,7 +262,7 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 | P1-5 | Interaction & visualization craft | P1 | Aesthetic base done; chart system + polish pending |
 | P2-1 | Notebook + larger-project handling | P2 | Notebook done; project ergonomics pending |
 | P2-2 | HPC / SSH / Slurm / Modal | P2 | Not started |
-| P2-3 | Plain-language privacy posture | P2 | Safety base done; disclosure pending |
+| P2-3 | Plain-language privacy posture | P2 | Disclosure shipped; keychain migration open |
 | P2-4 | Beta stability & guardrails | P2 | Base done; reliability pass pending |
 
 ## What to say (and not say)

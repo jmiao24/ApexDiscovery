@@ -31,6 +31,7 @@ import {
   type JupyterStatus,
 } from "@/lib/tauri";
 import { openArtifactExternally } from "@/lib/artifactFile";
+import { DataFlowCard } from "@/components/settings/DataFlowCard";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 
@@ -698,6 +699,9 @@ export function SettingsPage() {
             )}
           </div>
         </Card>
+
+        {/* ---- Privacy & data flow ---- */}
+        <DataFlowCard model={defaultModel} workspace={wsPath} />
 
         {/* ---- Appearance ---- */}
         <Card title="Appearance">
