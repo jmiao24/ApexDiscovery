@@ -80,7 +80,10 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
     let data = root.join("xdg-data");
     let cache = root.join("xdg-cache");
     let state = root.join("xdg-state");
-    for d in [&cfg, &data, &cache, &state] {
+    // Run OpenCode inside a small app workspace, NOT the app's cwd (which is `/` when
+    // launched from Finder) — otherwise it scans the whole filesystem root and is slow.
+    let workspace = root.join("workspace");
+    for d in [&cfg, &data, &cache, &state, &workspace] {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
     // Share the user's OpenCode login (free credits) without touching their sessions.
@@ -106,7 +109,8 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
         .env("XDG_DATA_HOME", data.to_string_lossy().to_string())
         .env("XDG_CACHE_HOME", cache.to_string_lossy().to_string())
         .env("XDG_STATE_HOME", state.to_string_lossy().to_string())
-        .env("HOME", home);
+        .env("HOME", home)
+        .current_dir(workspace);
 
     let (mut rx, child) = cmd.spawn().map_err(|e| format!("failed to spawn opencode: {e}"))?;
     // Drain events so the child's stdout/stderr buffer never blocks it.

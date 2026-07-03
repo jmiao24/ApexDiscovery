@@ -129,12 +129,15 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     }
   },
 
-  connectRetry: async (tries = 12) => {
+  connectRetry: async (tries = 30) => {
+    set({ status: "connecting" });
     for (let i = 0; i < tries; i++) {
       await get().connect();
       if (get().status === "ready") return;
+      set({ status: "connecting" }); // mask transient failures while the sidecar boots
       await sleep(500);
     }
+    set({ status: "error" });
   },
 
   bootstrap: async () => {
