@@ -5,6 +5,7 @@ import { useRuntimeStore } from "@/lib/runtime";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
 import { Composer } from "@/components/thread/Composer";
+import { WorkflowStarters } from "@/components/thread/WorkflowStarters";
 import { InspectorShell } from "@/components/inspector/InspectorShell";
 import { cn } from "@/lib/cn";
 
@@ -129,11 +130,7 @@ export function LiveSessionPage() {
                 {error}
               </div>
             )}
-            {connected && isEmpty && (
-              <div className="py-10 text-center text-sm text-muted">
-                Send a message to start a new conversation.
-              </div>
-            )}
+            {connected && isEmpty && <WorkflowStarters onPick={(p) => void onSend(p)} />}
             {thread && <BlockList blocks={thread.blocks} handlers={handlers} />}
           </div>
         </div>

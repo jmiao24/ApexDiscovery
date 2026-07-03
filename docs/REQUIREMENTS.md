@@ -44,9 +44,11 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 - **Acceptance.** From a single natural-language request, produce at least one
   figure **and** one report artifact, each linked to the code that made them,
   without the user leaving the app.
-- **Status.** Partially shipped (agent chat, plan approval, artifact panel,
-  notebooks). Gap: the "one prompt → complete workflow" happy path is not yet a
-  first-class, demoable flow.
+- **Status.** Shipped: the empty session offers one-click workflow starters
+  (demo end-to-end analysis, analyze-my-data, audit-a-report); the demo starter
+  verifiably produces code → figure → report → stats in one turn, all files
+  surfaced as artifacts with provenance records. Gap: richer built-in example
+  projects (bci-trends is repo-only).
 
 ### P0-2 · Local data + local compute (restricted-environment friendly)
 
@@ -251,7 +253,7 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 
 | # | Requirement | Tier | Status |
 |---|---|---|---|
-| P0-1 | Full workflow end to end (not chat) | P0 | Partial |
+| P0-1 | Full workflow end to end (not chat) | P0 | One-click starters shipped; example projects pending |
 | P0-2 | Local data + local compute | P0 | Done incl. data-flow card (R kernel pending) |
 | P0-3 | Artifact provenance / reproducibility | P0 | Versioned records + History UI shipped; re-run pending |
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | Skill + tagged/dismissible findings shipped |
