@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { ChevronDown, ShieldCheck } from "lucide-react";
-import type { FindingLevel, ReviewerBlock } from "@ai4s/shared";
+import { ChevronDown, ShieldCheck, X } from "lucide-react";
+import type { FindingLevel, ReviewCheck, ReviewerBlock } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 
 const BADGE: Record<FindingLevel, { label: string; className: string }> = {
@@ -9,9 +9,20 @@ const BADGE: Record<FindingLevel, { label: string; className: string }> = {
   error: { label: "Error", className: "bg-error/15 text-error ring-error/30" },
 };
 
+const CHECK_TAG: Record<ReviewCheck, string> = {
+  citation: "citation",
+  number: "number",
+  figure: "figure ↔ code",
+};
+
+/** Structured reviewer findings. Dismissal is a session-local reading aid —
+ *  the underlying review text stays in the conversation. */
 export function ReviewerCard({ block }: { block: ReviewerBlock }) {
   const [open, setOpen] = useState(true);
-  const count = block.findings.length;
+  const [dismissed, setDismissed] = useState<ReadonlySet<number>>(new Set());
+  const visible = block.findings
+    .map((f, i) => [f, i] as const)
+    .filter(([, i]) => !dismissed.has(i));
   return (
     <div className="rounded-card border border-border bg-surface shadow-card">
       <button
@@ -22,7 +33,8 @@ export function ReviewerCard({ block }: { block: ReviewerBlock }) {
         <ShieldCheck size={16} className="text-muted" />
         <span className="text-sm font-medium text-text">Reviewer</span>
         <span className="text-sm text-muted">
-          · {count} finding{count === 1 ? "" : "s"}
+          · {visible.length} finding{visible.length === 1 ? "" : "s"}
+          {dismissed.size > 0 && ` · ${dismissed.size} dismissed`}
         </span>
         <ChevronDown
           size={16}
@@ -32,10 +44,10 @@ export function ReviewerCard({ block }: { block: ReviewerBlock }) {
 
       {open && (
         <div className="space-y-3 px-4 pb-4">
-          {block.findings.map((f, i) => {
+          {visible.map(([f, i]) => {
             const badge = BADGE[f.level];
             return (
-              <div key={i} className="space-y-1.5">
+              <div key={i} className="group space-y-1.5">
                 <div className="flex items-start gap-2">
                   <span
                     className={cn(
@@ -45,7 +57,20 @@ export function ReviewerCard({ block }: { block: ReviewerBlock }) {
                   >
                     {badge.label}
                   </span>
+                  {f.check && (
+                    <span className="rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted ring-1 ring-border">
+                      {CHECK_TAG[f.check]}
+                    </span>
+                  )}
                   <span className="text-sm font-medium text-text">{f.title}</span>
+                  <button
+                    className="ml-auto shrink-0 text-muted opacity-0 hover:text-text group-hover:opacity-100"
+                    aria-label={`Dismiss finding: ${f.title}`}
+                    title="Dismiss this finding"
+                    onClick={() => setDismissed(new Set([...dismissed, i]))}
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
                 {f.evidence && (
                   <p className="whitespace-pre-wrap font-mono text-[12.5px] leading-relaxed text-muted">
@@ -55,6 +80,9 @@ export function ReviewerCard({ block }: { block: ReviewerBlock }) {
               </div>
             );
           })}
+          {visible.length === 0 && block.findings.length > 0 && (
+            <p className="text-sm text-muted">All findings dismissed.</p>
+          )}
           {block.note && <p className="text-sm text-muted">{block.note}</p>}
         </div>
       )}

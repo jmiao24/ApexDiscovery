@@ -94,8 +94,12 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 - **Acceptance.** The reviewer flags at least: (a) a citation it cannot resolve,
   (b) a number in the report with no traceable source, (c) a figure whose
   underlying code changed. Copy never promises "no errors."
-- **Status.** Structured reviewer cards render from agent output. Gap: the three
-  specific check types above as reliable, first-class audits.
+- **Status.** Shipped: the bundled first-party `traceability-review` skill runs
+  all three checks (Crossref/arXiv/PubMed citation resolution, unsourced-number
+  flagging, figure↔code staleness via `provenance.jsonl`) and emits the
+  structured review contract; reviewer cards tag each finding with its check
+  type and are dismissible one by one. Gap: hardening across document formats
+  (PDF manuscripts) and models weaker at tool use.
 
 ---
 
@@ -247,7 +251,7 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 | P0-1 | Full workflow end to end (not chat) | P0 | Partial |
 | P0-2 | Local data + local compute | P0 | Mostly done (R pending) |
 | P0-3 | Artifact provenance / reproducibility | P0 | Versioned records + History UI shipped; re-run pending |
-| P0-4 | Reviewer: traceable claims (3 checks) | P0 | Partial |
+| P0-4 | Reviewer: traceable claims (3 checks) | P0 | Skill + tagged/dismissible findings shipped |
 | P1-1 | Multi-discipline from day one | P1 | Pluggable; non-bio demo pending |
 | P1-2 | Domain + literature connectors | P1 | MCP done; science set pending |
 | P1-3 | Scientific renderers | P1 | Base previews done; domain viewers pending |

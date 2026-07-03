@@ -7,8 +7,8 @@ describe("splitReview", () => {
       "I reviewed the figure.\n\n```review\n" +
       JSON.stringify({
         findings: [
-          { level: "ok", title: "Data traces to code", evidence: "make_fig.py L10" },
-          { level: "bogus-level", title: "Missing seed" },
+          { level: "ok", title: "Data traces to code", evidence: "make_fig.py L10", check: "figure" },
+          { level: "bogus-level", title: "Missing seed", check: "bogus-check" },
         ],
         note: "Overall solid.",
       }) +
@@ -16,8 +16,13 @@ describe("splitReview", () => {
     const { clean, review } = splitReview(md);
     expect(review).not.toBeNull();
     expect(review!.findings).toHaveLength(2);
-    expect(review!.findings[0]).toMatchObject({ level: "ok", title: "Data traces to code" });
+    expect(review!.findings[0]).toMatchObject({
+      level: "ok",
+      title: "Data traces to code",
+      check: "figure",
+    });
     expect(review!.findings[1].level).toBe("warn"); // unknown level coerced
+    expect(review!.findings[1].check).toBeUndefined(); // unknown check dropped
     expect(review!.note).toBe("Overall solid.");
     expect(clean).not.toContain("```review");
     expect(clean).toContain("I reviewed the figure.");

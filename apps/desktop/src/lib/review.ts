@@ -1,7 +1,8 @@
-import type { FindingLevel, ReviewerBlock } from "@ai4s/shared";
+import type { FindingLevel, ReviewCheck, ReviewerBlock } from "@ai4s/shared";
 
 const FENCE = /```review\s*\n([\s\S]*?)\n```/;
 const LEVELS: FindingLevel[] = ["ok", "warn", "error"];
+const CHECKS: ReviewCheck[] = ["citation", "number", "figure"];
 
 /**
  * Extract a structured reviewer result the agent was asked to emit as a
@@ -14,7 +15,7 @@ export function splitReview(markdown: string): { clean: string; review: Reviewer
   let review: ReviewerBlock | null = null;
   try {
     const parsed = JSON.parse(m[1]) as {
-      findings?: Array<{ level?: string; title?: string; evidence?: string }>;
+      findings?: Array<{ level?: string; title?: string; evidence?: string; check?: string }>;
       note?: string;
     };
     const findings = (parsed.findings ?? [])
@@ -23,6 +24,7 @@ export function splitReview(markdown: string): { clean: string; review: Reviewer
         level: (LEVELS as string[]).includes(f.level ?? "") ? (f.level as FindingLevel) : "warn",
         title: String(f.title),
         evidence: f.evidence ? String(f.evidence) : undefined,
+        check: (CHECKS as string[]).includes(f.check ?? "") ? (f.check as ReviewCheck) : undefined,
       }));
     if (findings.length > 0 || parsed.note) {
       review = { kind: "reviewer", findings, note: parsed.note };

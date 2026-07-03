@@ -77,11 +77,15 @@ export interface ToolCallBlock {
 
 export type FindingLevel = "warn" | "ok" | "error";
 
+/** Which traceability audit produced a finding (P0-4's three first-class checks). */
+export type ReviewCheck = "citation" | "number" | "figure";
+
 export interface ReviewFinding {
   level: FindingLevel;
   title: string;
   /** Monospace evidence body. */
   evidence?: string;
+  check?: ReviewCheck;
 }
 
 export interface ReviewerBlock {

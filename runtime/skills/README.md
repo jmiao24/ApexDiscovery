@@ -4,10 +4,15 @@ Scientific skills, layered:
 
 ```text
 skills/
-  core/      # self-authored skills specific to this app (currently none)
+  core/      # self-authored skills specific to this app (traceability-review;
+             # other dirs are roadmap placeholders until they get a SKILL.md)
   external/  # third-party skill packs, fetched by script — git-ignored
   user/      # user-installed / custom skills (live in the runtime workspace)
 ```
+
+Core skills are bundled as the `skills-core/` app resource and deployed next to
+the external pack on every sidecar start; directories without a `SKILL.md` are
+skipped.
 
 ## Default pack: ai4s-skills (bundled into the installer)
 

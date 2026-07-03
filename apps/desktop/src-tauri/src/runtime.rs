@@ -111,36 +111,40 @@ pub fn import_opencode_login(app: AppHandle, state: State<'_, RuntimeState>) -> 
     Ok(true)
 }
 
-/// Deploy the bundled ai4s-skills pack (a Tauri resource) into the app-private
+/// Deploy the bundled skill packs (Tauri resources) into the app-private
 /// profile's global skills dir (`<xdg-config>/opencode/skills/`), which OpenCode
-/// scans regardless of project detection. The workspace's own `.opencode/skills/`
-/// stays reserved for skills the user installs. Runs before every sidecar start
-/// so app upgrades refresh the pack.
+/// scans regardless of project detection: `skills/` is the external ai4s-skills
+/// pack, `skills-core/` the first-party skills from `runtime/skills/core`. The
+/// workspace's own `.opencode/skills/` stays reserved for skills the user
+/// installs. Runs before every sidecar start so app upgrades refresh the packs.
 fn deploy_bundled_skills(app: &AppHandle) {
-    let src = match app
-        .path()
-        .resolve("skills", tauri::path::BaseDirectory::Resource)
-    {
-        Ok(p) if p.is_dir() => p,
-        _ => return, // dev run without `fetch-skills.sh` — nothing to deploy
-    };
     let dst = match xdg_config_home(app) {
         Ok(cfg) => cfg.join("opencode").join("skills"),
         Err(_) => return,
     };
-    if let Err(e) = sync_skill_pack(&src, &dst) {
-        eprintln!("failed to deploy bundled skills: {e}");
+    for resource in ["skills", "skills-core"] {
+        let src = match app
+            .path()
+            .resolve(resource, tauri::path::BaseDirectory::Resource)
+        {
+            Ok(p) if p.is_dir() => p,
+            _ => continue, // dev run without `fetch-skills.sh` — nothing to deploy
+        };
+        if let Err(e) = sync_skill_pack(&src, &dst) {
+            eprintln!("failed to deploy bundled skills ({resource}): {e}");
+        }
     }
 }
 
 /// Copy every skill directory under `src` into `dst`, replacing same-named
 /// directories (so bundled updates win) and leaving everything else in `dst`
-/// alone (user-installed skills keep their own directories).
+/// alone (user-installed skills keep their own directories). Directories
+/// without a SKILL.md (placeholders) are skipped.
 fn sync_skill_pack(src: &Path, dst: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
-        if !entry.file_type()?.is_dir() {
+        if !entry.file_type()?.is_dir() || !entry.path().join("SKILL.md").is_file() {
             continue;
         }
         let target = dst.join(entry.file_name());
@@ -326,6 +330,8 @@ mod tests {
         write(&src.join("paper-writer/SKILL.md"), "v2");
         write(&src.join("paper-writer/references/guide.md"), "ref");
         write(&src.join(".commit"), "abc123");
+        // A placeholder dir without SKILL.md must not be deployed.
+        fs::create_dir_all(src.join("placeholder")).unwrap();
 
         // Existing workspace: a stale copy of the bundled skill (with a file the
         // new version no longer has) and a user-installed skill.
@@ -343,6 +349,7 @@ mod tests {
         assert!(!dst.join("paper-writer/obsolete.md").exists(), "stale file must be gone");
         assert_eq!(fs::read_to_string(dst.join("my-skill/SKILL.md")).unwrap(), "user");
         assert!(!dst.join(".commit").exists(), "top-level files are not skills");
+        assert!(!dst.join("placeholder").exists(), "dirs without SKILL.md are not skills");
 
         fs::remove_dir_all(&tmp).unwrap();
     }
