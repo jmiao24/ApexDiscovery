@@ -30,12 +30,30 @@ fn xdg_config_home(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(runtime_root(app)?.join("xdg-config"))
 }
 
-/// The workspace OpenCode (and the notebook kernel) runs in — the agent's and
-/// the user's project files live here. This is user-facing data, so it goes in
-/// the OS documents folder: ~/Documents/OpenScience (no space — the agent runs
-/// shell commands against this path, and unquoted spaces break them). Falls
-/// back to $HOME/Documents.
+/// File recording the user's chosen active workspace folder (absolute path).
+fn active_workspace_file(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(runtime_root(app)?.join("active-workspace.txt"))
+}
+
+/// The active workspace folder OpenCode / the kernel / previews / provenance all
+/// operate in. Defaults to the base folder (`~/Documents/OpenScience`) until the
+/// user opens or creates another one; the choice persists across restarts.
 pub fn workspace_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Ok(f) = active_workspace_file(app) {
+        if let Ok(s) = std::fs::read_to_string(&f) {
+            let dir = PathBuf::from(s.trim());
+            if dir.is_dir() {
+                return Ok(dir);
+            }
+        }
+    }
+    base_workspace_dir(app)
+}
+
+/// The default workspace root: `~/Documents/OpenScience` (no space — the agent
+/// runs shell commands against this path, and unquoted spaces break them). Falls
+/// back to `$HOME/Documents`. New dated folders are created under here.
+pub fn base_workspace_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let docs = match app.path().document_dir() {
         Ok(d) => d,
         Err(_) => {
@@ -277,6 +295,69 @@ pub fn start_runtime(app: AppHandle, state: State<'_, RuntimeState>) -> Result<S
 #[tauri::command]
 pub fn workspace_path(app: AppHandle) -> Result<String, String> {
     Ok(workspace_dir(&app)?.to_string_lossy().to_string())
+}
+
+/// The base folder new dated workspaces are created under (`~/Documents/OpenScience`).
+#[tauri::command]
+pub fn workspace_base(app: AppHandle) -> Result<String, String> {
+    Ok(base_workspace_dir(&app)?.to_string_lossy().to_string())
+}
+
+/// Switch the active workspace folder: create it if needed, persist the choice,
+/// and restart the sidecar so its working directory (which scopes the agent's
+/// sessions and files) becomes the new folder. The kernel / Files / provenance
+/// read the same folder via `workspace_dir`. `path` must be absolute. Scoping is
+/// by the sidecar cwd, not a `?directory=` query — the latter routes turns to a
+/// scope the global event stream never sees.
+#[tauri::command]
+pub fn set_workspace(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+    path: String,
+) -> Result<String, String> {
+    let dir = PathBuf::from(&path);
+    if !dir.is_absolute() {
+        return Err("workspace path must be absolute".into());
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| format!("could not create folder: {e}"))?;
+    let canon = dir.canonicalize().map_err(|e| e.to_string())?;
+    std::fs::write(active_workspace_file(&app)?, canon.to_string_lossy().as_bytes())
+        .map_err(|e| e.to_string())?;
+
+    // Restart the sidecar so its cwd is the new folder (the frontend reconnects).
+    if state.url.lock().unwrap().is_some() {
+        kill_child(&state);
+        let port = { *state.port.lock().unwrap().get_or_insert_with(free_port) };
+        let child = spawn_sidecar(&app, port)?;
+        *state.child.lock().unwrap() = Some(child);
+    }
+    Ok(canon.to_string_lossy().to_string())
+}
+
+/// Create a new dated folder `<base>/<name>` and switch to it. `name` is a
+/// single path segment (the frontend supplies a timestamp); rejects separators.
+#[tauri::command]
+pub fn new_dated_workspace(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+    name: String,
+) -> Result<String, String> {
+    if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains("..") {
+        return Err("invalid folder name".into());
+    }
+    let dir = base_workspace_dir(&app)?.join(&name);
+    set_workspace(app, state, dir.to_string_lossy().to_string())
+}
+
+/// Native "choose a folder" dialog; returns the absolute path, or None on cancel.
+#[tauri::command]
+pub async fn pick_folder(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(picked) = app.dialog().file().blocking_pick_folder() else {
+        return Ok(None);
+    };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    Ok(Some(path.to_string_lossy().to_string()))
 }
 
 /// Kill the bundled OpenCode if running.

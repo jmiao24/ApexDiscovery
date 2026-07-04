@@ -30,6 +30,14 @@ export async function kernelExecute(
   return invoke<ExecResult>("kernel_execute", { code, language });
 }
 
+/** Restart the local kernel(s) — e.g. after switching workspace folder so the
+ *  next run spawns in the new directory. No-op outside the desktop app. */
+export async function kernelReset(): Promise<void> {
+  if (!isTauri) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("kernel_reset", {});
+}
+
 /** Render a kernel result as the text shown under a notebook cell. */
 export function formatExecResult(r: ExecResult): string {
   if (!r.ok && r.error) return r.error.trimEnd();

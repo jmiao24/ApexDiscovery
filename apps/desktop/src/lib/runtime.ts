@@ -17,10 +17,13 @@ import {
   detectTools as probeTools,
   isTauri,
   logDebug,
+  newDatedWorkspace,
+  setWorkspace,
   startRuntime,
   workspacePath,
   type ToolStatus,
 } from "./tauri";
+import { kernelReset } from "./kernel";
 import { deriveArtifact } from "./artifacts";
 import { provenanceInputFromEvent, recordProvenance } from "./provenance";
 import { splitReview } from "./review";
@@ -80,6 +83,10 @@ interface RuntimeState {
   disconnect: () => void;
   refreshSessions: () => Promise<void>;
   startDraft: () => void;
+  /** Active workspace folder (absolute path); null in the browser. */
+  workspace: string | null;
+  /** Switch to an existing folder, or (with `dated`) create a new dated one. */
+  switchWorkspace: (target: { path: string } | { dated: string }) => Promise<void>;
   openSession: (id: string) => Promise<void>;
   sendPrompt: (text: string) => Promise<string | null>;
   deleteSession: (id: string) => Promise<void>;
@@ -112,6 +119,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   questions: [],
   permissions: [],
   activeArtifact: null,
+  workspace: null,
 
   openArtifact: (activeArtifact) => set({ activeArtifact }),
   closeArtifact: () => set({ activeArtifact: null }),
@@ -185,6 +193,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     get().disconnect();
     // Scope skill discovery to the sidecar's workspace (null in browser dev).
     const directory = await workspacePath();
+    set({ workspace: directory });
     const c = new OpenCodeClient({ baseUrl: get().serverUrl, directory: directory ?? undefined });
     client = c;
     c.onStatus((status) => {
@@ -300,8 +309,35 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   // "New" opens a blank draft — no session is created until the first message (#3).
   startDraft: () => set({ currentId: null }),
 
+  switchWorkspace: async (target) => {
+    try {
+      if ("dated" in target) await newDatedWorkspace(target.dated);
+      else await setWorkspace(target.path);
+      // The sidecar restarted into the new folder; reset the local kernel so it
+      // respawns there, then reconnect (retrying while the restarted server comes
+      // up). connect() re-reads the active folder for skill scoping.
+      await kernelReset().catch(() => {});
+      set({ currentId: null, activeArtifact: null });
+      await get().connectRetry();
+      await Promise.all([get().refreshSessions(), get().loadCatalog()]);
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
+
   openSession: async (id) => {
     set({ currentId: id });
+    if (!client) return;
+    // Follow the session into its own workspace folder: switch the sidecar's cwd
+    // to it (restart) and reconnect, so the agent, kernel and Files all operate
+    // where the session's files live. Sessions with no recorded folder, or that
+    // already match the active folder, skip this.
+    const dir = get().sessions.find((s) => s.id === id)?.directory;
+    if (dir && dir !== get().workspace) {
+      await setWorkspace(dir).catch(() => {});
+      await kernelReset().catch(() => {});
+      await get().connectRetry();
+    }
     if (!client) return;
     // Recover any request the agent is blocked on (asked before connect/reload).
     void (async () => {

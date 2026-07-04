@@ -46,6 +46,8 @@ export class OpenCodeClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly authHeader: string | null;
+  /** Workspace folder, for directory-scoped lookups (skills/questions/permissions).
+   *  The agent's own working directory is the sidecar's cwd, set at spawn. */
   private readonly directory: string | null;
   private status: RuntimeStatus = "offline";
   private abort: AbortController | null = null;
@@ -162,7 +164,9 @@ export class OpenCodeClient {
     this.setStatus("offline");
   }
 
-  /** Create a new agent session, returning its id. */
+  /** Create a new agent session, returning its id. Scoping is by the sidecar's
+   *  working directory (set at spawn), not a query param — passing `?directory=`
+   *  here routes the turn to a scope whose events the global stream never sees. */
   async createSession(): Promise<string> {
     const res = await this.fetchImpl(`${this.baseUrl}/session`, {
       method: "POST",
@@ -178,8 +182,18 @@ export class OpenCodeClient {
   async listSessions(): Promise<SessionMeta[]> {
     const res = await this.fetchImpl(`${this.baseUrl}/session`, { headers: this.headers() });
     if (!res.ok) throw new Error(`Failed to list sessions (${res.status})`);
-    const arr = (await res.json()) as Array<{ id: string; title?: string; slug?: string }>;
-    return arr.map((s) => ({ id: s.id, title: s.title ?? "Untitled", slug: s.slug }));
+    const arr = (await res.json()) as Array<{
+      id: string;
+      title?: string;
+      slug?: string;
+      directory?: string;
+    }>;
+    return arr.map((s) => ({
+      id: s.id,
+      title: s.title ?? "Untitled",
+      slug: s.slug,
+      directory: s.directory,
+    }));
   }
 
   /** Delete a session. */

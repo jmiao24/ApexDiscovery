@@ -104,6 +104,8 @@ export interface SessionMeta {
   id: string;
   title: string;
   slug?: string;
+  /** Workspace folder this session operates in (absolute path). */
+  directory?: string;
 }
 
 export interface SkillInfo {

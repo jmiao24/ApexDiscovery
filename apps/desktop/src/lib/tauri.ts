@@ -144,7 +144,7 @@ export async function saveTextFile(filename: string, content: string): Promise<S
   return path ? { kind: "saved", path } : { kind: "canceled" };
 }
 
-/** The sidecar's workspace directory (desktop only; null in browser). */
+/** The active workspace directory (desktop only; null in browser). */
 export async function workspacePath(): Promise<string | null> {
   if (!isTauri) return null;
   try {
@@ -153,6 +153,39 @@ export async function workspacePath(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** The base folder new dated workspaces are created under (desktop only). */
+export async function workspaceBase(): Promise<string | null> {
+  if (!isTauri) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<string>("workspace_base");
+  } catch {
+    return null;
+  }
+}
+
+/** Switch the active workspace folder (creates it if needed, restarts the
+ *  sidecar). Returns the canonical path. Throws in the browser. */
+export async function setWorkspace(path: string): Promise<string> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("set_workspace", { path });
+}
+
+/** Create a new dated folder under the base workspace and switch to it. */
+export async function newDatedWorkspace(name: string): Promise<string> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("new_dated_workspace", { name });
+}
+
+/** Native folder picker; null on cancel or in the browser. */
+export async function pickFolder(): Promise<string | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string | null>("pick_folder");
 }
 
 export interface ToolStatus {
