@@ -25,6 +25,15 @@ describe("foldEvent", () => {
     expect(s.blocks[0]).toMatchObject({ kind: "tool-call", status: "success", title: "search (done)" });
   });
 
+  it("does not render interactive question/permission tools as thread rows", () => {
+    // These are surfaced by InteractionPrompt (answerable), not as blank rows.
+    const s = foldAll([
+      { type: "tool.updated", sessionId: S, callId: "q1", tool: "question", status: "running", title: "" },
+      { type: "tool.updated", sessionId: S, callId: "p1", tool: "permission", status: "running", title: "" },
+    ]);
+    expect(s.blocks).toHaveLength(0);
+  });
+
   it("never blanks a tool row when the completed event reports an empty title", () => {
     // Completed MCP tool parts carry title: "" — the tool name must survive.
     const s = foldAll([

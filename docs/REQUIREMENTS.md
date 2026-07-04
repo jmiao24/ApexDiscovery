@@ -254,8 +254,11 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
   auto-generated review noise outward.
 - **Acceptance.** Open/close/reopen a project reliably; the agent asks for
   approval on destructive/outward-facing actions; reviewer output stays in-app.
-- **Status.** Approval mode + sandbox shipped. Gap: dedicated first-run/file-open
-  reliability pass.
+- **Status.** Approval mode + sandbox shipped; the agent's interactive requests
+  (the `question` pick-an-option tool and permission prompts) now render as an
+  answerable card and reply through OpenCode's directory-scoped question/
+  permission API — previously they hung the session with no way to respond.
+  Gap: dedicated first-run/file-open reliability pass.
 
 ---
 

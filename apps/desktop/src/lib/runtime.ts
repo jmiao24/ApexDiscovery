@@ -5,6 +5,9 @@ import {
   type AgentInfo,
   type HistoryMessage,
   type OpenCodeEvent,
+  type PermissionAskedEvent,
+  type PermissionReply,
+  type QuestionAskedEvent,
   type SessionMeta,
   type SkillInfo,
   type ToolCallStatus,
@@ -58,10 +61,16 @@ interface RuntimeState {
   tools: ToolStatus[];
   hiddenExamples: string[];
   error: string | null;
+  /** Pending interactive requests the agent is blocked on, newest last. */
+  questions: QuestionAskedEvent[];
+  permissions: PermissionAskedEvent[];
   /** Artifact opened in the live inspector pane, if any. */
   activeArtifact: ArtifactBlock | null;
   openArtifact: (a: ArtifactBlock) => void;
   closeArtifact: () => void;
+  answerQuestion: (requestId: string, answers: string[][]) => Promise<void>;
+  rejectQuestion: (requestId: string) => Promise<void>;
+  replyPermission: (requestId: string, reply: PermissionReply) => Promise<void>;
   setServerUrl: (url: string) => void;
   loadCatalog: () => Promise<void>;
   detectTools: () => Promise<void>;
@@ -100,10 +109,43 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   tools: [],
   hiddenExamples: initialHidden(),
   error: null,
+  questions: [],
+  permissions: [],
   activeArtifact: null,
 
   openArtifact: (activeArtifact) => set({ activeArtifact }),
   closeArtifact: () => set({ activeArtifact: null }),
+
+  answerQuestion: async (requestId, answers) => {
+    const q = get().questions.find((x) => x.requestId === requestId);
+    if (!q || !client) return;
+    set((s) => ({ questions: s.questions.filter((x) => x.requestId !== requestId) }));
+    try {
+      await client.answerQuestion(requestId, answers);
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
+  rejectQuestion: async (requestId) => {
+    const q = get().questions.find((x) => x.requestId === requestId);
+    if (!q || !client) return;
+    set((s) => ({ questions: s.questions.filter((x) => x.requestId !== requestId) }));
+    try {
+      await client.rejectQuestion(requestId);
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
+  replyPermission: async (requestId, reply) => {
+    const p = get().permissions.find((x) => x.requestId === requestId);
+    if (!p || !client) return;
+    set((s) => ({ permissions: s.permissions.filter((x) => x.requestId !== requestId) }));
+    try {
+      await client.replyPermission(requestId, reply);
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
 
   setServerUrl: (serverUrl) => {
     if (typeof window !== "undefined") window.localStorage.setItem(URL_KEY, serverUrl);
@@ -154,6 +196,28 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       if (event.type === "error") {
         set({ error: event.message });
         return;
+      }
+      // Interactive requests live outside the thread blocks (transient UI).
+      switch (event.type) {
+        case "question.asked":
+          set((s) => ({
+            questions: [...s.questions.filter((q) => q.requestId !== event.requestId), event],
+          }));
+          return;
+        case "question.resolved":
+          set((s) => ({ questions: s.questions.filter((q) => q.requestId !== event.requestId) }));
+          return;
+        case "permission.asked":
+          set((s) => ({
+            permissions: [
+              ...s.permissions.filter((p) => p.requestId !== event.requestId),
+              event,
+            ],
+          }));
+          return;
+        case "permission.resolved":
+          set((s) => ({ permissions: s.permissions.filter((p) => p.requestId !== event.requestId) }));
+          return;
       }
       const sid = event.sessionId;
       if (!sid) return;
@@ -238,8 +302,23 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
 
   openSession: async (id) => {
     set({ currentId: id });
-    if (get().threads[id]?.loaded) return;
     if (!client) return;
+    // Recover any request the agent is blocked on (asked before connect/reload).
+    void (async () => {
+      try {
+        const [qs, ps] = await Promise.all([
+          client!.listQuestions(id),
+          client!.listPermissions(id),
+        ]);
+        set((s) => ({
+          questions: [...s.questions.filter((q) => q.sessionId !== id), ...qs],
+          permissions: [...s.permissions.filter((p) => p.sessionId !== id), ...ps],
+        }));
+      } catch {
+        /* pending-request recovery is best-effort */
+      }
+    })();
+    if (get().threads[id]?.loaded) return;
     try {
       const messages = await client.getMessages(id);
       set((s) => ({ threads: { ...s.threads, [id]: { ...historyToThread(messages), loaded: true } } }));
@@ -375,6 +454,9 @@ export function foldEvent(state: FoldState, event: OpenCodeEvent): FoldState {
       return { blocks, index };
     }
     case "tool.updated": {
+      // The interactive `question`/`permission` tools render as their own
+      // answerable card (InteractionPrompt), not as a blank thread row.
+      if (/question|permission|^ask$/i.test(event.tool)) return { blocks, index };
       const key = `tool:${event.callId}`;
       // Completed MCP tools report title as "" — fall back to the tool name,
       // never render a blank row.
@@ -440,6 +522,8 @@ export function historyToThread(messages: HistoryMessage[]): FoldState {
           if (review) blocks.push(review);
         }
         else if (p.type === "tool") {
+          // Interactive tools are surfaced by InteractionPrompt, not the thread.
+          if (/question|permission|^ask$/i.test(p.tool ?? "")) continue;
           const status = mapToolStatus(p.state?.status);
           blocks.push({
             kind: "tool-call",

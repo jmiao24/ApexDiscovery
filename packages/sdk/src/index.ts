@@ -22,4 +22,11 @@ export {
   type OAuthAuthorization,
   type McpConfig,
   type McpServer,
+  type QuestionOption,
+  type QuestionItem,
+  type QuestionAskedEvent,
+  type QuestionResolvedEvent,
+  type PermissionAskedEvent,
+  type PermissionResolvedEvent,
+  type PermissionReply,
 } from "./types";

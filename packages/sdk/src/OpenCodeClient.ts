@@ -8,9 +8,12 @@ import type {
   OpenCodeEvent,
   OpenCodePart,
   OpenCodeRawEvent,
+  PermissionReply,
   ProviderAuthMethod,
   ProviderCatalogEntry,
   ProviderInfo,
+  QuestionAskedEvent,
+  PermissionAskedEvent,
   RuntimeStatus,
   SessionMeta,
   SkillInfo,
@@ -394,6 +397,85 @@ export class OpenCodeClient {
     if (!res.ok) throw new Error(`Failed to send prompt (${res.status})`);
   }
 
+  // ---- interactive requests (question / permission) ----
+  // OpenCode exposes these as directory-scoped GLOBAL lists (not session-nested):
+  // GET/POST /question[/…] and /permission[/…], each scoped by ?directory=. The
+  // request id is globally unique; the reply/reject endpoints take it directly.
+
+  /** Append `?directory=<path>` so the server resolves the workspace instance.
+   *  Note: the `workspace` param is a `wrk_` id, NOT a path — omit it (directory
+   *  alone resolves the instance; sending a path as workspace 500s the server). */
+  private dirQuery(): string {
+    return this.directory ? `?directory=${encodeURIComponent(this.directory)}` : "";
+  }
+
+  /** Pending questions in the workspace (recovery on open — an ask can predate connect). */
+  async listQuestions(_sessionId?: string): Promise<QuestionAskedEvent[]> {
+    const res = await this.fetchImpl(`${this.baseUrl}/question${this.dirQuery()}`, {
+      headers: this.headers(),
+    });
+    if (!res.ok) return [];
+    const arr = (await res.json()) as Array<{
+      id: string;
+      sessionID: string;
+      questions?: QuestionAskedEvent["questions"];
+    }>;
+    return arr.map((q) => ({
+      type: "question.asked" as const,
+      sessionId: q.sessionID,
+      requestId: q.id,
+      questions: q.questions ?? [],
+    }));
+  }
+
+  /** Answer a question: one array of selected option labels per question, in order. */
+  async answerQuestion(requestId: string, answers: string[][]): Promise<void> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/question/${encodeURIComponent(requestId)}/reply${this.dirQuery()}`,
+      { method: "POST", headers: this.headers(true), body: JSON.stringify({ answers }) },
+    );
+    if (!res.ok) throw new Error(`Failed to answer the question (${res.status})`);
+  }
+
+  /** Reject/dismiss a question (the agent proceeds without an answer). */
+  async rejectQuestion(requestId: string): Promise<void> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/question/${encodeURIComponent(requestId)}/reject${this.dirQuery()}`,
+      { method: "POST", headers: this.headers(true), body: "{}" },
+    );
+    if (!res.ok) throw new Error(`Failed to reject the question (${res.status})`);
+  }
+
+  /** Pending permission requests in the workspace (recovery on open). */
+  async listPermissions(_sessionId?: string): Promise<PermissionAskedEvent[]> {
+    const res = await this.fetchImpl(`${this.baseUrl}/permission${this.dirQuery()}`, {
+      headers: this.headers(),
+    });
+    if (!res.ok) return [];
+    const arr = (await res.json()) as Array<{
+      id: string;
+      sessionID: string;
+      action?: string;
+      resources?: string[];
+    }>;
+    return arr.map((p) => ({
+      type: "permission.asked" as const,
+      sessionId: p.sessionID,
+      requestId: p.id,
+      action: p.action ?? "action",
+      resources: p.resources ?? [],
+    }));
+  }
+
+  /** Reply to a permission request: allow once, allow always, or reject. */
+  async replyPermission(requestId: string, reply: PermissionReply): Promise<void> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/permission/${encodeURIComponent(requestId)}/reply${this.dirQuery()}`,
+      { method: "POST", headers: this.headers(true), body: JSON.stringify({ reply }) },
+    );
+    if (!res.ok) throw new Error(`Failed to reply to the permission (${res.status})`);
+  }
+
   // ---- internals ----
 
   private async readStream(body: ReadableStream<Uint8Array>): Promise<void> {
@@ -481,6 +563,73 @@ export class OpenCodeClient {
       case "session.idle":
         this.emit({ type: "session.idle", sessionId: String(props.sessionID ?? "") });
         break;
+      // Interactive requests — support V2 (this server) and the bare names.
+      case "question.v2.asked":
+      case "question.asked": {
+        const q = props as {
+          id?: string;
+          sessionID?: string;
+          questions?: Array<{
+            question: string;
+            header: string;
+            options?: Array<{ label: string; description?: string }>;
+            multiple?: boolean;
+            custom?: boolean;
+          }>;
+        };
+        this.emit({
+          type: "question.asked",
+          sessionId: String(q.sessionID ?? ""),
+          requestId: String(q.id ?? ""),
+          questions: (q.questions ?? []).map((it) => ({
+            question: it.question,
+            header: it.header,
+            options: it.options ?? [],
+            multiple: it.multiple,
+            custom: it.custom,
+          })),
+        });
+        break;
+      }
+      case "question.v2.replied":
+      case "question.v2.rejected":
+      case "question.replied":
+      case "question.rejected": {
+        const q = props as { requestID?: string; id?: string; sessionID?: string };
+        this.emit({
+          type: "question.resolved",
+          sessionId: String(q.sessionID ?? ""),
+          requestId: String(q.requestID ?? q.id ?? ""),
+        });
+        break;
+      }
+      case "permission.v2.asked":
+      case "permission.asked": {
+        const p = props as {
+          id?: string;
+          sessionID?: string;
+          action?: string;
+          resources?: string[];
+        };
+        this.emit({
+          type: "permission.asked",
+          sessionId: String(p.sessionID ?? ""),
+          requestId: String(p.id ?? ""),
+          action: String(p.action ?? "action"),
+          resources: p.resources ?? [],
+        });
+        break;
+      }
+      case "permission.v2.replied":
+      case "permission.replied": {
+        const p = props as { requestID?: string; id?: string; sessionID?: string };
+        this.emit({
+          type: "permission.resolved",
+          sessionId: String(p.sessionID ?? ""),
+          requestId: String(p.requestID ?? p.id ?? ""),
+        });
+        break;
+      }
       case "session.error": {
         const err = props.error as
           | { name?: string; message?: string; data?: { message?: string } }

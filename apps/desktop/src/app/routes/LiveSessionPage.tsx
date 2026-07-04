@@ -6,6 +6,7 @@ import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
 import { Composer } from "@/components/thread/Composer";
 import { WorkflowStarters } from "@/components/thread/WorkflowStarters";
+import { InteractionPrompt } from "@/components/thread/InteractionPrompt";
 import { InspectorShell } from "@/components/inspector/InspectorShell";
 import { cn } from "@/lib/cn";
 
@@ -21,6 +22,8 @@ export function LiveSessionPage() {
     currentId,
     threads,
     error,
+    questions,
+    permissions,
     activeArtifact,
     connect,
     openSession,
@@ -28,6 +31,9 @@ export function LiveSessionPage() {
     sendPrompt,
     openArtifact,
     closeArtifact,
+    answerQuestion,
+    rejectQuestion,
+    replyPermission,
   } = useRuntimeStore();
 
   const connected = status === "ready";
@@ -54,6 +60,10 @@ export function LiveSessionPage() {
   const thread = currentId ? threads[currentId] : undefined;
   const title = sessions.find((s) => s.id === currentId)?.title;
   const isEmpty = !thread || thread.blocks.length === 0;
+
+  // The oldest unanswered request for THIS session blocks the run — surface it.
+  const activeQuestion = questions.find((q) => q.sessionId === currentId);
+  const activePermission = permissions.find((p) => p.sessionId === currentId);
 
   // Notebooks the agent touched in THIS session — the conversation ↔ notebook map.
   const sessionNotebooks = (thread?.blocks ?? []).filter(
@@ -136,7 +146,16 @@ export function LiveSessionPage() {
         </div>
 
         <div className="px-8 pb-5 pt-2">
-          <div className="mx-auto max-w-[760px]">
+          <div className="mx-auto max-w-[760px] space-y-3">
+            {(activeQuestion || activePermission) && (
+              <InteractionPrompt
+                question={activeQuestion}
+                permission={activeQuestion ? undefined : activePermission}
+                onAnswer={(id, answers) => void answerQuestion(id, answers)}
+                onReject={(id) => void rejectQuestion(id)}
+                onPermission={(id, reply) => void replyPermission(id, reply)}
+              />
+            )}
             <Composer
               onSend={onSend}
               disabled={!connected}

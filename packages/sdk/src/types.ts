@@ -34,6 +34,51 @@ export interface SessionIdleEvent {
   type: "session.idle";
   sessionId: string;
 }
+
+// ---- Interactive requests (the agent asks; the user must answer) ----
+// OpenCode blocks the run until answered. Two kinds: a `question` (pick from
+// options) and a `permission` (approve a command / file write / etc.).
+
+export interface QuestionOption {
+  label: string;
+  description?: string;
+}
+export interface QuestionItem {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  /** Allow selecting more than one option. */
+  multiple?: boolean;
+  /** Allow a free-text answer in addition to the options. */
+  custom?: boolean;
+}
+export interface QuestionAskedEvent {
+  type: "question.asked";
+  sessionId: string;
+  requestId: string;
+  questions: QuestionItem[];
+}
+/** A question was answered or rejected elsewhere — clear it from the UI. */
+export interface QuestionResolvedEvent {
+  type: "question.resolved";
+  sessionId: string;
+  requestId: string;
+}
+
+export interface PermissionAskedEvent {
+  type: "permission.asked";
+  sessionId: string;
+  requestId: string;
+  /** e.g. "bash", "write", "edit" — what the agent wants to do. */
+  action: string;
+  /** The concrete targets (a command line, file paths). */
+  resources: string[];
+}
+export interface PermissionResolvedEvent {
+  type: "permission.resolved";
+  sessionId: string;
+  requestId: string;
+}
 export interface RuntimeErrorEvent {
   type: "error";
   sessionId?: string;
@@ -44,7 +89,14 @@ export type OpenCodeEvent =
   | TextUpdatedEvent
   | ToolUpdatedEvent
   | SessionIdleEvent
-  | RuntimeErrorEvent;
+  | RuntimeErrorEvent
+  | QuestionAskedEvent
+  | QuestionResolvedEvent
+  | PermissionAskedEvent
+  | PermissionResolvedEvent;
+
+/** Approve a permission once, always (persist a rule), or reject it. */
+export type PermissionReply = "once" | "always" | "reject";
 
 // ---- REST shapes the app consumes ----
 
