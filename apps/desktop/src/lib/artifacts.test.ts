@@ -125,10 +125,11 @@ describe("previewKind", () => {
   });
 
   it("renders chemical structure files as molecules", () => {
-    expect(previewKind("mol")).toBe("molecule");
-    expect(previewKind("sdf")).toBe("molecule");
-    expect(previewKind("smi")).toBe("molecule");
-    expect(previewKind("smiles")).toBe("molecule");
+    for (const ext of [
+      "mol", "mol2", "sdf", "smi", "smiles", "cif", "mcif", "mmcif", "pdb", "pqr", "xyz", "cube",
+    ]) {
+      expect(previewKind(ext)).toBe("molecule");
+    }
   });
 });
 

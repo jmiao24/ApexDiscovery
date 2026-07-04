@@ -34,8 +34,16 @@ pub fn mime_for(ext: &str) -> (&'static str, bool) {
         "js" | "ts" | "sh" | "toml" | "log" => ("text/plain", true),
         "py" => ("text/x-python", true),
         "r" => ("text/x-r", true),
+        // Molecular structure formats — all plain text, rendered in 3D by the
+        // molecule viewer (3Dmol.js) which needs the raw utf8, not base64.
         "mol" | "sdf" => ("chemical/x-mdl-molfile", true),
+        "mol2" => ("chemical/x-mol2", true),
         "smi" | "smiles" => ("chemical/x-daylight-smiles", true),
+        "cif" | "mcif" | "mmcif" => ("chemical/x-cif", true),
+        "pdb" => ("chemical/x-pdb", true),
+        "pqr" => ("chemical/x-pqr", true),
+        "xyz" => ("chemical/x-xyz", true),
+        "cube" => ("chemical/x-cube", true),
         "txt" => ("text/plain", true),
         "docx" => ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", false),
         "xlsx" => ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", false),
@@ -375,8 +383,10 @@ mod tests {
 
     #[test]
     fn molecule_files_are_text() {
-        // The molecule viewer needs utf8, not base64 (MoleculeView parses the source).
-        for ext in ["mol", "sdf", "smi", "smiles"] {
+        // The 3D molecule viewer needs utf8, not base64 (3Dmol parses the source).
+        for ext in [
+            "mol", "mol2", "sdf", "smi", "smiles", "cif", "mcif", "mmcif", "pdb", "pqr", "xyz", "cube",
+        ] {
             assert!(mime_for(ext).1, "{ext} must be a text type");
         }
     }

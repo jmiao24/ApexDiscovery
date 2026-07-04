@@ -1,31 +1,62 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MoleculeView } from "./MoleculeView";
 
-// Uses the real openchemlib (pure JS, runs in jsdom) — a genuine render check.
+// 3Dmol needs WebGL, which jsdom lacks — mock it and assert the wiring
+// (model handed over with the right format, styles applied on toggle).
+const viewer = {
+  setBackgroundColor: vi.fn(),
+  addModel: vi.fn(),
+  setStyle: vi.fn(),
+  zoomTo: vi.fn(),
+  zoom: vi.fn(),
+  rotate: vi.fn(),
+  render: vi.fn(),
+  resize: vi.fn(),
+  clear: vi.fn(),
+  selectedAtoms: vi.fn(() => [{}, {}, {}]),
+};
+const createViewer = vi.fn(() => viewer);
+vi.mock("3dmol", () => ({ createViewer: () => createViewer() }));
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
 describe("MoleculeView", () => {
-  it("renders a SMILES structure to an inline SVG with a caption", async () => {
-    const { container } = render(<MoleculeView filename="mols.smi" text="CCO ethanol" />);
-    // Wait for the caption (the spinner is also an <svg>, so query the figure).
-    expect(await screen.findByText("ethanol")).toBeInTheDocument();
-    expect(container.querySelector("figure svg")).toBeInTheDocument();
+  it("hands a PDB's raw text to 3Dmol as a pdb model and reports atom count", async () => {
+    render(<MoleculeView filename="1abc.pdb" text={"ATOM  1  C   LIG\nATOM  2  O   LIG"} />);
+    await waitFor(() => expect(viewer.addModel).toHaveBeenCalled());
+    expect(viewer.addModel).toHaveBeenCalledWith(expect.stringContaining("ATOM"), "pdb");
+    expect(await screen.findByText("3 atoms")).toBeInTheDocument();
+    expect(screen.getByText("PDB")).toBeInTheDocument();
   });
 
-  it("renders every record of an SDF as a gallery", async () => {
-    const OCL = await import("openchemlib");
-    // Build two real molfiles and join them into an SDF.
-    const a = OCL.Molecule.fromSmiles("CCO").toMolfile();
-    const b = OCL.Molecule.fromSmiles("c1ccccc1").toMolfile();
-    const sdf = `ethanol\n${a.split("\n").slice(1).join("\n")}\n$$$$\nbenzene\n${b.split("\n").slice(1).join("\n")}\n$$$$\n`;
-
-    const { container } = render(<MoleculeView filename="lib.sdf" text={sdf} />);
-    await waitFor(() => expect(container.querySelectorAll("svg").length).toBe(2));
-    expect(screen.getByText("ethanol")).toBeInTheDocument();
-    expect(screen.getByText("benzene")).toBeInTheDocument();
+  it("converts a SMILES file to a coordinate-bearing model before rendering", async () => {
+    render(<MoleculeView filename="mols.smi" text="CCO ethanol" />);
+    await waitFor(() => expect(viewer.addModel).toHaveBeenCalled());
+    const [model, format] = viewer.addModel.mock.calls[0];
+    expect(format).toBe("sdf");
+    // openchemlib laid out real coordinates (not the raw SMILES string).
+    expect(model).not.toContain("CCO ethanol");
+    expect(model).toMatch(/-?\d+\.\d{3,}/);
   });
 
-  it("explains an empty file instead of rendering nothing", async () => {
-    render(<MoleculeView filename="empty.smi" text={"   \n\n"} />);
+  it("re-applies the style when the user switches render mode", async () => {
+    render(<MoleculeView filename="ligand.mol" text="mol" />);
+    await waitFor(() => expect(viewer.setStyle).toHaveBeenCalled());
+    viewer.setStyle.mockClear();
+
+    await userEvent.click(screen.getByRole("button", { name: "Sphere" }));
+    await waitFor(() =>
+      expect(viewer.setStyle).toHaveBeenCalledWith({}, expect.objectContaining({ sphere: expect.anything() })),
+    );
+  });
+
+  it("explains a SMILES file with no parseable structures", async () => {
+    render(<MoleculeView filename="empty.smi" text={"   \n# comment\n"} />);
     expect(await screen.findByText(/No chemical structures found/)).toBeInTheDocument();
+    expect(viewer.addModel).not.toHaveBeenCalled();
   });
 });

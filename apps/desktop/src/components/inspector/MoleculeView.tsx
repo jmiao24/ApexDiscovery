@@ -1,98 +1,237 @@
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
-import { MAX_MOLECULES, parseMoleculeFile, type MolEntry } from "@/lib/molecule";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { GLViewer } from "3dmol";
+import { Atom, RotateCcw } from "lucide-react";
+import {
+  defaultStyleMode,
+  isSmilesFile,
+  looksLikeMacromolecule,
+  moleculeFormatFor,
+  smilesToMolblock,
+  type MoleculeStyleMode,
+} from "@/lib/molecule";
+import { cn } from "@/lib/cn";
 
-interface Rendered {
-  name: string;
-  svg: string | null; // null = this entry could not be parsed
-}
+const STYLE_OPTIONS: Array<{ value: MoleculeStyleMode; label: string }> = [
+  { value: "stick", label: "Stick" },
+  { value: "sphere", label: "Sphere" },
+  { value: "cartoon", label: "Cartoon" },
+];
 
 /**
- * Native 2D structure renderer (P1-3) for chemical files (.mol / .sdf / .smi).
- * openchemlib depicts each structure as an SVG entirely locally — no service,
- * no WebGL. Structures render on a white card (chemistry convention) so they
- * read the same in light and dark themes. SDF libraries render as a gallery.
+ * Interactive 3D structure viewer (P1-3) for chemical files
+ * (cif/pdb/mol/mol2/sdf/xyz/pqr/cube and SMILES). 3Dmol.js renders a rotatable,
+ * zoomable model entirely locally via WebGL — no service. SMILES has no
+ * coordinates, so it is converted to a molblock first. The scene sits on a
+ * white stage (chemistry convention), consistent in light and dark themes.
  */
 export function MoleculeView({ filename, text }: { filename: string; text: string }) {
-  const [molecules, setMolecules] = useState<Rendered[] | null>(null);
-  const [truncated, setTruncated] = useState(0);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const viewerRef = useRef<GLViewer | null>(null);
+  const dragRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
+
+  const format = useMemo(() => moleculeFormatFor(filename), [filename]);
+  const isMacromolecule = useMemo(() => looksLikeMacromolecule(text), [text]);
+
+  const [styleMode, setStyleMode] = useState<MoleculeStyleMode>(() =>
+    defaultStyleMode(filename, text),
+  );
+  const [isDragging, setIsDragging] = useState(false);
+  const [rendering, setRendering] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [atomCount, setAtomCount] = useState<number | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    setMolecules(null);
-    setError(null);
-    (async () => {
-      try {
-        const { entries, truncated } = parseMoleculeFile(filename, text);
-        if (entries.length === 0) {
-          if (!cancelled) setError("No chemical structures found in this file.");
-          return;
-        }
-        // Lazy-load the renderer so it stays out of the main bundle.
-        const OCL = await import("openchemlib");
-        const rendered = entries.map((e) => renderOne(OCL, e));
-        if (!cancelled) {
-          setMolecules(rendered);
-          setTruncated(truncated);
-        }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    setStyleMode(defaultStyleMode(filename, text));
   }, [filename, text]);
 
-  if (error) return <div className="p-4 text-sm text-muted">{error}</div>;
-  if (molecules === null) {
-    return (
-      <div className="flex items-center gap-2 p-4 text-sm text-muted">
-        <Loader2 size={15} className="animate-spin" /> Rendering structure…
-      </div>
-    );
-  }
+  const resetView = useCallback(() => {
+    const v = viewerRef.current;
+    if (!v) return;
+    v.zoomTo();
+    v.render();
+  }, []);
 
-  const single = molecules.length === 1;
+  // Build (or rebuild) the scene whenever the file or style changes.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !format) return;
+
+    let cancelled = false;
+    setRendering(true);
+    setError(null);
+    setAtomCount(null);
+    container.replaceChildren();
+
+    (async () => {
+      try {
+        // SMILES carries no coordinates — lay it out into a molblock first.
+        const model = isSmilesFile(filename) ? await smilesToMolblock(text) : text;
+        if (cancelled) return;
+        if (!model) {
+          setError("No chemical structures found in this file.");
+          return;
+        }
+
+        const $3Dmol = await import("3dmol");
+        if (cancelled || !containerRef.current) return;
+
+        const viewer = $3Dmol.createViewer(containerRef.current, { backgroundColor: "white" });
+        viewerRef.current = viewer;
+        viewer.setBackgroundColor(0xffffff, 0); // transparent → our white stage shows
+        viewer.addModel(model, format);
+        applyStyle(viewer, styleMode, isMacromolecule);
+        viewer.zoomTo();
+        viewer.render();
+        setAtomCount(viewer.selectedAtoms({}).length);
+        requestAnimationFrame(() => {
+          if (!cancelled) {
+            viewer.resize();
+            viewer.render();
+          }
+        });
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setRendering(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      dragRef.current = null;
+      viewerRef.current?.clear();
+      viewerRef.current = null;
+      container.replaceChildren();
+    };
+  }, [filename, text, format, styleMode, isMacromolecule]);
+
+  // Keep the scene sized to its container.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const v = viewerRef.current;
+      if (!v) return;
+      v.resize();
+      v.render();
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.target instanceof Element && e.target.closest('[data-molecule-controls="true"]')) return;
+    if (e.button !== 0 || !viewerRef.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY };
+    setIsDragging(true);
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    const v = viewerRef.current;
+    if (!drag || !v || drag.pointerId !== e.pointerId) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    dragRef.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY };
+    if (Math.abs(dx) > 0.1) v.rotate(dx * 0.45, "y");
+    if (Math.abs(dy) > 0.1) v.rotate(dy * 0.45, "x");
+    v.render();
+  }, []);
+
+  const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId !== e.pointerId) return;
+    dragRef.current = null;
+    setIsDragging(false);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  }, []);
+
+  const onWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const v = viewerRef.current;
+    if (!v) return;
+    v.zoom(e.deltaY > 0 ? 0.9 : 1.1);
+    v.render();
+  }, []);
+
+  if (!format) return <div className="p-4 text-sm text-muted">Not a chemical structure file.</div>;
+
   return (
-    <div className="p-4">
-      <div className={single ? "" : "grid grid-cols-2 gap-3 sm:grid-cols-3"}>
-        {molecules.map((m, i) => (
-          <figure
-            key={i}
-            className="overflow-hidden rounded-card border border-border bg-white shadow-card"
-          >
-            <div
-              className={single ? "flex justify-center p-4" : "flex justify-center p-2"}
-              // openchemlib returns a self-contained SVG string; render it inline.
-              dangerouslySetInnerHTML={{
-                __html: m.svg ?? '<div style="color:#888;font:12px sans-serif;padding:1rem">could not render</div>',
-              }}
-            />
-            <figcaption className="truncate border-t border-border/60 bg-surface px-2 py-1 text-center text-xs text-muted">
-              {m.name}
-            </figcaption>
-          </figure>
-        ))}
+    <div
+      className={cn(
+        "relative h-full min-h-[420px] w-full touch-none select-none overflow-hidden bg-white",
+        isDragging ? "cursor-grabbing" : "cursor-grab",
+      )}
+      data-molecule-viewer="true"
+      onPointerDownCapture={onPointerDown}
+      onPointerMoveCapture={onPointerMove}
+      onPointerUpCapture={endDrag}
+      onPointerCancelCapture={endDrag}
+      onWheel={onWheel}
+    >
+      <div ref={containerRef} className="absolute inset-0" aria-label={`${filename} 3D molecule viewer`} />
+
+      <div
+        className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border/70 bg-surface/90 p-1 shadow-card backdrop-blur"
+        data-molecule-controls="true"
+      >
+        <div className="flex items-center gap-1 px-1.5 text-xs font-medium text-muted">
+          <Atom size={13} /> 3D
+        </div>
+        <div className="flex rounded bg-surface-2 p-0.5">
+          {STYLE_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => setStyleMode(o.value)}
+              className={cn(
+                "rounded px-2 py-1 text-xs font-medium transition-colors",
+                styleMode === o.value ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text",
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={resetView}
+          aria-label="Reset view"
+          title="Reset view"
+          className="flex h-7 w-7 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
+        >
+          <RotateCcw size={13} />
+        </button>
       </div>
-      {truncated > 0 && (
-        <p className="mt-3 text-center text-xs text-muted">
-          Showing the first {MAX_MOLECULES} of {MAX_MOLECULES + truncated} structures.
-        </p>
+
+      <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border/70 bg-surface/90 px-3 py-1.5 text-xs text-muted shadow-card backdrop-blur">
+        <span className="font-medium text-text">{format.toUpperCase()}</span>
+        {atomCount !== null && <span className="ml-2">{atomCount} atoms</span>}
+      </div>
+
+      {(rendering || error) && (
+        <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border/70 bg-surface/95 px-3 py-1.5 text-xs text-muted shadow-card backdrop-blur">
+          {rendering ? "Rendering structure…" : error}
+        </div>
       )}
     </div>
   );
 }
 
-/** Depict one entry as an SVG, or null if openchemlib rejects its source. */
-function renderOne(OCL: typeof import("openchemlib"), e: MolEntry): Rendered {
-  try {
-    const mol =
-      e.format === "smiles" ? OCL.Molecule.fromSmiles(e.source) : OCL.Molecule.fromMolfile(e.source);
-    if (mol.getAllAtoms() === 0) return { name: e.name, svg: null };
-    return { name: e.name, svg: mol.toSVG(360, 260, undefined, { autoCrop: true, suppressChiralText: true }) };
-  } catch {
-    return { name: e.name, svg: null };
+/** Apply a render style, mirroring 3Dmol's Jmol color scheme conventions. */
+function applyStyle(viewer: GLViewer, mode: MoleculeStyleMode, isMacromolecule: boolean) {
+  if (mode === "sphere") {
+    viewer.setStyle({}, { sphere: { colorscheme: "Jmol", scale: 0.36 } });
+    return;
   }
+  if (mode === "cartoon") {
+    if (isMacromolecule) {
+      viewer.setStyle({}, { cartoon: { color: "spectrum" } });
+      // Ligands/hetero atoms have no secondary structure — show them as sticks.
+      viewer.setStyle({ hetflag: true }, { stick: { colorscheme: "Jmol", radius: 0.12 } });
+    } else {
+      viewer.setStyle({}, { cartoon: { color: "spectrum" }, stick: { colorscheme: "Jmol", radius: 0.12 } });
+    }
+    return;
+  }
+  viewer.setStyle({}, { stick: { colorscheme: "Jmol", radius: 0.18 }, sphere: { colorscheme: "Jmol", scale: 0.26 } });
 }

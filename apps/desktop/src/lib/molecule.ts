@@ -1,71 +1,92 @@
-// Parse chemical structure files into individual molecule entries (P1-3).
-// Pure and library-free so it can be unit-tested without loading the renderer;
-// the actual 2D depiction (openchemlib → SVG) happens in MoleculeView.
+// Chemical-structure helpers (P1-3). Pure and WebGL-free so they unit-test in
+// jsdom; the interactive 3D depiction happens in MoleculeView via 3Dmol.js.
 
-export type MolFormat = "molfile" | "smiles";
+/** 3Dmol.js render styles the viewer exposes. */
+export type MoleculeStyleMode = "stick" | "sphere" | "cartoon";
 
-export interface MolEntry {
-  /** Display name, from the file when present, else a positional fallback. */
-  name: string;
-  /** The molfile text or SMILES string to hand the renderer. */
-  source: string;
-  format: MolFormat;
+/** File extension → the format string 3Dmol.js expects in `addModel`. */
+const MOLECULE_FORMATS: Record<string, string> = {
+  cif: "cif",
+  cube: "cube",
+  mcif: "cif",
+  mmcif: "cif",
+  mol: "sdf",
+  mol2: "mol2",
+  pdb: "pdb",
+  pqr: "pqr",
+  sdf: "sdf",
+  xyz: "xyz",
+  // SMILES has no coordinates; it is converted to a molblock first (see
+  // smilesToMolblock) and then handed to 3Dmol as an "sdf" model.
+  smi: "sdf",
+  smiles: "sdf",
+};
+
+/** Extensions with no 3D coordinates — a molblock must be generated first. */
+const SMILES_EXTS = new Set(["smi", "smiles"]);
+
+function extOf(filename: string): string {
+  const dot = filename.lastIndexOf(".");
+  return dot >= 0 ? filename.slice(dot + 1).toLowerCase() : "";
 }
 
-/** Render at most this many structures from one file (SDF libraries can be huge). */
-export const MAX_MOLECULES = 24;
+/** The 3Dmol format for a file, or null when it is not a molecule file. */
+export function moleculeFormatFor(filename: string): string | null {
+  return MOLECULE_FORMATS[extOf(filename)] ?? null;
+}
+
+export function isSmilesFile(filename: string): boolean {
+  return SMILES_EXTS.has(extOf(filename));
+}
 
 /**
- * Split a chemical file into molecule entries by extension:
- * - `.mol` — one MDL molfile.
- * - `.sdf` — records separated by `$$$$`; each record is a molfile whose first
- *   line is its title.
- * - `.smi` / `.smiles` — one molecule per line: `<SMILES> [name]`.
- * Returns `{ entries, truncated }`; `truncated` is how many were dropped past
- * the cap, so the UI can say so instead of silently hiding them.
+ * Heuristic: does this look like a macromolecule (protein / large complex)
+ * rather than a small molecule? Secondary-structure records or many atoms /
+ * alpha carbons imply a cartoon depiction reads better than sticks.
  */
-export function parseMoleculeFile(
-  filename: string,
-  text: string,
-): { entries: MolEntry[]; truncated: number } {
-  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
-  const all = ext === "smi" || ext === "smiles" ? parseSmiles(text) : parseMolfiles(ext, text);
-  const entries = all.slice(0, MAX_MOLECULES);
-  return { entries, truncated: Math.max(0, all.length - entries.length) };
+export function looksLikeMacromolecule(content: string): boolean {
+  if (/^(HELIX|SHEET)\s/m.test(content)) return true;
+  const atoms = content.match(/^ATOM\s+/gm)?.length ?? 0;
+  const alphaCarbons = content.match(/^ATOM\s+\d+\s+CA\s+/gm)?.length ?? 0;
+  return atoms > 120 || alphaCarbons > 20;
 }
 
-function parseSmiles(text: string): MolEntry[] {
-  const out: MolEntry[] = [];
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const [smiles, ...rest] = trimmed.split(/\s+/);
-    out.push({
-      name: rest.join(" ") || `Structure ${out.length + 1}`,
-      source: smiles,
-      format: "smiles",
-    });
-  }
-  return out;
+/** The style to open a file with: cartoon for macromolecules, else sticks. */
+export function defaultStyleMode(filename: string, content: string): MoleculeStyleMode {
+  const macromoleculeExt = ["cif", "mcif", "mmcif", "pdb", "pqr"].includes(extOf(filename));
+  return macromoleculeExt && looksLikeMacromolecule(content) ? "cartoon" : "stick";
 }
 
-function parseMolfiles(ext: string, text: string): MolEntry[] {
-  if (ext === "sdf") {
-    // Records end with a `$$$$` delimiter line (consumed with its newline so
-    // no record starts with a stray line break); drop the trailing empty
-    // record. Records must NOT be trimmed at the front — that would eat a
-    // BLANK title line and shift the fixed-position molfile header.
-    const records = text
-      .split(/^\$\$\$\$[ \t]*(?:\r?\n|$)/m)
-      .map((r) => r.trimEnd())
-      .filter((r) => r.trim() !== "");
-    return records.map((rec, i) => ({
-      name: rec.split(/\r?\n/)[0]?.trim() || `Structure ${i + 1}`,
-      source: rec,
-      format: "molfile",
-    }));
+/**
+ * Convert a `.smi` / `.smiles` file (one `<SMILES> [name]` per line, `#`
+ * comments skipped) into a single SDF string with 2D coordinates, so the same
+ * 3D viewer can render it. Returns null if no line parses. openchemlib is
+ * loaded lazily to keep it out of the main bundle.
+ */
+export async function smilesToMolblock(text: string): Promise<string | null> {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
+  if (lines.length === 0) return null;
+
+  const OCL = await import("openchemlib");
+  const records: string[] = [];
+  for (const line of lines) {
+    const [smiles, ...rest] = line.split(/\s+/);
+    try {
+      const mol = OCL.Molecule.fromSmiles(smiles);
+      if (mol.getAllAtoms() === 0) continue;
+      mol.inventCoordinates(); // ensure a laid-out 2D depiction
+      const name = rest.join(" ") || `Structure ${records.length + 1}`;
+      // A molfile's first line is its title; the rest is the connection table.
+      const molfile = mol.toMolfile().split(/\r?\n/);
+      molfile[0] = name;
+      records.push(molfile.join("\n"));
+    } catch {
+      // Skip an unparseable SMILES line rather than failing the whole file.
+    }
   }
-  // A single .mol file; its first line is the title (often blank).
-  const name = text.split(/\r?\n/)[0]?.trim();
-  return [{ name: name || "Structure", source: text, format: "molfile" }];
+  if (records.length === 0) return null;
+  return `${records.join("\n$$$$\n")}\n$$$$\n`;
 }

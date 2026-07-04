@@ -42,7 +42,7 @@ const REF_EXTS = [
   "pdf", "html", "htm", "svg", "png", "jpg", "jpeg", "gif", "webp",
   "csv", "tsv", "md", "tex", "json", "py", "ipynb", "r",
   "docx", "xlsx", "pptx",
-  "mol", "sdf", "smi", "smiles",
+  "mol", "mol2", "sdf", "smi", "smiles", "cif", "mcif", "mmcif", "pdb", "pqr", "xyz", "cube",
 ];
 const REF_RE = new RegExp(`[\\w./-]+\\.(?:${REF_EXTS.join("|")})\\b`, "gi");
 
@@ -109,7 +109,8 @@ export function previewKind(ext: string): PreviewKind {
   if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(e)) return "image";
   if (e === "csv" || e === "tsv") return "table";
   if (e === "docx" || e === "xlsx" || e === "pptx") return e;
-  if (["mol", "sdf", "smi", "smiles"].includes(e)) return "molecule";
+  if (["mol", "mol2", "sdf", "smi", "smiles", "cif", "mcif", "mmcif", "pdb", "pqr", "xyz", "cube"].includes(e))
+    return "molecule";
   return "text";
 }
 

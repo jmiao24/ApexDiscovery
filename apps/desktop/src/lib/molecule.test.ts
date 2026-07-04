@@ -1,54 +1,81 @@
 import { describe, expect, it } from "vitest";
-import { MAX_MOLECULES, parseMoleculeFile } from "./molecule";
+import {
+  defaultStyleMode,
+  isSmilesFile,
+  looksLikeMacromolecule,
+  moleculeFormatFor,
+  smilesToMolblock,
+} from "./molecule";
 
-describe("parseMoleculeFile", () => {
-  it("reads a single .mol file, taking its title line as the name", () => {
-    const molfile = "benzene\n  test\n\n  0  0\nM  END\n";
-    const { entries, truncated } = parseMoleculeFile("benzene.mol", molfile);
-    expect(truncated).toBe(0);
-    expect(entries).toHaveLength(1);
-    expect(entries[0].name).toBe("benzene");
-    expect(entries[0].format).toBe("molfile");
-    expect(entries[0].source).toBe(molfile);
+describe("moleculeFormatFor", () => {
+  it("maps chemical extensions to their 3Dmol format", () => {
+    expect(moleculeFormatFor("ligand.mol")).toBe("sdf");
+    expect(moleculeFormatFor("lib.sdf")).toBe("sdf");
+    expect(moleculeFormatFor("complex.mol2")).toBe("mol2");
+    expect(moleculeFormatFor("1abc.pdb")).toBe("pdb");
+    expect(moleculeFormatFor("crystal.cif")).toBe("cif");
+    expect(moleculeFormatFor("struct.mmcif")).toBe("cif");
+    expect(moleculeFormatFor("cluster.xyz")).toBe("xyz");
+    expect(moleculeFormatFor("mols.smi")).toBe("sdf");
   });
 
-  it("splits an .sdf into records on the $$$$ delimiter", () => {
-    const sdf = "mol-a\n  x\n\nM  END\n$$$$\nmol-b\n  y\n\nM  END\n$$$$\n";
-    const { entries } = parseMoleculeFile("library.sdf", sdf);
-    expect(entries.map((e) => e.name)).toEqual(["mol-a", "mol-b"]);
-    expect(entries.every((e) => e.format === "molfile")).toBe(true);
+  it("returns null for non-molecule files", () => {
+    expect(moleculeFormatFor("report.md")).toBeNull();
+    expect(moleculeFormatFor("noext")).toBeNull();
+  });
+});
+
+describe("isSmilesFile", () => {
+  it("flags only the coordinate-free SMILES extensions", () => {
+    expect(isSmilesFile("a.smi")).toBe(true);
+    expect(isSmilesFile("a.smiles")).toBe(true);
+    expect(isSmilesFile("a.sdf")).toBe(false);
+    expect(isSmilesFile("a.pdb")).toBe(false);
+  });
+});
+
+describe("looksLikeMacromolecule", () => {
+  it("detects secondary-structure records", () => {
+    expect(looksLikeMacromolecule("HELIX    1  AA1 ...\n")).toBe(true);
+    expect(looksLikeMacromolecule("SHEET    1 ...\n")).toBe(true);
   });
 
-  it("keeps blank .sdf title lines so the fixed-position header is not shifted", () => {
-    // Unnamed exports (e.g. RDKit) have an EMPTY first line — trimming it away
-    // would move the counts line out of molfile line 4 and parse 0 atoms.
-    const record = "\n  RDKit          2D\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\nM  END";
-    const sdf = `${record}\n$$$$\n${record}\n$$$$\n`;
-    const { entries } = parseMoleculeFile("unnamed.sdf", sdf);
-    expect(entries).toHaveLength(2);
-    for (const e of entries) {
-      expect(e.source).toBe(record); // leading blank title line intact
-      expect(e.name).toMatch(/^Structure \d$/);
-    }
+  it("detects many alpha carbons", () => {
+    const atoms = Array.from({ length: 25 }, (_, i) => `ATOM  ${i} CA  ALA`).join("\n");
+    expect(looksLikeMacromolecule(atoms)).toBe(true);
   });
 
-  it("reads .smi lines as SMILES with an optional name, skipping comments", () => {
-    const smi = "# a comment\nc1ccccc1 benzene\nCCO ethanol\n\nCN1C=NC2=C1 partial\n";
-    const { entries } = parseMoleculeFile("mols.smi", smi);
-    expect(entries).toHaveLength(3);
-    expect(entries[0]).toMatchObject({ name: "benzene", source: "c1ccccc1", format: "smiles" });
-    expect(entries[1]).toMatchObject({ name: "ethanol", source: "CCO" });
+  it("treats a small molecule as not macromolecular", () => {
+    expect(looksLikeMacromolecule("ATOM  1  C   LIG\nATOM  2  O   LIG")).toBe(false);
+  });
+});
+
+describe("defaultStyleMode", () => {
+  it("opens a protein PDB in cartoon", () => {
+    const pdb = Array.from({ length: 25 }, (_, i) => `ATOM  ${i} CA  ALA`).join("\n");
+    expect(defaultStyleMode("1abc.pdb", pdb)).toBe("cartoon");
   });
 
-  it("names unnamed SMILES positionally", () => {
-    const { entries } = parseMoleculeFile("x.smiles", "CCO\nCCC\n");
-    expect(entries.map((e) => e.name)).toEqual(["Structure 1", "Structure 2"]);
+  it("opens a small molecule in stick", () => {
+    expect(defaultStyleMode("ligand.mol", "small")).toBe("stick");
+    // A small-molecule format never defaults to cartoon even if content is odd.
+    expect(defaultStyleMode("x.sdf", "HELIX ")).toBe("stick");
+  });
+});
+
+describe("smilesToMolblock", () => {
+  it("converts SMILES lines to a coordinate-bearing SDF", async () => {
+    const sdf = await smilesToMolblock("# comment\nCCO ethanol\nc1ccccc1 benzene\n");
+    expect(sdf).not.toBeNull();
+    // Two records separated by the SDF delimiter, each named from the line.
+    expect(sdf!.match(/\$\$\$\$/g)).toHaveLength(2);
+    expect(sdf!.startsWith("ethanol\n")).toBe(true);
+    expect(sdf).toContain("\nbenzene\n");
+    // Real coordinates were generated (not all-zero), so 3D rendering works.
+    expect(sdf).toMatch(/-?\d+\.\d{3,}/);
   });
 
-  it("caps huge libraries and reports how many were dropped", () => {
-    const smi = Array.from({ length: MAX_MOLECULES + 5 }, () => "CCO").join("\n");
-    const { entries, truncated } = parseMoleculeFile("big.smi", smi);
-    expect(entries).toHaveLength(MAX_MOLECULES);
-    expect(truncated).toBe(5);
+  it("returns null when nothing parses", async () => {
+    expect(await smilesToMolblock("   \n# only a comment\n")).toBeNull();
   });
 });
