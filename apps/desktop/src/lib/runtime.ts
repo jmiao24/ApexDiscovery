@@ -430,6 +430,18 @@ export interface FoldState {
 }
 
 /** Pure reducer: fold one normalized OpenCode event into a thread's blocks. */
+/**
+ * Tidy a tool-call title for the conversation: show workspace files by their
+ * relative path (`demo/analyze.py`), not the full `/Users/.../OpenScience/...`
+ * absolute path, so the thread reads like a researcher's log, not a shell trace.
+ * The workspace path never contains spaces (by design), so a space-free run
+ * ending in `OpenScience/` matches it whether or not it has a leading slash
+ * (OpenCode's write-tool titles drop it).
+ */
+export function tidyToolTitle(title: string): string {
+  return title.replace(/[^\s]*OpenScience\//g, "").trim() || title;
+}
+
 export function foldEvent(state: FoldState, event: OpenCodeEvent): FoldState {
   const blocks = [...state.blocks];
   const index = { ...state.index };
@@ -462,7 +474,7 @@ export function foldEvent(state: FoldState, event: OpenCodeEvent): FoldState {
       // never render a blank row.
       const block: ThreadBlock = {
         kind: "tool-call",
-        title: event.title?.trim() || event.tool || "tool",
+        title: tidyToolTitle(event.title?.trim() || event.tool || "tool"),
         status: event.status,
       };
       if (key in index) blocks[index[key]] = block;
@@ -527,7 +539,7 @@ export function historyToThread(messages: HistoryMessage[]): FoldState {
           const status = mapToolStatus(p.state?.status);
           blocks.push({
             kind: "tool-call",
-            title: p.state?.title?.trim() || p.tool || "tool",
+            title: tidyToolTitle(p.state?.title?.trim() || p.tool || "tool"),
             status,
           });
           const artifact = deriveArtifact({

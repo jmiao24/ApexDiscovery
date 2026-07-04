@@ -1,10 +1,27 @@
 import { describe, expect, it } from "vitest";
 import type { OpenCodeEvent, HistoryMessage } from "@ai4s/sdk";
-import { foldEvent, historyToThread, type FoldState } from "./runtime";
+import { foldEvent, historyToThread, tidyToolTitle, type FoldState } from "./runtime";
 
 const empty: FoldState = { blocks: [], index: {} };
 const S = "ses_1";
 const foldAll = (events: OpenCodeEvent[]): FoldState => events.reduce(foldEvent, empty);
+
+describe("tidyToolTitle", () => {
+  it("shows workspace files by their relative path", () => {
+    expect(tidyToolTitle("/Users/asq/Documents/OpenScience/demo/analyze.py")).toBe("demo/analyze.py");
+    expect(tidyToolTitle("mkdir -p /Users/asq/Documents/OpenScience/demo_analysis")).toBe(
+      "mkdir -p demo_analysis",
+    );
+    // OpenCode's write-tool titles drop the leading slash — must still relativize.
+    expect(tidyToolTitle("Users/asq/Documents/OpenScience/demo_analysis/analyze.py")).toBe(
+      "demo_analysis/analyze.py",
+    );
+  });
+  it("leaves non-workspace titles unchanged", () => {
+    expect(tidyToolTitle("search (done)")).toBe("search (done)");
+    expect(tidyToolTitle("python3 -c \"import numpy\"")).toBe('python3 -c "import numpy"');
+  });
+});
 
 describe("foldEvent", () => {
   it("upserts a text part by id (idempotent full-text updates, not appends)", () => {
