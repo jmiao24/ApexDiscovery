@@ -119,6 +119,46 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
       res.end(JSON.stringify([{ name: "build", description: "Default agent.", mode: "primary" }]));
       return;
     }
+    if (req.method === "GET" && url.startsWith("/command")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify([
+          { name: "init", description: "guided AGENTS.md setup", source: "command" },
+          { name: "analyze-data", description: "Analyze a dataset end to end.", source: "skill" },
+        ]),
+      );
+      return;
+    }
+    const sh = url.match(/^\/session\/([^/]+)\/shell/);
+    if (req.method === "POST" && sh) {
+      const sessionID = decodeURIComponent(sh[1]);
+      const push = (obj: unknown) => clients.forEach((c) => send(c, obj));
+      push({
+        type: "message.part.updated",
+        properties: {
+          part: {
+            sessionID,
+            id: "psh",
+            type: "tool",
+            callID: "csh",
+            tool: "bash",
+            state: { status: "completed", title: "pwd", input: { command: "pwd" }, output: "/ws/mock\n" },
+          },
+        },
+      });
+      push({ type: "session.idle", properties: { sessionID } });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ info: { role: "assistant" }, parts: [] }));
+      return;
+    }
+    const cm = url.match(/^\/session\/([^/]+)\/command/);
+    if (req.method === "POST" && cm) {
+      const sessionID = decodeURIComponent(cm[1]);
+      streamTurn(sessionID);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ info: { role: "assistant" }, parts: [] }));
+      return;
+    }
     const m = url.match(/^\/session\/([^/]+)\/prompt_async/);
     if (req.method === "POST" && m) {
       res.writeHead(200, { "Content-Type": "application/json" });

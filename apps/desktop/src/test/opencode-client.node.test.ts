@@ -49,6 +49,40 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
     expect(client.getStatus()).toBe("offline");
   });
 
+  it("lists slash commands (config commands + skills, one merged list)", async () => {
+    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    const commands = await client.listCommands();
+    expect(commands.map((c) => c.name)).toEqual(["init", "analyze-data"]);
+    expect(commands[1].source).toBe("skill");
+  });
+
+  it("runs a shell command: bash tool part + session.idle stream back", async () => {
+    const events: OpenCodeEvent[] = [];
+    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    client.onEvent((e) => events.push(e));
+    await client.connect();
+    await client.runShell("ses_mock", "pwd");
+    await waitFor(() => events.some((e) => e.type === "session.idle"));
+    const bash = events.find(
+      (e): e is Extract<OpenCodeEvent, { type: "tool.updated" }> =>
+        e.type === "tool.updated" && e.tool === "bash",
+    );
+    expect(bash?.status).toBe("success");
+    expect(bash?.output).toContain("/ws/mock");
+    client.close();
+  });
+
+  it("runs a slash command: a normal agent turn streams back", async () => {
+    const events: OpenCodeEvent[] = [];
+    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    client.onEvent((e) => events.push(e));
+    await client.connect();
+    await client.runCommand("ses_mock", "init", "focus on tests");
+    await waitFor(() => events.some((e) => e.type === "session.idle"));
+    expect(events.map((e) => e.type)).toContain("text.updated");
+    client.close();
+  });
+
   it("reports an error status when the server is unreachable", async () => {
     const client = new OpenCodeClient({ baseUrl: "http://127.0.0.1:1" });
     await expect(client.connect()).rejects.toBeTruthy();

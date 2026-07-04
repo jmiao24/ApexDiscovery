@@ -12,6 +12,10 @@ const mocks = vi.hoisted(() => ({
   failCreates: 0,
   /** Fire a normalized event into the store, as the SSE stream would. */
   fireEvent: (_e: unknown) => {},
+  runShell: vi.fn(),
+  runCommand: vi.fn(),
+  /** Next runShell call throws (HTTP-level failure). */
+  failShell: false,
 }));
 
 vi.mock("./tauri", () => ({
@@ -60,6 +64,30 @@ vi.mock("@ai4s/sdk", () => {
       return "ses_new";
     }
     async sendPrompt() {}
+    async listCommands() {
+      return [{ name: "init", description: "guided AGENTS.md setup", source: "command" }];
+    }
+    // Like the real endpoints, shell/command resolve only when the turn is
+    // over — and session.idle fires BEFORE the POST resolves.
+    async runShell(sid: string, command: string, agent: string) {
+      mocks.runShell(sid, command, agent);
+      if (mocks.failShell) throw new Error("shell exploded");
+      mocks.fireEvent({
+        type: "tool.updated",
+        sessionId: sid,
+        callId: "csh",
+        tool: "bash",
+        status: "success",
+        title: "",
+        input: { command },
+        output: "/ws/mock\n",
+      });
+      mocks.fireEvent({ type: "session.idle", sessionId: sid });
+    }
+    async runCommand(sid: string, name: string, args?: string) {
+      mocks.runCommand(sid, name, args);
+      mocks.fireEvent({ type: "session.idle", sessionId: sid });
+    }
     close() {}
   }
   return { OpenCodeClient, DEFAULT_OPENCODE_URL: "http://127.0.0.1:4096" };
@@ -71,6 +99,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   mocks.failConnects = 0;
   mocks.failCreates = 0;
+  mocks.failShell = false;
   useRuntimeStore.setState({
     currentId: null,
     workspacePinned: false,
@@ -198,6 +227,70 @@ describe("per-session workspace folders", () => {
     await done;
     expect(useRuntimeStore.getState().switching).toBe(false);
     expect(useRuntimeStore.getState().status).toBe("ready");
+  });
+
+  it("runShell: echoes `! cmd`, runs it, and ends the turn even though idle beat the POST", async () => {
+    const id = await useRuntimeStore.getState().runShell("pwd");
+    expect(id).toBe("ses_new");
+    expect(mocks.runShell).toHaveBeenCalledWith("ses_new", "pwd", "build");
+    const s = useRuntimeStore.getState();
+    expect(s.threads["ses_new"].blocks[0]).toEqual({ kind: "user", text: "! pwd" });
+    // The sync endpoint resolves after session.idle already fired — the
+    // running lock must not stick (it was set before the POST, cleared after).
+    expect(s.runningSessions["ses_new"]).toBeUndefined();
+    expect(s.shellTurns["ses_new"]).toBeUndefined();
+    expect(s.sending).toBe(false);
+  });
+
+  it("runShell: the bash row carries the command as title and the output inline", async () => {
+    await useRuntimeStore.getState().runShell("pwd");
+    const bash = useRuntimeStore
+      .getState()
+      .threads["ses_new"].blocks.find((b) => b.kind === "tool-call");
+    // The shell endpoint reports an empty title — the command line stands in,
+    // and the output shows inline (it IS the result the user asked for).
+    expect(bash).toMatchObject({ title: "pwd", status: "success", outputSummary: "/ws/mock" });
+  });
+
+  it("an agent bash step (no shell turn) stays a quiet line without inline output", async () => {
+    await useRuntimeStore.getState().sendPrompt("hi");
+    mocks.fireEvent({
+      type: "tool.updated",
+      sessionId: "ses_new",
+      callId: "c9",
+      tool: "bash",
+      status: "success",
+      title: "install deps",
+      input: { command: "pip install numpy" },
+      output: "lots of pip noise",
+    });
+    const bash = useRuntimeStore
+      .getState()
+      .threads["ses_new"].blocks.find((b) => b.kind === "tool-call");
+    expect(bash).toMatchObject({ title: "install deps", status: "success" });
+    expect((bash as { outputSummary?: string }).outputSummary).toBeUndefined();
+  });
+
+  it("runShell failure lands as a red line and unlocks the composer", async () => {
+    mocks.failShell = true;
+    await useRuntimeStore.getState().runShell("pwd");
+    const s = useRuntimeStore.getState();
+    expect(s.threads["ses_new"].blocks.slice(-1)[0]).toMatchObject({
+      kind: "status-line",
+      tone: "error",
+    });
+    expect(s.runningSessions["ses_new"]).toBeUndefined();
+    expect(s.shellTurns["ses_new"]).toBeUndefined(); // no events will clear it
+    expect(s.sending).toBe(false);
+  });
+
+  it("runCommand: echoes `/name args` and posts the command with its arguments", async () => {
+    const id = await useRuntimeStore.getState().runCommand("init", "focus on tests");
+    expect(id).toBe("ses_new");
+    expect(mocks.runCommand).toHaveBeenCalledWith("ses_new", "init", "focus on tests");
+    const s = useRuntimeStore.getState();
+    expect(s.threads["ses_new"].blocks[0]).toEqual({ kind: "user", text: "/init focus on tests" });
+    expect(s.runningSessions["ses_new"]).toBeUndefined();
   });
 
   it("switchWorkspace pins the chosen folder; startDraft un-pins it", async () => {

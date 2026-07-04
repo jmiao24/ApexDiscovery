@@ -29,4 +29,18 @@ describe("ToolCallRow", () => {
     );
     expect(screen.getByText("142 lines of output")).toBeInTheDocument();
   });
+
+  it("shows the inline output of a user-run shell command", () => {
+    render(
+      <ToolCallRow
+        block={{
+          kind: "tool-call",
+          title: "pwd",
+          status: "success",
+          outputSummary: "/ws/2026-07-04-1030",
+        }}
+      />,
+    );
+    expect(screen.getByText("/ws/2026-07-04-1030")).toBeInTheDocument();
+  });
 });

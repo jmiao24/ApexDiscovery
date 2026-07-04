@@ -1,5 +1,6 @@
 import type {
   AgentInfo,
+  CommandInfo,
   HistoryMessage,
   McpConfig,
   McpServer,
@@ -407,6 +408,57 @@ export class OpenCodeClient {
     const res = await this.fetchImpl(`${this.baseUrl}/agent`, { headers: this.headers() });
     if (!res.ok) throw new Error(`Failed to list agents (${res.status})`);
     return (await res.json()) as AgentInfo[];
+  }
+
+  /** Slash commands the runtime can run — config commands, skills and MCP
+   *  prompts all surface in this one list (directory-scoped like skills). */
+  async listCommands(): Promise<CommandInfo[]> {
+    const res = await this.fetchImpl(`${this.baseUrl}/command${this.dirQuery()}`, {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`Failed to list commands (${res.status})`);
+    const arr = (await res.json()) as Array<{
+      name: string;
+      description?: string;
+      source?: string;
+      agent?: string;
+    }>;
+    return arr.map((c) => ({
+      name: c.name,
+      description: c.description,
+      source: c.source,
+      agent: c.agent,
+    }));
+  }
+
+  /** Run a shell command directly in the session's workspace — no model turn.
+   *  The result lands in the session history as a bash tool part and streams
+   *  via onEvent; the POST resolves only when the command finishes. */
+  async runShell(sessionId: string, command: string, agent = "build"): Promise<void> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/session/${encodeURIComponent(sessionId)}/shell`,
+      {
+        method: "POST",
+        headers: this.headers(true),
+        body: JSON.stringify({ agent, command }),
+      },
+    );
+    if (!res.ok) throw new Error(`Command failed to run (${res.status})`);
+  }
+
+  /** Run a slash command (config command / skill / MCP prompt) in a session.
+   *  This is a full agent turn; the POST resolves when the turn completes,
+   *  while output streams via onEvent along the way. */
+  async runCommand(sessionId: string, command: string, args?: string): Promise<void> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/session/${encodeURIComponent(sessionId)}/command`,
+      {
+        method: "POST",
+        headers: this.headers(true),
+        body: JSON.stringify({ command, ...(args ? { arguments: args } : {}) }),
+      },
+    );
+    if (!res.ok) throw new Error(`Failed to run /${command} (${res.status})`);
   }
 
   /** Send a prompt into a session; output streams back via onEvent (SSE). */

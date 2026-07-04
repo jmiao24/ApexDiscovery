@@ -29,10 +29,13 @@ export function LiveSessionPage() {
     questions,
     permissions,
     activeArtifact,
+    commands,
     connect,
     openSession,
     startDraft,
     sendPrompt,
+    runShell,
+    runCommand,
     openArtifact,
     closeArtifact,
     answerQuestion,
@@ -52,10 +55,13 @@ export function LiveSessionPage() {
     else startDraft(); // blank draft — no session created yet (#3)
   }, [sessionId, openSession, startDraft]);
 
-  const onSend = async (text: string) => {
-    const id = await sendPrompt(text);
-    if (id && !sessionId) navigate(`/live/${id}`); // reflect the freshly-created session
+  // All three composer paths reflect a freshly-created session in the URL.
+  const afterTurn = (id: string | null) => {
+    if (id && !sessionId) navigate(`/live/${id}`);
   };
+  const onSend = async (text: string) => afterTurn(await sendPrompt(text));
+  const onRunShell = async (command: string) => afterTurn(await runShell(command));
+  const onRunCommand = async (name: string, args: string) => afterTurn(await runCommand(name, args));
 
   // Interactions from the thread/inspector fold back into the conversation as follow-up prompts.
   const handlers: BlockHandlers = {
@@ -193,6 +199,9 @@ export function LiveSessionPage() {
             )}
             <Composer
               onSend={onSend}
+              onRunShell={(c) => void onRunShell(c)}
+              onRunCommand={(n, a) => void onRunCommand(n, a)}
+              commands={commands}
               disabled={!connected || working}
               placeholder={
                 working ? "Waiting for the reply…" : connected ? "Ask anything" : "Connect to chat"

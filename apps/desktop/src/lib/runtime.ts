@@ -3,6 +3,7 @@ import {
   OpenCodeClient,
   DEFAULT_OPENCODE_URL,
   type AgentInfo,
+  type CommandInfo,
   type HistoryMessage,
   type OpenCodeEvent,
   type PermissionAskedEvent,
@@ -59,6 +60,9 @@ interface RuntimeState {
   threads: Record<string, Thread>;
   skills: SkillInfo[];
   agents: AgentInfo[];
+  /** Slash commands the runtime can run ("/" palette): config commands,
+   *  skills and MCP prompts, one merged list from GET /command. */
+  commands: CommandInfo[];
   /** Configured default model ("provider/model"), or null when unset. */
   defaultModel: string | null;
   tools: ToolStatus[];
@@ -98,10 +102,19 @@ interface RuntimeState {
   /** Sessions with an active turn (send accepted, session.idle not yet seen).
    *  Drives the composer lock and the "Working…" indicator. */
   runningSessions: Record<string, true>;
+  /** Sessions whose current turn is a user-typed "!" shell command. Their bash
+   *  output shows inline in the thread — the output IS the result the user
+   *  asked for. Agent bash steps stay quiet single-line log entries. */
+  shellTurns: Record<string, true>;
   /** Switch to an existing folder, or (with `dated`) create a new dated one. */
   switchWorkspace: (target: { path: string } | { dated: string }) => Promise<void>;
   openSession: (id: string) => Promise<void>;
   sendPrompt: (text: string) => Promise<string | null>;
+  /** Run a "!" shell command directly in the session's workspace folder —
+   *  no model turn; the output folds into the thread as a bash tool row. */
+  runShell: (command: string) => Promise<string | null>;
+  /** Run a "/" slash command (config command / skill / MCP prompt). */
+  runCommand: (name: string, args?: string) => Promise<string | null>;
   deleteSession: (id: string) => Promise<void>;
   hideExample: (id: string) => void;
   installSkill: (text: string) => Promise<string | null>;
@@ -125,6 +138,138 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 /** Tool calls already written to provenance — success events can repeat per callId. */
 const recordedProvenance = new Set<string>();
 
+type StoreSet = {
+  (partial: Partial<RuntimeState>): void;
+  (fn: (s: RuntimeState) => Partial<RuntimeState>): void;
+};
+type StoreGet = () => RuntimeState;
+
+/**
+ * The one send lifecycle (new → input → send → response), shared by plain
+ * prompts, "!" shell commands and "/" slash commands:
+ *   1. `echo` lands in the thread IMMEDIATELY — on a draft under DRAFT_KEY,
+ *      grafted onto the real session id later, so the page never resets.
+ *   2. `sending` is true from click until the POST is accepted (locks the
+ *      composer); the session sits in `runningSessions` while the turn runs.
+ *   3. Failures land as a red status line inside the conversation.
+ * `syncTurn` marks endpoints whose POST resolves only when the turn is OVER
+ * (shell/command, unlike prompt_async) — their running lock is set BEFORE the
+ * POST and cleared when it settles, because session.idle arrives before the
+ * POST resolves and a lock set afterwards would never clear.
+ * `shell` additionally marks the turn in `shellTurns` for its duration, so
+ * the event fold shows the bash output inline.
+ */
+async function performTurn(
+  set: StoreSet,
+  get: StoreGet,
+  echo: string,
+  post: (sid: string) => Promise<void>,
+  syncTurn: boolean,
+  shell = false,
+): Promise<string | null> {
+  if (!client) {
+    set({ error: "Not connected to the OpenCode runtime." });
+    return null;
+  }
+  if (get().sending) return null; // one send at a time
+  const echoKey = get().currentId ?? DRAFT_KEY;
+  set((s) => {
+    const cur = s.threads[echoKey] ?? emptyThread();
+    return {
+      sending: true,
+      threads: {
+        ...s.threads,
+        [echoKey]: { ...cur, loaded: true, blocks: [...cur.blocks, { kind: "user", text: echo }] },
+      },
+    };
+  });
+  try {
+    let id = get().currentId;
+    if (!id) {
+      // Lazy-create the session on the first message (#3). Unless the user
+      // pinned a folder via the workspace switcher, a new session gets its
+      // own fresh dated folder (~/Documents/OpenScience/<date-time>) first,
+      // so its files never pile up in the bare base folder.
+      if (isTauri && !get().workspacePinned) {
+        set({ switching: true });
+        try {
+          await newDatedWorkspace(datedWorkspaceName());
+          await kernelReset().catch(() => {});
+          await get().connectRetry();
+        } finally {
+          set({ switching: false });
+        }
+        if (get().status !== "ready" || !client) {
+          throw new Error("Runtime did not reconnect after creating the session folder.");
+        }
+      }
+      id = await withRetry(() => client!.createSession());
+      set((s) => {
+        // Graft the draft conversation onto the real session id.
+        const threads = { ...s.threads, [id!]: s.threads[DRAFT_KEY] ?? emptyThread() };
+        delete threads[DRAFT_KEY];
+        return { currentId: id, threads };
+      });
+      void get().refreshSessions();
+    }
+    const sid = id;
+    void logDebug(`turn → ${sid}`);
+    if (syncTurn) {
+      set((s) => ({
+        runningSessions: { ...s.runningSessions, [sid]: true },
+        ...(shell ? { shellTurns: { ...s.shellTurns, [sid]: true as const } } : {}),
+      }));
+      try {
+        await post(sid);
+      } catch (err) {
+        // A failed POST produces no events — drop the shell flag here. (On
+        // success the session.idle event clears it, never the POST settling:
+        // SSE frames and the POST response race on separate connections, and
+        // the bash-output event may land after the POST resolves.)
+        set((s) => {
+          const shellTurns = { ...s.shellTurns };
+          delete shellTurns[sid];
+          return { shellTurns };
+        });
+        throw err;
+      } finally {
+        set((s) => {
+          const runningSessions = { ...s.runningSessions };
+          delete runningSessions[sid];
+          return { runningSessions };
+        });
+      }
+    } else {
+      await post(sid);
+      set((s) => ({ runningSessions: { ...s.runningSessions, [sid]: true } }));
+    }
+    void logDebug("turn OK");
+    return sid;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    void logDebug(`turn FAILED: ${msg}`);
+    // The failure belongs next to the message that caused it.
+    const key = get().currentId ?? DRAFT_KEY;
+    set((s) => {
+      const cur = s.threads[key] ?? emptyThread();
+      return {
+        error: msg,
+        threads: {
+          ...s.threads,
+          [key]: {
+            ...cur,
+            loaded: true,
+            blocks: [...cur.blocks, { kind: "status-line", text: `Send failed: ${msg}`, tone: "error" }],
+          },
+        },
+      };
+    });
+    return get().currentId;
+  } finally {
+    set({ sending: false });
+  }
+}
+
 /** The live OpenCode client (Settings talks to the runtime's config API directly). */
 export function getClient(): OpenCodeClient | null {
   return client;
@@ -138,6 +283,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   threads: {},
   skills: [],
   agents: [],
+  commands: [],
   defaultModel: null,
   tools: [],
   hiddenExamples: initialHidden(),
@@ -150,6 +296,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   switching: false,
   sending: false,
   runningSessions: {},
+  shellTurns: {},
 
   openArtifact: (activeArtifact) => set({ activeArtifact }),
   closeArtifact: () => set({ activeArtifact: null }),
@@ -193,10 +340,11 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   loadCatalog: async () => {
     if (!client) return;
     try {
-      const [firstSkills, agents, defaultModel] = await Promise.all([
+      const [firstSkills, agents, defaultModel, commands] = await Promise.all([
         client.listSkills(),
         client.listAgents(),
         client.getDefaultModel().catch(() => null),
+        client.listCommands().catch(() => []),
       ]);
       let skills = firstSkills;
       // The first workspace-scoped /api/skill call triggers OpenCode's lazy
@@ -205,7 +353,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         await sleep(1500);
         skills = await client.listSkills();
       }
-      set({ skills, agents, defaultModel });
+      set({ skills, agents, defaultModel, commands });
     } catch {
       /* ignore transient failures */
     }
@@ -285,12 +433,23 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       if (!sid) return;
       set((s) => {
         const cur = s.threads[sid] ?? emptyThread();
-        const folded = foldEvent({ blocks: cur.blocks, index: cur.index }, event);
+        const folded = foldEvent(
+          { blocks: cur.blocks, index: cur.index },
+          event,
+          { shellTurn: !!s.shellTurns[sid] },
+        );
         // The turn is over — unlock the composer and drop the "Working…" row.
+        // The shell flag clears HERE (not when the POST settles): within the
+        // SSE stream the bash-output event always precedes session.idle.
         const runningSessions = { ...s.runningSessions };
-        if (event.type === "session.idle") delete runningSessions[sid];
+        const shellTurns = { ...s.shellTurns };
+        if (event.type === "session.idle") {
+          delete runningSessions[sid];
+          delete shellTurns[sid];
+        }
         return {
           runningSessions,
+          shellTurns,
           threads: { ...s.threads, [sid]: { ...cur, ...folded, loaded: true } },
         };
       });
@@ -443,91 +602,32 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     }
   },
 
-  // The send lifecycle (new → input → send → response), so the user always
-  // knows where things stand:
-  //   1. The message echoes into the thread IMMEDIATELY — on a draft it goes
-  //      under DRAFT_KEY and is grafted onto the real session id later, so the
-  //      page never visibly resets when the session appears.
-  //   2. `sending` is true from click until the POST is accepted (locks the
-  //      composer); then the session is in `runningSessions` until its
-  //      session.idle / error event (keeps it locked, shows "Working…").
-  //   3. Failures land as a red status line inside the conversation.
-  sendPrompt: async (text) => {
-    if (!client) {
-      set({ error: "Not connected to the OpenCode runtime." });
-      return null;
-    }
-    if (get().sending) return null; // one send at a time
-    const echoKey = get().currentId ?? DRAFT_KEY;
-    set((s) => {
-      const cur = s.threads[echoKey] ?? emptyThread();
-      return {
-        sending: true,
-        threads: {
-          ...s.threads,
-          [echoKey]: { ...cur, loaded: true, blocks: [...cur.blocks, { kind: "user", text }] },
-        },
-      };
-    });
-    try {
-      let id = get().currentId;
-      if (!id) {
-        // Lazy-create the session on the first message (#3). Unless the user
-        // pinned a folder via the workspace switcher, a new session gets its
-        // own fresh dated folder (~/Documents/OpenScience/<date-time>) first,
-        // so its files never pile up in the bare base folder.
-        if (isTauri && !get().workspacePinned) {
-          set({ switching: true });
-          try {
-            await newDatedWorkspace(datedWorkspaceName());
-            await kernelReset().catch(() => {});
-            await get().connectRetry();
-          } finally {
-            set({ switching: false });
-          }
-          if (get().status !== "ready" || !client) {
-            throw new Error("Runtime did not reconnect after creating the session folder.");
-          }
-        }
-        id = await withRetry(() => client!.createSession());
-        set((s) => {
-          // Graft the draft conversation onto the real session id.
-          const threads = { ...s.threads, [id!]: s.threads[DRAFT_KEY] ?? emptyThread() };
-          delete threads[DRAFT_KEY];
-          return { currentId: id, threads };
-        });
-        void get().refreshSessions();
-      }
-      const sid = id;
-      void logDebug(`sendPrompt → ${sid}`);
-      await withRetry(() => client!.sendPrompt(sid, text));
-      void logDebug("sendPrompt OK");
-      set((s) => ({ runningSessions: { ...s.runningSessions, [sid]: true } }));
-      return sid;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      void logDebug(`sendPrompt FAILED: ${msg}`);
-      // The failure belongs next to the message that caused it.
-      const key = get().currentId ?? DRAFT_KEY;
-      set((s) => {
-        const cur = s.threads[key] ?? emptyThread();
-        return {
-          error: msg,
-          threads: {
-            ...s.threads,
-            [key]: {
-              ...cur,
-              loaded: true,
-              blocks: [...cur.blocks, { kind: "status-line", text: `Send failed: ${msg}`, tone: "error" }],
-            },
-          },
-        };
-      });
-      return get().currentId;
-    } finally {
-      set({ sending: false });
-    }
+  // The send lifecycle (new → input → send → response) is shared by plain
+  // prompts, "!" shell commands and "/" slash commands — see performTurn.
+  sendPrompt: (text) =>
+    performTurn(set, get, text, (sid) => withRetry(() => client!.sendPrompt(sid, text)), false),
+
+  // No retry for shell/command: re-POSTing would run the command twice.
+  runShell: (command) => {
+    const agent = get().agents.find((a) => a.mode === "primary")?.name ?? "build";
+    return performTurn(
+      set,
+      get,
+      `! ${command}`,
+      (sid) => client!.runShell(sid, command, agent),
+      true,
+      true,
+    );
   },
+
+  runCommand: (name, args) =>
+    performTurn(
+      set,
+      get,
+      args ? `/${name} ${args}` : `/${name}`,
+      (sid) => client!.runCommand(sid, name, args),
+      true,
+    ),
 
   deleteSession: async (id) => {
     if (client) {
@@ -614,7 +714,11 @@ export function tidyToolTitle(title: string): string {
   return title.replace(/[^\s]*OpenScience\//g, "").trim() || title;
 }
 
-export function foldEvent(state: FoldState, event: OpenCodeEvent): FoldState {
+export function foldEvent(
+  state: FoldState,
+  event: OpenCodeEvent,
+  opts?: { shellTurn?: boolean },
+): FoldState {
   const blocks = [...state.blocks];
   const index = { ...state.index };
   switch (event.type) {
@@ -644,12 +748,19 @@ export function foldEvent(state: FoldState, event: OpenCodeEvent): FoldState {
       // pure noise in the conversation, so drop them.
       if (/question|permission|^ask$|todo/i.test(event.tool)) return { blocks, index };
       const key = `tool:${event.callId}`;
-      // Completed MCP tools report title as "" — fall back to the tool name,
-      // never render a blank row.
+      // Completed MCP tools (and the shell endpoint) report title as "" —
+      // fall back to the bash command line, then the tool name; never render
+      // a blank row.
+      const command = typeof event.input?.command === "string" ? event.input.command : "";
       const block: ThreadBlock = {
         kind: "tool-call",
-        title: tidyToolTitle(event.title?.trim() || event.tool || "tool"),
+        title: tidyToolTitle(event.title?.trim() || command || event.tool || "tool"),
         status: event.status,
+        // A user-typed "!" command ran for its output — show it inline.
+        // Agent bash steps stay quiet single-line log entries.
+        ...(opts?.shellTurn && event.tool === "bash" && event.output?.trim()
+          ? { outputSummary: event.output.replace(/\s+$/, "") }
+          : {}),
       };
       if (key in index) blocks[index[key]] = block;
       else {

@@ -24,27 +24,35 @@ export function ToolCallRow({ block }: { block: ToolCallBlock }) {
   const s = STATUS[block.status];
   const prominent = PROMINENT.has(block.status);
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2",
-        prominent
-          ? "rounded-input border border-border bg-surface px-3 py-2 text-sm"
-          : "px-2 py-1 text-[12.5px]",
-      )}
-      data-status={block.status}
-    >
-      <span className={cn("shrink-0", s.className)} aria-label={s.label} role="img">
-        {s.icon}
-      </span>
-      <span
+    <div data-status={block.status}>
+      <div
         className={cn(
-          "flex-1 truncate",
-          prominent ? "text-text" : cn("font-mono", block.status === "running" ? "text-text" : "text-muted"),
+          "flex items-center gap-2",
+          prominent
+            ? "rounded-input border border-border bg-surface px-3 py-2 text-sm"
+            : "px-2 py-1 text-[12.5px]",
         )}
       >
-        {block.title}
-      </span>
-      {block.meta && <span className="shrink-0 text-xs text-muted">{block.meta}</span>}
+        <span className={cn("shrink-0", s.className)} aria-label={s.label} role="img">
+          {s.icon}
+        </span>
+        <span
+          className={cn(
+            "flex-1 truncate",
+            prominent ? "text-text" : cn("font-mono", block.status === "running" ? "text-text" : "text-muted"),
+          )}
+        >
+          {block.title}
+        </span>
+        {block.meta && <span className="shrink-0 text-xs text-muted">{block.meta}</span>}
+      </div>
+      {/* Output of a user-typed "!" shell command — the result they asked for.
+          (Agent tool steps never carry outputSummary; they stay one quiet line.) */}
+      {block.outputSummary && (
+        <pre className="ml-2 mt-0.5 max-h-64 overflow-y-auto whitespace-pre-wrap break-all rounded-input bg-surface-2 px-3 py-2 font-mono text-xs leading-5 text-text">
+          {block.outputSummary}
+        </pre>
+      )}
     </div>
   );
 }

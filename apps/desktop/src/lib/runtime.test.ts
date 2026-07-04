@@ -4,7 +4,8 @@ import { datedWorkspaceName, foldEvent, historyToThread, tidyToolTitle, type Fol
 
 const empty: FoldState = { blocks: [], index: {} };
 const S = "ses_1";
-const foldAll = (events: OpenCodeEvent[]): FoldState => events.reduce(foldEvent, empty);
+const foldAll = (events: OpenCodeEvent[]): FoldState =>
+  events.reduce((s, e) => foldEvent(s, e), empty);
 
 describe("tidyToolTitle", () => {
   it("shows workspace files by their relative path", () => {

@@ -120,6 +120,18 @@ export interface AgentInfo {
   mode?: string;
 }
 
+/** A slash command the runtime can run. GET /command merges every source:
+ *  config commands, skills, and MCP prompts — one list for the composer's
+ *  "/" palette. */
+export interface CommandInfo {
+  name: string;
+  description?: string;
+  /** Where it came from, e.g. "command" | "skill" | "mcp". */
+  source?: string;
+  /** Agent the command pins, when it does. */
+  agent?: string;
+}
+
 /** A message loaded from history (GET /session/:id/message). */
 export interface HistoryMessage {
   role: "user" | "assistant";
