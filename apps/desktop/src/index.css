@@ -24,6 +24,19 @@
   --warn: #c98a2b;
   --ok: #4b8b5b;
   --error: #c0564b;
+  /* Chart design system (P1-5) — validated categorical hues + chart chrome,
+     the single source of truth shared with @ai4s/shared and the matplotlib
+     style. Light surface = --surface (#ffffff). */
+  --series-1: #2a78d6;
+  --series-2: #1baf7a;
+  --series-3: #eda100;
+  --series-4: #008300;
+  --series-5: #4a3aa7;
+  --series-6: #e34948;
+  --series-7: #e87ba4;
+  --series-8: #eb6834;
+  --chart-grid: #e7e3da;
+  --chart-axis: #cbc6bb;
 }
 
 [data-theme="dark"] {
@@ -39,6 +52,17 @@
   --warn: #d7a24a;
   --ok: #6bb07d;
   --error: #d47a70;
+  /* Same hues stepped for the dark chart surface (--surface #1e1d24). */
+  --series-1: #3987e5;
+  --series-2: #199e70;
+  --series-3: #c98500;
+  --series-4: #008300;
+  --series-5: #9085e9;
+  --series-6: #e66767;
+  --series-7: #d55181;
+  --series-8: #d95926;
+  --chart-grid: #33313c;
+  --chart-axis: #4a4753;
 }
 
 html,

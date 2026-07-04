@@ -3,14 +3,16 @@ import { Command } from "cmdk";
 import { useNavigate } from "react-router-dom";
 import {
   FileSearch,
-  FileText,
-  FolderPlus,
   Moon,
+  NotebookPen,
   PackagePlus,
+  Plus,
   Settings,
   ShieldCheck,
 } from "lucide-react";
 import { useUiStore } from "@/lib/store";
+import { useRuntimeStore } from "@/lib/runtime";
+import { WORKFLOW_STARTERS } from "@/components/thread/WorkflowStarters";
 
 interface Action {
   id: string;
@@ -18,6 +20,9 @@ interface Action {
   icon: React.ReactNode;
   run: () => void;
 }
+
+/** Prompt for a starter workflow by id, so ⌘K and the empty-session cards stay in sync. */
+const starterPrompt = (id: string) => WORKFLOW_STARTERS.find((s) => s.id === id)?.prompt ?? "";
 
 export function CommandPalette() {
   const open = useUiStore((s) => s.paletteOpen);
@@ -38,14 +43,23 @@ export function CommandPalette() {
   }, [setOpen]);
 
   const close = () => setOpen(false);
+
+  // Start a new session and send a workflow prompt, then reveal that session.
+  const runWorkflow = async (starterId: string) => {
+    close();
+    useRuntimeStore.getState().startDraft();
+    const id = await useRuntimeStore.getState().sendPrompt(starterPrompt(starterId));
+    if (id) navigate(`/live/${id}`);
+  };
+
   const actions: Action[] = [
-    { id: "new", label: "New research project", icon: <FolderPlus size={16} />, run: () => { navigate("/"); close(); } },
-    { id: "search", label: "Search literature", icon: <FileSearch size={16} />, run: close },
-    { id: "reviewer", label: "Run reviewer", icon: <ShieldCheck size={16} />, run: close },
+    { id: "new", label: "New session", icon: <Plus size={16} />, run: () => { useRuntimeStore.getState().startDraft(); navigate("/live"); close(); } },
+    { id: "analyze", label: "Analyze my data (new workflow)", icon: <FileSearch size={16} />, run: () => void runWorkflow("analyze") },
+    { id: "review", label: "Audit a report (traceability review)", icon: <ShieldCheck size={16} />, run: () => void runWorkflow("audit") },
+    { id: "notebooks", label: "Open notebooks", icon: <NotebookPen size={16} />, run: () => { navigate("/notebooks"); close(); } },
+    { id: "skills", label: "Manage skills", icon: <PackagePlus size={16} />, run: () => { navigate("/skills"); close(); } },
     { id: "settings", label: "Open settings", icon: <Settings size={16} />, run: () => { navigate("/settings"); close(); } },
-    { id: "skill", label: "Install skill", icon: <PackagePlus size={16} />, run: () => { navigate("/skills"); close(); } },
-    { id: "report", label: "Export report", icon: <FileText size={16} />, run: close },
-    { id: "theme", label: "Toggle theme", icon: <Moon size={16} />, run: () => { toggleTheme(); close(); } },
+    { id: "theme", label: "Toggle light / dark theme", icon: <Moon size={16} />, run: () => { toggleTheme(); close(); } },
   ];
 
   if (!open) return null;

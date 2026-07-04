@@ -297,3 +297,46 @@ export interface Citation {
   year?: number;
   source?: string;
 }
+
+// ---- Chart design system (P1-5) ----
+// One validated palette, the single source of truth for BOTH native app charts
+// (SVG stat tiles, mini-bars) and agent-generated figures (matplotlib, via the
+// bundled `openscience.mplstyle` which carries the same hexes). Validated with
+// the dataviz skill against the app's real surfaces — light #ffffff, dark
+// #1e1d24 — for the lightness band, chroma floor, CVD separation, and contrast.
+// Categorical hues are assigned in this fixed order, never cycled.
+
+export type ChartTheme = "light" | "dark";
+
+export interface ChartPalette {
+  /** Categorical series hues, in fixed assignment order (identity encoding). */
+  categorical: string[];
+  /** Single-hue sequential ramp, light→dark (magnitude encoding). */
+  sequential: string[];
+  /** Reserved state colors — never reused as a series hue. */
+  status: { good: string; warning: string; serious: string; critical: string };
+}
+
+/** Light-mode palette (chart surface #ffffff). */
+export const CHART_PALETTE_LIGHT: ChartPalette = {
+  categorical: ["#2a78d6", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948", "#e87ba4", "#eb6834"],
+  sequential: ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#104281"],
+  status: { good: "#0ca30c", warning: "#c98a2b", serious: "#ec835a", critical: "#d03b3b" },
+};
+
+/** Dark-mode palette — the same hues stepped for the dark surface (#1e1d24). */
+export const CHART_PALETTE_DARK: ChartPalette = {
+  categorical: ["#3987e5", "#199e70", "#c98500", "#008300", "#9085e9", "#e66767", "#d55181", "#d95926"],
+  sequential: ["#104281", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb"],
+  status: { good: "#0ca30c", warning: "#d7a24a", serious: "#ec835a", critical: "#d03b3b" },
+};
+
+export function chartPalette(theme: ChartTheme): ChartPalette {
+  return theme === "dark" ? CHART_PALETTE_DARK : CHART_PALETTE_LIGHT;
+}
+
+/** Categorical hue for series `i`, assigned in fixed order (wraps only past 8). */
+export function seriesColor(i: number, theme: ChartTheme): string {
+  const c = chartPalette(theme).categorical;
+  return c[((i % c.length) + c.length) % c.length];
+}

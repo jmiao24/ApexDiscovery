@@ -178,10 +178,16 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
   same palette and render correctly in light and dark mode. (b) Core flows
   (open artifact, switch version, run cell, approve plan) have no visible jank on
   a mid-range laptop. (c) The command palette reaches every primary action.
-- **Status.** Paper aesthetic + settings redesign + notebook/artifact panels
-  shipped. Gap: a single documented chart design system (shared palette + mark
-  specs across agent-generated and native UI), and a craft/interaction pass on
-  the core flows.
+- **Status.** Shipped: one documented chart design system — a validated
+  categorical/sequential/status palette that is the single source of truth in
+  three places kept in sync (`@ai4s/shared` chartPalette, `index.css --series-*`,
+  and `runtime/.../openscience.mplstyle` applied by the `publication-figures`
+  skill), so an agent-generated matplotlib figure and native app UI read as one
+  system in both light and dark (validated with the dataviz standard against the
+  app's real surfaces). Command palette reaches every primary action (all real:
+  new session, two workflows, notebooks, skills, settings, theme). Empty session
+  redesigned into a calm, centered welcome. Gap: a native categorical chart
+  surface when a real dataset needs one; broader interaction polish.
 
 ### P1-4 · Cross-platform installer incl. Windows
 
@@ -265,7 +271,7 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 | P1-2 | Domain + literature connectors | P1 | Curated one-click connectors + BYO guide shipped |
 | P1-3 | Scientific renderers | P1 | Base previews done; domain viewers pending |
 | P1-4 | Windows + macOS installers | P1 | macOS done; Windows pending |
-| P1-5 | Interaction & visualization craft | P1 | Aesthetic base done; chart system + polish pending |
+| P1-5 | Interaction & visualization craft | P1 | Chart design system + palette + command palette shipped |
 | P2-1 | Notebook + larger-project handling | P2 | Notebook done; project ergonomics pending |
 | P2-2 | HPC / SSH / Slurm / Modal | P2 | Not started |
 | P2-3 | Plain-language privacy posture | P2 | Disclosure shipped; keychain migration open |

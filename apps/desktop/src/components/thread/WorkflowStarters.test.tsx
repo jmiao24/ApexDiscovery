@@ -14,7 +14,7 @@ describe("WorkflowStarters", () => {
   it("sends the full-workflow prompt on click", async () => {
     const onPick = vi.fn();
     render(<WorkflowStarters onPick={onPick} />);
-    await userEvent.click(screen.getByText("Demo: analysis end to end"));
+    await userEvent.click(screen.getByText("Run a demo analysis, end to end"));
     expect(onPick).toHaveBeenCalledWith(expect.stringContaining("figure1.png"));
     expect(onPick.mock.calls[0][0]).toContain("report.md");
   });
