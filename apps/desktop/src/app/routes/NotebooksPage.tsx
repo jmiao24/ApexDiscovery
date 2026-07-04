@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { NotebookPen, Plus } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, NotebookPen, Plus } from "lucide-react";
 import { addTextToWorkspace, isTauri } from "@/lib/tauri";
 import { listNotebooks, type NotebookEntry } from "@/lib/artifactFile";
 import { emptyIpynb } from "@/lib/notebook-file";
+import type { KernelLanguage } from "@/lib/kernel";
 import { NotebookEditor } from "@/components/notebook/NotebookEditor";
 import { toast } from "@/lib/toast";
 
@@ -14,6 +15,8 @@ import { toast } from "@/lib/toast";
 export function NotebooksPage() {
   const [entries, setEntries] = useState<NotebookEntry[]>([]);
   const [open, setOpen] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     setEntries(await listNotebooks());
@@ -22,9 +25,21 @@ export function NotebooksPage() {
     void refresh();
   }, [refresh]);
 
-  const createNew = async () => {
+  // Close the kernel menu on any outside click.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [menuOpen]);
+
+  const createNew = async (language: KernelLanguage) => {
+    setMenuOpen(false);
     try {
-      const name = await addTextToWorkspace("notebook.ipynb", emptyIpynb());
+      const base = language === "r" ? "notebook-r.ipynb" : "notebook.ipynb";
+      const name = await addTextToWorkspace(base, emptyIpynb(language));
       await refresh();
       setOpen(name);
     } catch (err) {
@@ -50,17 +65,42 @@ export function NotebooksPage() {
         <div className="flex items-center gap-3">
           <h1 className="font-serif text-xl text-text">Notebooks</h1>
           <div className="flex-1" />
-          <button
-            className="flex items-center gap-1.5 rounded-input bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
-            onClick={() => void createNew()}
-            disabled={!isTauri}
-          >
-            <Plus size={13} /> New notebook
-          </button>
+          <div className="relative" ref={menuRef}>
+            <button
+              className="flex items-center gap-1.5 rounded-input bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
+              onClick={() => setMenuOpen((v) => !v)}
+              disabled={!isTauri}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+            >
+              <Plus size={13} /> New notebook <ChevronDown size={12} className="opacity-80" />
+            </button>
+            {menuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 z-10 mt-1 w-40 overflow-hidden rounded-card border border-border bg-surface py-1 shadow-lg"
+              >
+                <button
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text hover:bg-surface-2"
+                  onClick={() => void createNew("python")}
+                >
+                  <NotebookPen size={13} className="text-muted" /> Python notebook
+                </button>
+                <button
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text hover:bg-surface-2"
+                  onClick={() => void createNew("r")}
+                >
+                  <NotebookPen size={13} className="text-muted" /> R notebook
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <p className="mt-1 text-sm text-muted">
-          Jupyter notebooks in your workspace. Cells run on the local Python kernel; the agent
-          works on the same files.
+          Jupyter notebooks in your workspace. Cells run on the local Python or R kernel; the
+          agent works on the same files.
         </p>
 
         <div className="mt-5 space-y-1.5">

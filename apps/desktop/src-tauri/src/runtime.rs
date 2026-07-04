@@ -221,6 +221,9 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
     }
     // Ship the bundled scientific skills into the app-private OpenCode profile.
     deploy_bundled_skills(app);
+    // Restore credentials from the OS keychain into auth.json before OpenCode
+    // (which reads that file) starts. No-op if the file is already present.
+    crate::keychain::hydrate(app);
     let home = std::env::var("HOME").unwrap_or_default();
     let port_str = port.to_string();
 

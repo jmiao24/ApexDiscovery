@@ -44,6 +44,8 @@ pub fn mime_for(ext: &str) -> (&'static str, bool) {
         "pqr" => ("chemical/x-pqr", true),
         "xyz" => ("chemical/x-xyz", true),
         "cube" => ("chemical/x-cube", true),
+        // Genome annotation tracks — plain text, rendered by the native track viewer.
+        "bed" | "bedgraph" | "bdg" | "gff" | "gff3" | "gtf" | "vcf" => ("text/plain", true),
         "txt" => ("text/plain", true),
         "docx" => ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", false),
         "xlsx" => ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", false),
@@ -237,6 +239,73 @@ pub fn list_notebooks(app: AppHandle) -> Result<Vec<NotebookEntry>, String> {
     Ok(found)
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DirEntry {
+    /// Workspace-relative path with `/` separators.
+    path: String,
+    /// Base name shown in the tree.
+    name: String,
+    is_dir: bool,
+    /// File size in bytes (0 for directories).
+    size: u64,
+    /// Seconds since the epoch.
+    modified: u64,
+}
+
+/// List one directory in the workspace (non-recursive) for the file explorer.
+/// `rel` is a workspace-relative dir path ("" = workspace root). Hidden entries
+/// and heavy build dirs are skipped; directories sort first, then by name.
+#[tauri::command]
+pub fn list_dir(app: AppHandle, rel: String) -> Result<Vec<DirEntry>, String> {
+    dir_entries(&workspace_dir(&app)?, &rel)
+}
+
+fn dir_entries(root: &Path, rel: &str) -> Result<Vec<DirEntry>, String> {
+    let root = root.canonicalize().map_err(|e| e.to_string())?;
+    let dir = resolve_under(&root, rel)?;
+    if !dir.is_dir() {
+        return Err("not a directory".into());
+    }
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())?.flatten() {
+        let fname = entry.file_name();
+        let name = fname.to_string_lossy().into_owned();
+        if name.starts_with('.') || name == "node_modules" || name == "__pycache__" {
+            continue;
+        }
+        let Ok(ft) = entry.file_type() else { continue };
+        let meta = entry.metadata().ok();
+        let modified = meta
+            .as_ref()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let Ok(rel_path) = entry.path().strip_prefix(&root).map(|p| {
+            p.components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/")
+        }) else {
+            continue;
+        };
+        out.push(DirEntry {
+            path: rel_path,
+            name,
+            is_dir: ft.is_dir(),
+            size: if ft.is_file() { meta.as_ref().map(|m| m.len()).unwrap_or(0) } else { 0 },
+            modified,
+        });
+    }
+    out.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+    });
+    Ok(out)
+}
+
 /// Write text to a workspace-relative path (used to save notebooks). Rejects
 /// absolute paths and any `..` component; missing parent dirs are created.
 #[tauri::command]
@@ -379,7 +448,39 @@ fn base64_encode(input: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{base64_encode, locate_under, mime_for, unique_name};
+    use super::{base64_encode, dir_entries, locate_under, mime_for, unique_name};
+
+    #[test]
+    fn genome_and_molecule_files_are_text() {
+        for ext in ["bed", "bedgraph", "gff", "gff3", "gtf", "vcf"] {
+            assert!(mime_for(ext).1, "{ext} must be a text type");
+        }
+    }
+
+    #[test]
+    fn list_dir_sorts_dirs_first_and_skips_hidden() {
+        let root = std::env::temp_dir().join(format!("ai4s-listdir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        std::fs::create_dir_all(root.join(".hidden")).unwrap();
+        std::fs::write(root.join("b.txt"), "hi").unwrap();
+        std::fs::write(root.join("a.csv"), "x,y").unwrap();
+        std::fs::write(root.join("node_modules_marker"), "").unwrap();
+        std::fs::create_dir_all(root.join("node_modules")).unwrap();
+
+        let entries = dir_entries(&root, "").unwrap();
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        // dir first, then files alphabetically; hidden + node_modules skipped.
+        assert_eq!(names, vec!["sub", "a.csv", "b.txt", "node_modules_marker"]);
+        assert!(entries[0].is_dir);
+        assert_eq!(entries.iter().find(|e| e.name == "a.csv").unwrap().size, 3);
+
+        // Listing a subdirectory and rejecting escapes.
+        assert!(dir_entries(&root, "sub").unwrap().is_empty());
+        assert!(dir_entries(&root, "../..").is_err());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn molecule_files_are_text() {

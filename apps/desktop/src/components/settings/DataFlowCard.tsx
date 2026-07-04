@@ -26,7 +26,7 @@ export function DataFlowCard({ model, workspace }: { model: string | null; works
             </li>
             <li>Code execution — the Python kernel and Jupyter run locally; datasets are processed here, never uploaded in bulk.</li>
             <li>Session history and provenance records, in the app's private data folder.</li>
-            <li>Provider keys and login tokens — an app-private file readable only by your account; never written to the workspace, provenance, logs, or exports.</li>
+            <li>Provider keys and login tokens — kept at rest in your OS keychain; never written to the workspace, provenance, logs, or exports.</li>
           </ul>
         </div>
         <div>

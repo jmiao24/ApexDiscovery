@@ -57,6 +57,22 @@ export async function listNotebooks(): Promise<NotebookEntry[]> {
   return invoke<NotebookEntry[]>("list_notebooks");
 }
 
+export interface DirEntry {
+  path: string;
+  name: string;
+  isDir: boolean;
+  size: number;
+  /** Seconds since the epoch. */
+  modified: number;
+}
+
+/** List one workspace directory (non-recursive; "" = root). Desktop only. */
+export async function listDir(rel: string): Promise<DirEntry[]> {
+  if (!isTauri) return [];
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<DirEntry[]>("list_dir", { rel });
+}
+
 /** Write text to a workspace-relative path (desktop only; throws in browser). */
 export async function writeWorkspaceFile(path: string, content: string): Promise<void> {
   if (!isTauri) throw new Error("not running in the desktop app");

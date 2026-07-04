@@ -3,8 +3,13 @@ import { ArrowLeft, History, Loader2, NotebookPen, Play, Plus, RefreshCw, Trash2
 import type { NotebookCell } from "@ai4s/shared";
 import { readArtifact, writeWorkspaceFile } from "@/lib/artifactFile";
 import { ProvenancePanel } from "@/components/inspector/ProvenancePanel";
-import { parseIpynb, serializeIpynb } from "@/lib/notebook-file";
-import { formatExecResult, kernelExecute } from "@/lib/kernel";
+import { parseIpynb, serializeIpynb, notebookLanguage } from "@/lib/notebook-file";
+import {
+  formatExecResult,
+  isCodeLanguage,
+  kernelExecute,
+  type KernelLanguage,
+} from "@/lib/kernel";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 
@@ -25,6 +30,7 @@ export function NotebookEditor({
   onClose?: () => void;
 }) {
   const [cells, setCells] = useState<NotebookCell[] | null>(null);
+  const [language, setLanguage] = useState<KernelLanguage>("python");
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState<number | null>(null);
   const [saved, setSaved] = useState(true);
@@ -41,6 +47,7 @@ export function NotebookEditor({
       const f = await readArtifact(path);
       if (!f || f.encoding !== "utf8") throw new Error("could not read the notebook");
       rawRef.current = f.data;
+      setLanguage(notebookLanguage(f.data));
       setCells(parseIpynb(f.data));
       setSaved(true);
     } catch (e) {
@@ -62,6 +69,7 @@ export function NotebookEditor({
           const f = await readArtifact(path);
           if (f && f.encoding === "utf8" && rawRef.current !== null && f.data !== rawRef.current) {
             rawRef.current = f.data;
+            setLanguage(notebookLanguage(f.data));
             setCells(parseIpynb(f.data));
           }
         } catch {
@@ -103,7 +111,8 @@ export function NotebookEditor({
     setRunning(cell.index);
     update(cell.index, { output: "running…" });
     try {
-      const res = await kernelExecute(cell.code);
+      const lang = isCodeLanguage(cell.language) ? cell.language : language;
+      const res = await kernelExecute(cell.code, lang);
       update(cell.index, {
         output: res ? formatExecResult(res) : "(local kernel available only in the desktop app)",
       });
@@ -117,7 +126,7 @@ export function NotebookEditor({
   const addCell = () => {
     setCells((c) => {
       const next = (c?.[c.length - 1]?.index ?? 0) + 1;
-      return [...(c ?? []), { index: next, language: "python", code: "" }];
+      return [...(c ?? []), { index: next, language, code: "" }];
     });
     setSaved(false);
   };
@@ -144,6 +153,9 @@ export function NotebookEditor({
         )}
         <NotebookPen size={14} className="shrink-0 text-muted" />
         <h1 className="truncate text-[13px] font-medium text-text">{path}</h1>
+        <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+          {language === "r" ? "R" : "Python"}
+        </span>
         <span className="shrink-0 text-xs text-muted">{saved ? "Saved" : "Unsaved"}</span>
         <div className="flex-1" />
         <span className="hidden shrink-0 text-xs text-muted xl:inline">
@@ -175,7 +187,7 @@ export function NotebookEditor({
 
       {showHistory && (
         <div className="flex-1 overflow-y-auto bg-surface-2">
-          <ProvenancePanel path={path} language="python" />
+          <ProvenancePanel path={path} language={language} />
         </div>
       )}
       <div className={cn("flex-1 overflow-y-auto", showHistory && "hidden")}>
@@ -191,7 +203,7 @@ export function NotebookEditor({
               <div className="mb-1 flex items-center gap-2 text-xs text-muted">
                 <span className="font-mono">[{cell.index}]</span>
                 <span>{cell.language}</span>
-                {cell.language === "python" && (
+                {isCodeLanguage(cell.language) && (
                   <button
                     className="hidden items-center gap-1 rounded px-1.5 py-0.5 text-xs hover:bg-surface-2 hover:text-text group-hover:flex"
                     aria-label={`Run cell ${cell.index}`}
@@ -222,7 +234,7 @@ export function NotebookEditor({
                 spellCheck={false}
                 className={cn(
                   "w-full resize-none rounded-input border border-border bg-surface p-3 font-mono text-[12.5px] leading-relaxed text-text outline-none focus:border-accent/50",
-                  cell.language !== "python" && "bg-surface-2 text-muted",
+                  !isCodeLanguage(cell.language) && "bg-surface-2 text-muted",
                 )}
                 aria-label={`Cell ${cell.index}`}
               />

@@ -37,6 +37,45 @@ fn server_meta_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(env_dir(app)?.join("server.json"))
 }
 
+/// Where we record the managed jupyter-lab's PID, so a later run can kill an
+/// orphan left by a crash/force-quit before rebinding the fixed port.
+fn pid_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(env_dir(app)?.join("jupyter.pid"))
+}
+
+/// Kill an orphaned jupyter-lab from a previous app run (a crash or force quit
+/// leaves one behind; two instances then fight over the fixed port). Best-effort
+/// and precise: never touches unrelated processes.
+fn kill_orphan_jupyter(app: &AppHandle) {
+    // Unix: match the env's own jupyter-lab path — scoped, proven, no PID reuse risk.
+    #[cfg(unix)]
+    if let Ok(dir) = env_dir(app) {
+        let pattern = format!("{}/bin/jupyter-lab", dir.to_string_lossy());
+        let _ = std::process::Command::new("pkill").args(["-f", &pattern]).output();
+        std::thread::sleep(std::time::Duration::from_millis(400));
+    }
+    // Windows: taskkill the recorded PID, filtered to python.exe so a recycled
+    // PID belonging to some other process is spared.
+    #[cfg(windows)]
+    if let Ok(path) = pid_path(app) {
+        if let Ok(pid) = std::fs::read_to_string(&path).map(|s| s.trim().to_string()) {
+            if !pid.is_empty() && pid.chars().all(|c| c.is_ascii_digit()) {
+                let _ = std::process::Command::new("taskkill")
+                    .args([
+                        "/FI",
+                        &format!("PID eq {pid}"),
+                        "/FI",
+                        "IMAGENAME eq python.exe",
+                        "/F",
+                        "/T",
+                    ])
+                    .output();
+                std::thread::sleep(std::time::Duration::from_millis(400));
+            }
+        }
+    }
+}
+
 fn bin(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
     let dir = env_dir(app)?;
     #[cfg(windows)]
@@ -179,14 +218,7 @@ pub fn start_jupyter(app: AppHandle, state: State<'_, JupyterState>) -> Result<J
     let meta = load_meta(&app).ok_or("Jupyter setup is incomplete (no server meta)")?;
     let workspace = workspace_dir(&app)?;
 
-    // Kill any orphaned jupyter-lab from a previous app run (a crash or force
-    // quit leaves one behind; two instances then fight over the fixed port).
-    #[cfg(unix)]
-    {
-        let pattern = format!("{}/bin/jupyter-lab", env_dir(&app)?.to_string_lossy());
-        let _ = std::process::Command::new("pkill").args(["-f", &pattern]).output();
-        std::thread::sleep(std::time::Duration::from_millis(400));
-    }
+    kill_orphan_jupyter(&app);
 
     let cmd = app
         .shell()
@@ -203,6 +235,10 @@ pub fn start_jupyter(app: AppHandle, state: State<'_, JupyterState>) -> Result<J
         .current_dir(workspace);
     let (mut rx, child) = cmd.spawn().map_err(|e| format!("failed to start jupyter: {e}"))?;
     tauri::async_runtime::spawn(async move { while rx.recv().await.is_some() {} });
+    // Record the PID so a future run can kill this process if it is orphaned.
+    if let Ok(path) = pid_path(&app) {
+        let _ = std::fs::write(path, child.pid().to_string());
+    }
     *state.child.lock().unwrap() = Some(child);
     *state.running.lock().unwrap() = true;
     Ok(status_of(&app, &state))

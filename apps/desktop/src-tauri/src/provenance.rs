@@ -44,7 +44,8 @@ pub struct ProvenanceRecord {
 }
 
 /// The environment a version was produced in — enough to reproduce: which
-/// Python, which OS/arch, which app build. Captured once per app run (cheap).
+/// Python, which OS/arch, which app build, and which installed packages.
+/// Captured once per app run (cheap).
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvInfo {
@@ -55,6 +56,70 @@ pub struct EnvInfo {
     pub platform: String,
     /// Open Science app version that recorded this.
     pub app: String,
+    /// Installed Python packages (pip freeze), content-addressed to a lockfile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub packages: Option<PackageSnapshot>,
+}
+
+/// A snapshot of the installed Python packages at record time. The full
+/// `name==version` list is stored once, content-addressed, at
+/// `.openscience/env/<hash>.txt`; records carry only the count + hash so the
+/// store stays small and identical environments dedupe to one lockfile.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageSnapshot {
+    /// Number of installed packages captured.
+    pub count: u32,
+    /// Short content hash; the lockfile is `.openscience/env/<hash>.txt`.
+    pub hash: String,
+}
+
+const ENV_DIR: &str = "env";
+
+/// Capture `pip freeze` once per app run — a per-write process spawn would slow
+/// every agent edit. Returns the raw `name==version` list.
+fn pip_freeze() -> Option<String> {
+    static CACHE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            let bin = crate::kernel::python_bin()?;
+            let out = std::process::Command::new(bin)
+                .args(["-m", "pip", "freeze"])
+                .output()
+                .ok()?;
+            if !out.status.success() {
+                return None;
+            }
+            let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if text.is_empty() {
+                None
+            } else {
+                Some(text)
+            }
+        })
+        .clone()
+}
+
+/// A short, deterministic content hash for lockfile addressing. DefaultHasher
+/// uses fixed keys, so the same freeze maps to the same file across runs.
+fn content_hash(text: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut h);
+    format!("{:016x}", h.finish())
+}
+
+/// Write `freeze` to a content-addressed lockfile (once) and return its snapshot.
+fn write_lockfile(root: &Path, freeze: &str) -> Result<PackageSnapshot, String> {
+    let count = freeze.lines().filter(|l| !l.trim().is_empty()).count() as u32;
+    let hash = content_hash(freeze);
+    let dir = root.join(STORE_DIR).join(ENV_DIR);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(format!("{hash}.txt"));
+    if !path.exists() {
+        std::fs::write(&path, freeze).map_err(|e| e.to_string())?;
+    }
+    Ok(PackageSnapshot { count, hash })
 }
 
 /// Detect the local Python version once per app run — `python -V` on every
@@ -76,11 +141,14 @@ fn python_version() -> Option<String> {
         .clone()
 }
 
-fn capture_env(app_version: String) -> EnvInfo {
+fn capture_env(root: &Path, app_version: String) -> EnvInfo {
+    // Package capture is best-effort: no pip / write failure just omits it.
+    let packages = pip_freeze().and_then(|f| write_lockfile(root, &f).ok());
     EnvInfo {
         python: python_version(),
         platform: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
         app: app_version,
+        packages,
     }
 }
 
@@ -209,13 +277,28 @@ pub fn record_provenance(
     log: Option<String>,
 ) -> Result<ProvenanceRecord, String> {
     let _guard = state.0.lock().map_err(|_| "provenance lock poisoned")?;
-    let env = capture_env(app.package_info().version.to_string());
-    append_record(&workspace_dir(&app)?, &path, &tool, session_id, model, content, log, Some(env))
+    let root = workspace_dir(&app)?;
+    let env = capture_env(&root, app.package_info().version.to_string());
+    append_record(&root, &path, &tool, session_id, model, content, log, Some(env))
 }
 
 #[tauri::command]
 pub fn list_provenance(app: AppHandle, path: String) -> Result<Vec<ProvenanceRecord>, String> {
     versions_for(&workspace_dir(&app)?, &path)
+}
+
+/// Read a content-addressed package lockfile (`.openscience/env/<hash>.txt`).
+/// `hash` is validated to hex so it cannot escape the env directory.
+#[tauri::command]
+pub fn read_env_lockfile(app: AppHandle, hash: String) -> Result<String, String> {
+    if hash.is_empty() || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("invalid lockfile id".into());
+    }
+    let path = workspace_dir(&app)?
+        .join(STORE_DIR)
+        .join(ENV_DIR)
+        .join(format!("{hash}.txt"));
+    std::fs::read_to_string(&path).map_err(|e| format!("lockfile unavailable: {e}"))
 }
 
 #[cfg(test)]
@@ -246,6 +329,7 @@ mod tests {
                 python: Some("3.12.4".into()),
                 platform: "macos-aarch64".into(),
                 app: "0.1.0".into(),
+                packages: Some(super::PackageSnapshot { count: 2, hash: "abc123".into() }),
             }),
         )
         .unwrap();
@@ -264,6 +348,31 @@ mod tests {
         assert_eq!(env.python.as_deref(), Some("3.12.4"));
         assert_eq!(env.platform, "macos-aarch64");
         assert_eq!(env.app, "0.1.0");
+        let pkgs = env.packages.as_ref().expect("packages recorded");
+        assert_eq!((pkgs.count, pkgs.hash.as_str()), (2, "abc123"));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn lockfile_is_content_addressed_and_deduped() {
+        use super::{content_hash, write_lockfile};
+        let root = temp_root("lockfile");
+        let freeze = "numpy==2.0.1\npandas==2.2.2\n\nscipy==1.14.0\n";
+        let s1 = write_lockfile(&root, freeze).unwrap();
+        // Blank lines are not counted as packages.
+        assert_eq!(s1.count, 3);
+        assert_eq!(s1.hash, content_hash(freeze)); // deterministic addressing
+        let lock = root.join(".openscience/env").join(format!("{}.txt", s1.hash));
+        assert_eq!(std::fs::read_to_string(&lock).unwrap(), freeze);
+
+        // Same environment -> same hash, no duplicate file rewrite.
+        let s2 = write_lockfile(&root, freeze).unwrap();
+        assert_eq!(s2.hash, s1.hash);
+        // A different environment -> a different lockfile.
+        let s3 = write_lockfile(&root, "numpy==2.0.1\n").unwrap();
+        assert_ne!(s3.hash, s1.hash);
+        assert_eq!(s3.count, 1);
 
         let _ = std::fs::remove_dir_all(root);
     }

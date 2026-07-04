@@ -16,13 +16,20 @@ const records: ProvenanceRecord[] = [
     content: "print(2)",
     model: "anthropic/claude",
     sessionId: "ses_1",
-    env: { python: "3.12.4", platform: "macos-aarch64", app: "0.1.0" },
+    env: {
+      python: "3.12.4",
+      platform: "macos-aarch64",
+      app: "0.1.0",
+      packages: { count: 3, hash: "deadbeef" },
+    },
   },
 ];
 
 const listProvenance = vi.fn();
+const readEnvLockfile = vi.fn();
 vi.mock("@/lib/provenance", () => ({
   listProvenance: (path: string) => listProvenance(path),
+  readEnvLockfile: (hash: string) => readEnvLockfile(hash),
 }));
 
 const renderPanel = () =>
@@ -37,7 +44,10 @@ const codeBlock = (text: string) => (_: string, el: Element | null) =>
   el?.tagName === "CODE" && el.textContent === text;
 
 describe("ProvenancePanel", () => {
-  beforeEach(() => listProvenance.mockReset());
+  beforeEach(() => {
+    listProvenance.mockReset();
+    readEnvLockfile.mockReset();
+  });
 
   it("lists versions newest first with the latest expanded", async () => {
     listProvenance.mockResolvedValue(records);
@@ -74,6 +84,20 @@ describe("ProvenancePanel", () => {
     expect(draft).toContain("Reproduce `fig/plot.py` (provenance v2)");
     expect(draft).toContain("Python 3.12.4");
     expect(draft).toContain("print(2)");
+    // The reproduce prompt references the captured package lockfile.
+    expect(draft).toContain("3 installed Python packages");
+    expect(draft).toContain(".openscience/env/deadbeef.txt");
+  });
+
+  it("reveals the captured package lockfile on demand", async () => {
+    listProvenance.mockResolvedValue(records);
+    readEnvLockfile.mockResolvedValue("numpy==2.0.1\npandas==2.2.2\nscipy==1.14.0");
+    renderPanel();
+
+    await userEvent.click(await screen.findByRole("button", { name: /3 packages/ }));
+    expect(readEnvLockfile).toHaveBeenCalledWith("deadbeef");
+    expect(await screen.findByText(/numpy==2.0.1/)).toBeInTheDocument();
+    expect(screen.getByText(/pip freeze · 3 packages/)).toBeInTheDocument();
   });
 
   it("explains the empty state", async () => {

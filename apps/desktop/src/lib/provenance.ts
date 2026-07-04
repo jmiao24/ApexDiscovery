@@ -71,3 +71,14 @@ export async function listProvenance(path: string): Promise<ProvenanceRecord[]> 
     return [];
   }
 }
+
+/** The captured `pip freeze` list for a package snapshot hash (null if unreadable). */
+export async function readEnvLockfile(hash: string): Promise<string | null> {
+  if (!isTauri) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<string>("read_env_lockfile", { hash });
+  } catch {
+    return null;
+  }
+}

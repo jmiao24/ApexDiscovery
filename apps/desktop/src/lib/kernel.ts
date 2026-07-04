@@ -9,11 +9,25 @@ export interface ExecResult {
   error: string | null;
 }
 
-/** Run one cell in the persistent local kernel. Returns null outside the desktop app. */
-export async function kernelExecute(code: string): Promise<ExecResult | null> {
+/** Languages with a local kernel. A notebook runs one of these. */
+export type KernelLanguage = "python" | "r";
+
+/** True for cell languages that run on a local kernel (vs. markdown/raw). */
+export function isCodeLanguage(lang: string): lang is KernelLanguage {
+  return lang === "python" || lang === "r";
+}
+
+/**
+ * Run one cell in the persistent local kernel for `language` (default python).
+ * Returns null outside the desktop app.
+ */
+export async function kernelExecute(
+  code: string,
+  language: KernelLanguage = "python",
+): Promise<ExecResult | null> {
   if (!isTauri) return null;
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<ExecResult>("kernel_execute", { code });
+  return invoke<ExecResult>("kernel_execute", { code, language });
 }
 
 /** Render a kernel result as the text shown under a notebook cell. */

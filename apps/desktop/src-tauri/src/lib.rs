@@ -6,6 +6,7 @@ mod examples;
 mod hpc;
 mod jupyter;
 mod kernel;
+mod keychain;
 mod opencode_config;
 mod preview_server;
 mod provenance;
@@ -59,9 +60,11 @@ pub fn run() {
             artifact_file::add_files_to_workspace,
             artifact_file::add_text_to_workspace,
             artifact_file::list_notebooks,
+            artifact_file::list_dir,
             artifact_file::write_workspace_file,
             provenance::record_provenance,
             provenance::list_provenance,
+            provenance::read_env_lockfile,
             science_mcp::science_mcp_python,
             science_mcp::setup_science_mcp,
             examples::install_example,
@@ -78,11 +81,17 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building AI4S Workbench")
         .run(|app, event| {
-            // Ensure the bundled OpenCode is killed when the app exits.
-            if let tauri::RunEvent::ExitRequested { .. } = event {
+            // Clean up on exit. macOS Cmd+Q / Quit terminates via RunEvent::Exit
+            // (ExitRequested is not always delivered), so handle BOTH — otherwise
+            // the OpenCode sidecar orphans and credentials never move to the
+            // keychain. The cleanup is idempotent, so running on both is safe.
+            if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
                 runtime::kill_child(&app.state::<RuntimeState>());
                 kernel::kill_kernel(&app.state::<KernelState>());
                 jupyter::kill_jupyter(&app.state::<JupyterState>());
+                // Move provider credentials back to the OS keychain at rest,
+                // now that OpenCode (which owns auth.json) has been stopped.
+                keychain::persist(app);
             }
         });
 }

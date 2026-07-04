@@ -18,6 +18,7 @@ const EXT_KIND: Record<string, ArtifactKind> = {
   pdf: "report", tex: "report", md: "report", docx: "report", pptx: "report",
   csv: "table", tsv: "table", parquet: "table", xlsx: "table",
   mol: "data", sdf: "data", smi: "data", smiles: "data",
+  bed: "data", bedgraph: "data", bdg: "data", gff: "data", gff3: "data", gtf: "data", vcf: "data",
 };
 
 const EXT_LANG: Record<string, string> = {
@@ -43,6 +44,7 @@ const REF_EXTS = [
   "csv", "tsv", "md", "tex", "json", "py", "ipynb", "r",
   "docx", "xlsx", "pptx",
   "mol", "mol2", "sdf", "smi", "smiles", "cif", "mcif", "mmcif", "pdb", "pqr", "xyz", "cube",
+  "bed", "bedgraph", "bdg", "gff", "gff3", "gtf", "vcf",
 ];
 const REF_RE = new RegExp(`[\\w./-]+\\.(?:${REF_EXTS.join("|")})\\b`, "gi");
 
@@ -73,6 +75,8 @@ const MIME: Record<string, string> = {
   csv: "text/csv", tsv: "text/tab-separated-values",
   md: "text/markdown", tex: "text/x-tex", json: "application/json",
   py: "text/x-python", r: "text/x-r", txt: "text/plain",
+  bed: "text/plain", bedgraph: "text/plain", bdg: "text/plain",
+  gff: "text/plain", gff3: "text/plain", gtf: "text/plain", vcf: "text/plain",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -96,7 +100,8 @@ export type PreviewKind =
   | "docx"
   | "xlsx"
   | "pptx"
-  | "molecule";
+  | "molecule"
+  | "genome";
 
 /** How a file should be previewed, from its extension. This is the previewer
  *  registry: native webview viewers first (pdf/html/image via the local file
@@ -111,6 +116,7 @@ export function previewKind(ext: string): PreviewKind {
   if (e === "docx" || e === "xlsx" || e === "pptx") return e;
   if (["mol", "mol2", "sdf", "smi", "smiles", "cif", "mcif", "mmcif", "pdb", "pqr", "xyz", "cube"].includes(e))
     return "molecule";
+  if (["bed", "bedgraph", "bdg", "gff", "gff3", "gtf", "vcf"].includes(e)) return "genome";
   return "text";
 }
 

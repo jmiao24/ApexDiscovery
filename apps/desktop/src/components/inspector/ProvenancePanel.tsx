@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2, MessageSquare, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, MessageSquare, Package, RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { ProvenanceRecord } from "@ai4s/shared";
-import { listProvenance } from "@/lib/provenance";
+import { listProvenance, readEnvLockfile } from "@/lib/provenance";
 import { useUiStore } from "@/lib/store";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { cn } from "@/lib/cn";
 
 /** The prompt the Reproduce action drafts — prefilled, reviewed, user-sent. */
 export function reproducePrompt(r: ProvenanceRecord): string {
+  const pkgs = r.env?.packages;
+  const pkgNote = pkgs
+    ? ` The environment had ${pkgs.count} installed Python packages, listed in \`.openscience/env/${pkgs.hash}.txt\` — if the regenerated result differs, install matching versions from that lockfile and re-run.`
+    : "";
   const env = r.env
-    ? ` It was produced with${r.env.python ? ` Python ${r.env.python} on` : ""} ${r.env.platform}.`
+    ? ` It was produced with${r.env.python ? ` Python ${r.env.python} on` : ""} ${r.env.platform}.${pkgNote}`
     : "";
   const content = r.content ?? "";
   // A fence longer than any backtick run in the content, so embedded ``` in
@@ -44,8 +48,22 @@ function longestBacktickRun(text: string): number {
 export function ProvenancePanel({ path, language }: { path: string; language?: string }) {
   const [records, setRecords] = useState<ProvenanceRecord[] | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
+  // The package lockfile currently shown, keyed by its content hash.
+  const [lockfile, setLockfile] = useState<{ hash: string; text: string | null } | null>(null);
   const navigate = useNavigate();
   const setComposerDraft = useUiStore((s) => s.setComposerDraft);
+
+  // Toggle the pip-freeze lockfile for a snapshot hash; loads it lazily on open.
+  const toggleLockfile = (hash: string) => {
+    if (lockfile?.hash === hash) {
+      setLockfile(null);
+      return;
+    }
+    setLockfile({ hash, text: null });
+    void readEnvLockfile(hash).then((text) =>
+      setLockfile((cur) => (cur?.hash === hash ? { hash, text: text ?? "(lockfile unavailable)" } : cur)),
+    );
+  };
 
   // Draft the reproduce prompt into the conversation the version came from —
   // the user reviews and sends it (human in the loop, never auto-run).
@@ -124,6 +142,19 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                         .join(" · ")}
                     </span>
                   )}
+                  {r.env?.packages && (
+                    <button
+                      className={cn(
+                        "flex items-center gap-1 rounded px-1.5 py-0.5 font-mono hover:bg-surface-2 hover:text-text",
+                        lockfile?.hash === r.env.packages.hash && "bg-surface-2 text-text",
+                      )}
+                      onClick={() => toggleLockfile(r.env!.packages!.hash)}
+                      title="View the captured pip freeze lockfile for this version"
+                      aria-pressed={lockfile?.hash === r.env.packages.hash}
+                    >
+                      <Package size={11} /> {r.env.packages.count} packages
+                    </button>
+                  )}
                   {r.log && <span className="truncate">{r.log}</span>}
                   <span className="flex-1" />
                   {r.content && (
@@ -145,6 +176,22 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                     </button>
                   )}
                 </div>
+                {r.env?.packages && lockfile?.hash === r.env.packages.hash && (
+                  <div className="rounded-input border border-border bg-surface-2">
+                    <div className="border-b border-border px-2.5 py-1 text-[11px] text-muted">
+                      pip freeze · {r.env.packages.count} packages
+                    </div>
+                    {lockfile.text === null ? (
+                      <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-muted">
+                        <Loader2 size={12} className="animate-spin" /> Loading…
+                      </div>
+                    ) : (
+                      <pre className="max-h-48 overflow-auto px-2.5 py-2 font-mono text-[11px] leading-relaxed text-text">
+                        {lockfile.text}
+                      </pre>
+                    )}
+                  </div>
+                )}
                 {r.content ? (
                   <CodeViewer code={r.content} language={language} />
                 ) : (

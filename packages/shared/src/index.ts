@@ -301,6 +301,15 @@ export interface ProvenanceEnv {
   platform: string;
   /** Open Science app version that recorded it. */
   app: string;
+  /** Installed Python packages (pip freeze), content-addressed to a lockfile. */
+  packages?: PackageSnapshot;
+}
+
+export interface PackageSnapshot {
+  /** Number of installed packages captured. */
+  count: number;
+  /** Short content hash; the lockfile is `.openscience/env/<hash>.txt`. */
+  hash: string;
 }
 
 export interface Citation {

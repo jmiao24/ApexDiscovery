@@ -1,26 +1,36 @@
-// A local Python kernel for the notebook. Spawns `kernel_bridge.py` (see
-// runtime/kernel/) as a persistent child and talks its line-delimited JSON
-// protocol synchronously: write one request, read one response. Fully local —
-// uses whatever Python is installed, no network, no model key.
+// Local notebook kernels. One persistent child per language ("python" | "r"),
+// each holding shared state across cells like a Jupyter kernel. Fully local —
+// uses whatever Python/R is installed, no network, no model key.
+//
+// Wire protocol (one request, one response line):
+//   - Python: write {"id","code"} JSON; the bridge replies with a JSON line.
+//   - R:      write the cell code to the kernel's code file, then send "<id>";
+//             the bridge reads that file and replies with the SAME JSON shape.
+// The read side is therefore identical for both languages.
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
-// The bridge script ships in-tree; embed it and materialize it on first use so it
-// is always present next to the app regardless of packaging.
-const BRIDGE_SRC: &str = include_str!("../../../../runtime/kernel/kernel_bridge.py");
+// The bridge scripts ship in-tree; embed them and materialize on first use so
+// they are always present next to the app regardless of packaging.
+const PY_BRIDGE_SRC: &str = include_str!("../../../../runtime/kernel/kernel_bridge.py");
+const R_BRIDGE_SRC: &str = include_str!("../../../../runtime/kernel/kernel_bridge.R");
 
 struct Kernel {
     child: Child,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
     seq: u64,
+    /// For the R kernel: the file the host writes each cell's code into. None for Python.
+    code_file: Option<PathBuf>,
 }
 
+/// Persistent kernels keyed by language.
 #[derive(Default)]
-pub struct KernelState(Mutex<Option<Kernel>>);
+pub struct KernelState(Mutex<HashMap<String, Kernel>>);
 
 #[derive(serde::Serialize)]
 pub struct ExecResult {
@@ -30,7 +40,16 @@ pub struct ExecResult {
     error: Option<String>,
 }
 
-fn bridge_path(app: &AppHandle) -> Result<PathBuf, String> {
+/// Normalize a requested language to a supported kernel id. Empty -> python.
+fn normalize_lang(language: &str) -> Result<&'static str, String> {
+    match language.trim().to_ascii_lowercase().as_str() {
+        "" | "python" | "python3" => Ok("python"),
+        "r" => Ok("r"),
+        other => Err(format!("unsupported kernel language: {other}")),
+    }
+}
+
+fn kernel_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
@@ -38,9 +57,13 @@ fn bridge_path(app: &AppHandle) -> Result<PathBuf, String> {
         .join("runtime")
         .join("kernel");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join("kernel_bridge.py");
-    // Rewrite each start so an app update ships a fresh bridge.
-    std::fs::write(&path, BRIDGE_SRC).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+// Rewrite the bridge each start so an app update ships a fresh copy.
+fn materialize(app: &AppHandle, name: &str, src: &str) -> Result<PathBuf, String> {
+    let path = kernel_dir(app)?.join(name);
+    std::fs::write(&path, src).map_err(|e| e.to_string())?;
     Ok(path)
 }
 
@@ -78,46 +101,107 @@ fn python_candidates() -> Vec<String> {
     c
 }
 
+/// Common Rscript locations (same minimal-PATH problem as Python).
+#[cfg(windows)]
+fn rscript_candidates() -> Vec<String> {
+    let mut c = vec!["Rscript".to_string(), "Rscript.exe".to_string()];
+    for base in [
+        "C:\\Program Files\\R",
+        "C:\\Program Files (x86)\\R",
+    ] {
+        // Newest install layout: <base>\R-x.y.z\bin\Rscript.exe — probed via PATH first,
+        // this literal fallback covers the common single-version install.
+        c.push(format!("{base}\\bin\\Rscript.exe"));
+    }
+    c
+}
+
+#[cfg(not(windows))]
+fn rscript_candidates() -> Vec<String> {
+    let mut c = vec!["Rscript".to_string()];
+    if let Ok(home) = std::env::var("HOME") {
+        c.push(format!("{home}/anaconda3/bin/Rscript"));
+        c.push(format!("{home}/miniconda3/bin/Rscript"));
+    }
+    c.extend(
+        [
+            "/opt/homebrew/bin/Rscript",
+            "/usr/local/bin/Rscript",
+            "/opt/anaconda3/bin/Rscript",
+            "/usr/bin/Rscript",
+            // macOS R.framework install (r-project.org .pkg)
+            "/Library/Frameworks/R.framework/Resources/bin/Rscript",
+        ]
+        .map(String::from),
+    );
+    c
+}
+
 pub(crate) fn python_bin() -> Option<String> {
     python_candidates()
         .into_iter()
         .find(|bin| Command::new(bin).arg("--version").output().is_ok())
 }
 
-fn spawn_kernel(app: &AppHandle) -> Result<Kernel, String> {
-    let script = bridge_path(app)?;
-    let python = python_bin()
-        .ok_or("no Python found — install Python 3 to use the local notebook kernel")?;
+pub(crate) fn rscript_bin() -> Option<String> {
+    rscript_candidates()
+        .into_iter()
+        .find(|bin| Command::new(bin).arg("--version").output().is_ok())
+}
+
+fn spawn_kernel(app: &AppHandle, lang: &str) -> Result<Kernel, String> {
     // Run in the agent's workspace so notebook code sees the same files it produced.
     let workspace = crate::runtime::workspace_dir(app)?;
-    let mut child = Command::new(python)
-        .arg(script)
+    let (mut cmd, code_file) = match lang {
+        "python" => {
+            let script = materialize(app, "kernel_bridge.py", PY_BRIDGE_SRC)?;
+            let python = python_bin().ok_or(
+                "no Python found — install Python 3 to run Python notebooks",
+            )?;
+            let mut c = Command::new(python);
+            c.arg(script);
+            (c, None)
+        }
+        "r" => {
+            let script = materialize(app, "kernel_bridge.R", R_BRIDGE_SRC)?;
+            let rscript = rscript_bin().ok_or(
+                "no R found — install R (r-project.org) to run R notebooks",
+            )?;
+            let code_file = kernel_dir(app)?.join("r_cell.R");
+            std::fs::write(&code_file, "").map_err(|e| e.to_string())?;
+            let mut c = Command::new(rscript);
+            c.arg(script).arg(&code_file);
+            (c, Some(code_file))
+        }
+        _ => return Err(format!("unsupported kernel language: {lang}")),
+    };
+    let mut child = cmd
         .current_dir(workspace)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| format!("failed to start Python kernel: {e}"))?;
+        .map_err(|e| format!("failed to start {lang} kernel: {e}"))?;
     let stdin = child.stdin.take().ok_or("no kernel stdin")?;
     let stdout = BufReader::new(child.stdout.take().ok_or("no kernel stdout")?);
-    Ok(Kernel { child, stdin, stdout, seq: 0 })
+    Ok(Kernel { child, stdin, stdout, seq: 0, code_file })
 }
 
-/// Execute one cell in the persistent local kernel (starting it on first use).
-#[tauri::command]
-pub fn kernel_execute(
-    app: AppHandle,
-    state: State<'_, KernelState>,
-    code: String,
-) -> Result<ExecResult, String> {
-    let mut guard = state.0.lock().unwrap();
-    if guard.is_none() {
-        *guard = Some(spawn_kernel(&app)?);
-    }
-    let k = guard.as_mut().unwrap();
+/// Send one request to a running kernel and read its single JSON response line.
+fn exec_on(k: &mut Kernel, code: &str) -> Result<ExecResult, String> {
     k.seq += 1;
-    let req = serde_json::json!({ "id": k.seq.to_string(), "code": code });
-    writeln!(k.stdin, "{req}").map_err(|e| format!("kernel write failed: {e}"))?;
+    match &k.code_file {
+        // R: stage the code in the kernel's file, then poke it with the id.
+        Some(path) => {
+            std::fs::write(path, code).map_err(|e| format!("kernel write failed: {e}"))?;
+            writeln!(k.stdin, "{}", k.seq).map_err(|e| format!("kernel write failed: {e}"))?;
+        }
+        // Python: send the code inline as JSON.
+        None => {
+            let req = serde_json::json!({ "id": k.seq.to_string(), "code": code });
+            writeln!(k.stdin, "{req}").map_err(|e| format!("kernel write failed: {e}"))?;
+        }
+    }
     k.stdin.flush().map_err(|e| format!("kernel flush failed: {e}"))?;
 
     let mut line = String::new();
@@ -126,8 +210,6 @@ pub fn kernel_execute(
         .read_line(&mut line)
         .map_err(|e| format!("kernel read failed: {e}"))?;
     if n == 0 {
-        // The child died; drop it so the next call respawns a clean kernel.
-        *guard = None;
         return Err("kernel exited unexpectedly".into());
     }
     let v: serde_json::Value =
@@ -140,16 +222,54 @@ pub fn kernel_execute(
     })
 }
 
-/// Restart the kernel (clears all state).
+/// Execute one cell in the persistent local kernel for `language` (default python),
+/// starting it on first use.
 #[tauri::command]
-pub fn kernel_reset(state: State<'_, KernelState>) {
-    if let Some(mut k) = state.0.lock().unwrap().take() {
-        let _ = k.child.kill();
+pub fn kernel_execute(
+    app: AppHandle,
+    state: State<'_, KernelState>,
+    code: String,
+    language: Option<String>,
+) -> Result<ExecResult, String> {
+    let lang = normalize_lang(language.as_deref().unwrap_or("python"))?;
+    let mut guard = state.0.lock().unwrap();
+    if !guard.contains_key(lang) {
+        let k = spawn_kernel(&app, lang)?;
+        guard.insert(lang.to_string(), k);
+    }
+    let k = guard.get_mut(lang).unwrap();
+    match exec_on(k, &code) {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            // The child likely died; drop it so the next call respawns cleanly.
+            guard.remove(lang);
+            Err(e)
+        }
+    }
+}
+
+/// Restart a kernel (clears its state). Omit `language` to reset all kernels.
+#[tauri::command]
+pub fn kernel_reset(state: State<'_, KernelState>, language: Option<String>) {
+    let mut guard = state.0.lock().unwrap();
+    match language.as_deref() {
+        Some(l) => {
+            if let Ok(lang) = normalize_lang(l) {
+                if let Some(mut k) = guard.remove(lang) {
+                    let _ = k.child.kill();
+                }
+            }
+        }
+        None => {
+            for (_, mut k) in guard.drain() {
+                let _ = k.child.kill();
+            }
+        }
     }
 }
 
 pub fn kill_kernel(state: &KernelState) {
-    if let Some(mut k) = state.0.lock().unwrap().take() {
+    for (_, mut k) in state.0.lock().unwrap().drain() {
         let _ = k.child.kill();
     }
 }
@@ -158,10 +278,24 @@ pub fn kill_kernel(state: &KernelState) {
 mod tests {
     use super::*;
 
-    // Drives the real in-tree bridge with the same write-line / read-line protocol
+    fn read(stdout: &mut BufReader<ChildStdout>) -> serde_json::Value {
+        let mut line = String::new();
+        stdout.read_line(&mut line).unwrap();
+        serde_json::from_str(line.trim()).unwrap()
+    }
+
+    #[test]
+    fn normalizes_languages() {
+        assert_eq!(normalize_lang("").unwrap(), "python");
+        assert_eq!(normalize_lang("Python3").unwrap(), "python");
+        assert_eq!(normalize_lang("R").unwrap(), "r");
+        assert!(normalize_lang("julia").is_err());
+    }
+
+    // Drives the real in-tree Python bridge with the same JSON protocol
     // kernel_execute uses, proving the Rust <-> Python round trip and shared state.
     #[test]
-    fn round_trips_and_keeps_state() {
+    fn python_round_trips_and_keeps_state() {
         let Some(python) = python_bin() else {
             eprintln!("skipping: no python found");
             return;
@@ -176,12 +310,6 @@ mod tests {
             .expect("spawn bridge");
         let mut stdin = child.stdin.take().unwrap();
         let mut stdout = BufReader::new(child.stdout.take().unwrap());
-
-        let read = |stdout: &mut BufReader<ChildStdout>| -> serde_json::Value {
-            let mut line = String::new();
-            stdout.read_line(&mut line).unwrap();
-            serde_json::from_str(line.trim()).unwrap()
-        };
 
         writeln!(stdin, "{}", serde_json::json!({"id":"1","code":"a=41\na+1"})).unwrap();
         stdin.flush().unwrap();
@@ -203,5 +331,60 @@ mod tests {
         assert!(r3["error"].as_str().unwrap().contains("ZeroDivisionError"));
 
         let _ = child.kill();
+    }
+
+    // Same round trip against the real R bridge (skipped if R is not installed):
+    // shared state across cells, last-expression value, and error reporting.
+    #[test]
+    fn r_round_trips_and_keeps_state() {
+        let Some(rscript) = rscript_bin() else {
+            eprintln!("skipping: no Rscript found");
+            return;
+        };
+        let script = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../runtime/kernel/kernel_bridge.R");
+        let dir = std::env::temp_dir().join("os_r_kernel_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let code_file = dir.join("r_cell.R");
+        std::fs::write(&code_file, "").unwrap();
+        let mut child = Command::new(rscript)
+            .arg(script)
+            .arg(&code_file)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn R bridge");
+        let mut stdin = child.stdin.take().unwrap();
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
+        let mut poke = |code: &str, id: &str| {
+            std::fs::write(&code_file, code).unwrap();
+            writeln!(stdin, "{id}").unwrap();
+            stdin.flush().unwrap();
+        };
+
+        poke("a <- 41\na + 1", "1");
+        let r1 = read(&mut stdout);
+        assert_eq!(r1["ok"], true);
+        assert_eq!(r1["result"], "[1] 42");
+
+        // `a` persists into the next cell.
+        poke("a", "2");
+        let r2 = read(&mut stdout);
+        assert_eq!(r2["result"], "[1] 41");
+
+        // stdout is captured; the final visible value is the result.
+        poke("cat('hi\\n')\n2 + 2", "3");
+        let r3 = read(&mut stdout);
+        assert_eq!(r3["stdout"].as_str().unwrap().trim(), "hi");
+        assert_eq!(r3["result"], "[1] 4");
+
+        // Errors -> ok:false with a message.
+        poke("stop('boom')", "4");
+        let r4 = read(&mut stdout);
+        assert_eq!(r4["ok"], false);
+        assert!(r4["error"].as_str().unwrap().contains("boom"));
+
+        let _ = child.kill();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Files, NotebookPen, Plus, Settings, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Files, FolderTree, NotebookPen, Plus, Settings, SlidersHorizontal, Trash2 } from "lucide-react";
 import type { Project } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 import { isTauri } from "@/lib/tauri";
@@ -65,6 +65,7 @@ export function Sidebar({ project }: { project: Project }) {
         <NavRow icon={<Plus size={16} />} label="New" onClick={startNew} />
         <NavRow icon={<SlidersHorizontal size={16} />} label="Customize" onClick={() => navigate("/settings")} />
         <NavRow icon={<NotebookPen size={16} />} label="Notebooks" onClick={() => navigate("/notebooks")} />
+        <NavRow icon={<FolderTree size={16} />} label="Files" onClick={() => navigate("/files")} />
         <NavRow icon={<Files size={16} />} label="Skills" onClick={() => navigate("/skills")} />
       </nav>
 

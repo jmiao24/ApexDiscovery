@@ -62,10 +62,14 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
   device; the app can state plainly what (if anything) is sent to a model
   provider. Persistent kernels keep variables/dataframes/models in memory to
   avoid reloads.
-- **Status.** Shipped for local Python kernel + Jupyter sidecar (isolated env,
-  workspace-scoped); Settings now carries a plain-language "Privacy & data
-  flow" card stating what stays local vs. what the model provider sees. Gap: R
-  kernel.
+- **Status.** Shipped for local Python **and R** kernels + Jupyter sidecar
+  (isolated env, workspace-scoped). Each notebook runs one persistent local
+  kernel keyed by its kernelspec language; R uses a base-R-only bridge (no
+  IRkernel/jsonlite needed), so R notebooks run cell-by-cell with shared state,
+  last-expression values, stdout/warnings, and error reporting — against any
+  installed R, offline. New-notebook menu offers Python or R. Settings carries a
+  plain-language "Privacy & data flow" card stating what stays local vs. what the
+  model provider sees.
 
 ### P0-3 · Provenance / reproducibility for every artifact
 
@@ -84,7 +88,12 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
   History panel reveals per-version data + a link back to the originating
   conversation, and a per-version **Reproduce** action drafts a prompt (never
   auto-sent) that re-runs the recorded code and reports whether the regenerated
-  file matches. Gap: package-level environment capture (pip freeze / lockfile).
+  file matches. Package-level capture is shipped too: each record captures
+  `pip freeze` (once per app run) into a content-addressed lockfile
+  `.openscience/env/<hash>.txt` (identical environments dedupe to one file);
+  the record carries only `{count, hash}`, the History panel shows an "N
+  packages" chip that reveals the full list on click, and the Reproduce prompt
+  points the agent at the lockfile to reinstall matching versions.
 
 ### P0-4 · Reviewer agent — traceable claims, not "no hallucinations"
 
@@ -156,8 +165,13 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
   library output.
 - **Acceptance.** PDF, tables, and matplotlib/plotly render natively without
   export; at least one domain renderer (protein *or* chemical structure) ships.
-- **Status.** File previews (pdf/html/docx/xlsx/pptx) + figure artifacts exist.
-  Gap: domain renderers (structure/track viewers).
+- **Status.** Shipped. File previews (pdf/html/docx/xlsx/pptx) + figure
+  artifacts, plus TWO native domain renderers: an interactive 3D structure
+  viewer (3Dmol.js: cif/pdb/mol/mol2/sdf/xyz/pqr/cube + SMILES) and a native
+  genome-track viewer (BED/bedGraph/GFF3/GTF/VCF) — features on a base-pair
+  axis with drag-to-pan / scroll-to-zoom, row-packed so overlaps stay visible,
+  a contig selector, and colors from the app's series palette (theme-aware),
+  all offline from the file alone (no reference genome, no service).
 
 ### P1-5 · Interaction & visualization craft (the app must feel premium)
 
@@ -203,8 +217,13 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
   first-launch works without CLI knowledge.
 - **Acceptance.** A non-technical user installs and reaches a working first
   session on both macOS and Windows via a signed installer.
-- **Status.** macOS installer shipped; Jupyter/uv sidecars bundled. Gap: Windows
-  installer parity (NSIS `.exe` / `.msi`).
+- **Status.** macOS installer shipped; Jupyter/uv sidecars bundled. Windows
+  build pipeline in place (CI `build.yml` matrix produces NSIS `.exe` / `.msi`;
+  both sidecar fetch scripts emit the `*-x86_64-pc-windows-msvc.exe` binaries)
+  and the cross-platform code paths audited — fixed a Windows-only orphaned-
+  jupyter cleanup gap (was Unix-only, would wedge the fixed port). Gap (host-
+  bound): producing + code-signing the installer and verifying a real Windows
+  first-run require a Windows machine/CI — cannot be done on the macOS dev host.
 
 ---
 
@@ -221,7 +240,11 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 - **Acceptance.** Editing/agent-editing one cell does not force a full rerun;
   variables persist across cells and turns.
 - **Status.** Persistent kernel + per-cell run + reload + session↔notebook chips
-  shipped. Gap: multi-file/"IDE for larger projects" ergonomics.
+  shipped. Multi-file handling shipped: a native workspace **Files** explorer
+  (sidebar) browses the whole project tree — folders navigable via a breadcrumb,
+  type-aware icons + sizes — and opens ANY file in the native viewers (figures,
+  tables, PDF, molecule/genome renderers, runnable notebooks), not just the
+  files the agent happened to mention.
 
 ### P2-2 · HPC / SSH / Slurm / Modal compute management
 
@@ -250,10 +273,16 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 - **Acceptance.** A user can read, in the app, exactly what leaves the machine
   for their chosen provider; audit confirms keys/data never enter provenance,
   logs, or exports.
-- **Status.** Workspace sandbox + approval mode shipped; the plain-language
-  data-flow disclosure card is live in Settings. Gap (correction): provider
-  credentials currently live in an app-private `auth.json` (mode 600, managed
-  by OpenCode) — NOT the OS keychain; moving them to the keychain remains open.
+- **Status.** Shipped. Workspace sandbox + approval mode + the plain-language
+  data-flow disclosure card in Settings. Provider credentials now live at rest in
+  the **OS keychain** (macOS Keychain / Windows Credential Manager via the
+  `keyring` crate): the app hydrates OpenCode's `auth.json` from the keychain
+  before the sidecar starts and, on exit, writes it back and deletes the
+  plaintext file — so no credential file sits on disk between runs. Invariant:
+  credentials are never lost (the file is removed only after a successful
+  keychain write; any failure keeps it). Verified end to end (auth.json →
+  keychain on quit → byte-identical restore on next launch → OpenCode ready with
+  the configured model).
 
 ### P2-4 · Beta stability & guardrails
 
@@ -269,7 +298,11 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
   (the `question` pick-an-option tool and permission prompts) now render as an
   answerable card and reply through OpenCode's directory-scoped question/
   permission API — previously they hung the session with no way to respond.
-  Gap: dedicated first-run/file-open reliability pass.
+  Also fixed a real exit-cleanup bug: on macOS Cmd+Q/Quit the app terminates via
+  `RunEvent::Exit` (not `ExitRequested`), so the OpenCode sidecar (and the
+  kernel / Jupyter) used to orphan on every quit; cleanup now runs on both
+  events, so quitting reliably reaps the child processes. Gap: dedicated
+  first-run/file-open reliability pass.
 
 ---
 
@@ -278,18 +311,18 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 | # | Requirement | Tier | Status |
 |---|---|---|---|
 | P0-1 | Full workflow end to end (not chat) | P0 | One-click starters + bundled real-data example shipped |
-| P0-2 | Local data + local compute | P0 | Done incl. data-flow card (R kernel pending) |
-| P0-3 | Artifact provenance / reproducibility | P0 | Versioned records + env capture + History UI + Reproduce shipped |
+| P0-2 | Local data + local compute | P0 | Done: local Python **and R** kernels + data-flow card |
+| P0-3 | Artifact provenance / reproducibility | P0 | Versioned records + env & package-lockfile capture + History UI + Reproduce shipped |
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | Skill + tagged/dismissible findings shipped |
 | P1-1 | Multi-discipline from day one | P1 | Pluggable + non-bio climate example shipped |
 | P1-2 | Domain + literature connectors | P1 | Curated one-click connectors + BYO guide shipped |
-| P1-3 | Scientific renderers | P1 | Base previews done; domain viewers pending |
-| P1-4 | Windows + macOS installers | P1 | macOS done; Windows pending |
+| P1-3 | Scientific renderers | P1 | Base previews + 3D structure viewer + genome-track viewer shipped |
+| P1-4 | Windows + macOS installers | P1 | macOS done; Windows CI pipeline + code paths ready (signing/real-Windows verify is host-bound) |
 | P1-5 | Interaction & visualization craft | P1 | Chart design system + palette + command palette shipped |
-| P2-1 | Notebook + larger-project handling | P2 | Notebook done; project ergonomics pending |
+| P2-1 | Notebook + larger-project handling | P2 | Notebook + workspace Files explorer (browse tree, open any file) shipped |
 | P2-2 | HPC / SSH / Slurm / Modal | P2 | SSH+Slurm shipped (cluster card + skill); Modal pending |
-| P2-3 | Plain-language privacy posture | P2 | Disclosure shipped; keychain migration open |
-| P2-4 | Beta stability & guardrails | P2 | Base done; reliability pass pending |
+| P2-3 | Plain-language privacy posture | P2 | Disclosure + OS-keychain credential storage shipped |
+| P2-4 | Beta stability & guardrails | P2 | Interactive prompts + exit-cleanup (no orphaned sidecar) fixed; first-run pass pending |
 
 ## What to say (and not say)
 
