@@ -168,6 +168,71 @@ export async function detectTools(): Promise<ToolStatus[]> {
   return invoke<ToolStatus[]>("detect_tools");
 }
 
+export interface HpcCheck {
+  reachable: boolean;
+  slurm: string | null;
+  message: string | null;
+}
+
+export interface HpcJob {
+  id: string;
+  state: string;
+  time: string;
+  partition: string;
+  name: string;
+}
+
+/** Host aliases from the user's ~/.ssh/config (desktop only). */
+export async function listSshHosts(): Promise<string[]> {
+  if (!isTauri) return [];
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string[]>("list_ssh_hosts");
+}
+
+/** The configured cluster host, or null (desktop only). */
+export async function hpcConfig(): Promise<string | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string | null>("hpc_config");
+}
+
+/** Persist (or clear, with null) the cluster host — shared with the agent via
+ *  the workspace's .openscience/hpc.json. */
+export async function setHpcConfig(host: string | null): Promise<void> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("set_hpc_config", { host });
+}
+
+/** Probe a host over SSH: reachable? Slurm available? */
+export async function hpcCheck(host: string): Promise<HpcCheck> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<HpcCheck>("hpc_check", { host });
+}
+
+/** The user's queued/running Slurm jobs on the host. */
+export async function hpcJobs(host: string): Promise<HpcJob[]> {
+  if (!isTauri) return [];
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<HpcJob[]>("hpc_jobs", { host });
+}
+
+/** Cancel one of the user's Slurm jobs. */
+export async function hpcCancel(host: string, jobId: string): Promise<void> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("hpc_cancel", { host, jobId });
+}
+
+/** Copy a bundled example project into the workspace (idempotent; never
+ *  overwrites user edits). Returns the workspace directory name. */
+export async function installExample(name: string): Promise<string> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("install_example", { name });
+}
+
 /** Append a diagnostic line to <app-data>/debug.log (desktop only; no-op in browser). */
 export async function logDebug(message: string): Promise<void> {
   if (!isTauri) return;

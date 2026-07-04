@@ -38,6 +38,50 @@ pub struct ProvenanceRecord {
     pub content: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub log: Option<String>,
+    /// Runtime environment captured when the version was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<EnvInfo>,
+}
+
+/// The environment a version was produced in — enough to reproduce: which
+/// Python, which OS/arch, which app build. Captured once per app run (cheap).
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnvInfo {
+    /// Local Python version, e.g. "3.12.4" (the interpreter agent code runs on).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub python: Option<String>,
+    /// OS and architecture, e.g. "macos-aarch64".
+    pub platform: String,
+    /// Open Science app version that recorded this.
+    pub app: String,
+}
+
+/// Detect the local Python version once per app run — `python -V` on every
+/// record would add a process spawn to each agent write.
+fn python_version() -> Option<String> {
+    static CACHE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            let bin = crate::kernel::python_bin()?;
+            let out = std::process::Command::new(bin).arg("--version").output().ok()?;
+            let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let text = if text.is_empty() {
+                String::from_utf8_lossy(&out.stderr).trim().to_string() // Python 2 printed -V to stderr
+            } else {
+                text
+            };
+            Some(text.strip_prefix("Python ").unwrap_or(&text).to_string())
+        })
+        .clone()
+}
+
+fn capture_env(app_version: String) -> EnvInfo {
+    EnvInfo {
+        python: python_version(),
+        platform: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
+        app: app_version,
+    }
 }
 
 /// Normalize an artifact path (absolute or relative, from tool input) to a
@@ -103,6 +147,7 @@ pub fn append_record(
     model: Option<String>,
     content: Option<String>,
     log: Option<String>,
+    env: Option<EnvInfo>,
 ) -> Result<ProvenanceRecord, String> {
     let rel = normalize_rel(root, path)?;
     let file = store_file(root);
@@ -128,6 +173,7 @@ pub fn append_record(
         model,
         content: content.map(cap_content),
         log,
+        env,
     };
     let line = serde_json::to_string(&record).map_err(|e| e.to_string())?;
     use std::io::Write;
@@ -163,7 +209,8 @@ pub fn record_provenance(
     log: Option<String>,
 ) -> Result<ProvenanceRecord, String> {
     let _guard = state.0.lock().map_err(|_| "provenance lock poisoned")?;
-    append_record(&workspace_dir(&app)?, &path, &tool, session_id, model, content, log)
+    let env = capture_env(app.package_info().version.to_string());
+    append_record(&workspace_dir(&app)?, &path, &tool, session_id, model, content, log, Some(env))
 }
 
 #[tauri::command]
@@ -185,9 +232,23 @@ mod tests {
     #[test]
     fn versions_increment_per_path_and_round_trip() {
         let root = temp_root("versions");
-        let r1 = append_record(&root, "fig/plot.py", "write", Some("ses_1".into()), Some("m".into()), Some("print(1)".into()), None).unwrap();
-        let r2 = append_record(&root, "fig/plot.py", "edit", Some("ses_1".into()), None, Some("print(2)".into()), None).unwrap();
-        let other = append_record(&root, "report.md", "write", None, None, None, Some("wrote report.md".into())).unwrap();
+        let r1 = append_record(&root, "fig/plot.py", "write", Some("ses_1".into()), Some("m".into()), Some("print(1)".into()), None, None).unwrap();
+        let r2 = append_record(&root, "fig/plot.py", "edit", Some("ses_1".into()), None, Some("print(2)".into()), None, None).unwrap();
+        let other = append_record(
+            &root,
+            "report.md",
+            "write",
+            None,
+            None,
+            None,
+            Some("wrote report.md".into()),
+            Some(super::EnvInfo {
+                python: Some("3.12.4".into()),
+                platform: "macos-aarch64".into(),
+                app: "0.1.0".into(),
+            }),
+        )
+        .unwrap();
         assert_eq!((r1.version, r2.version, other.version), (1, 2, 1));
 
         let v = versions_for(&root, "fig/plot.py").unwrap();
@@ -196,6 +257,13 @@ mod tests {
         assert_eq!(v[1].tool, "edit");
         assert_eq!(v[1].session_id.as_deref(), Some("ses_1"));
         assert!(v[1].ts > 0);
+        // env round-trips (and its absence stays absent).
+        assert!(v[0].env.is_none());
+        let report = versions_for(&root, "report.md").unwrap();
+        let env = report[0].env.as_ref().expect("env recorded");
+        assert_eq!(env.python.as_deref(), Some("3.12.4"));
+        assert_eq!(env.platform, "macos-aarch64");
+        assert_eq!(env.app, "0.1.0");
 
         let _ = std::fs::remove_dir_all(root);
     }
@@ -205,7 +273,7 @@ mod tests {
         let root = temp_root("norm");
         // Absolute path under the workspace → same key as the relative form.
         let abs = root.join("a/b.txt");
-        append_record(&root, abs.to_str().unwrap(), "write", None, None, None, None).unwrap();
+        append_record(&root, abs.to_str().unwrap(), "write", None, None, None, None, None).unwrap();
         let v = versions_for(&root, "a/b.txt").unwrap();
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].path, "a/b.txt");
@@ -220,13 +288,13 @@ mod tests {
     #[test]
     fn corrupt_lines_are_skipped_and_content_is_capped() {
         let root = temp_root("corrupt");
-        append_record(&root, "x.py", "write", None, None, None, None).unwrap();
+        append_record(&root, "x.py", "write", None, None, None, None, None).unwrap();
         // A corrupt line must not lose the rest of the history.
         use std::io::Write;
         let file = root.join(".openscience/provenance.jsonl");
         let mut f = std::fs::OpenOptions::new().append(true).open(&file).unwrap();
         writeln!(f, "not json").unwrap();
-        append_record(&root, "x.py", "write", None, None, None, None).unwrap();
+        append_record(&root, "x.py", "write", None, None, None, None, None).unwrap();
         let v = versions_for(&root, "x.py").unwrap();
         assert_eq!(v.iter().map(|r| r.version).collect::<Vec<_>>(), vec![1, 2]);
 

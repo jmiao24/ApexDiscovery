@@ -34,6 +34,8 @@ pub fn mime_for(ext: &str) -> (&'static str, bool) {
         "js" | "ts" | "sh" | "toml" | "log" => ("text/plain", true),
         "py" => ("text/x-python", true),
         "r" => ("text/x-r", true),
+        "mol" | "sdf" => ("chemical/x-mdl-molfile", true),
+        "smi" | "smiles" => ("chemical/x-daylight-smiles", true),
         "txt" => ("text/plain", true),
         "docx" => ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", false),
         "xlsx" => ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", false),
@@ -369,7 +371,15 @@ fn base64_encode(input: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{base64_encode, locate_under, unique_name};
+    use super::{base64_encode, locate_under, mime_for, unique_name};
+
+    #[test]
+    fn molecule_files_are_text() {
+        // The molecule viewer needs utf8, not base64 (MoleculeView parses the source).
+        for ext in ["mol", "sdf", "smi", "smiles"] {
+            assert!(mime_for(ext).1, "{ext} must be a text type");
+        }
+    }
 
     #[test]
     fn unique_name_dedupes_with_numeric_suffix() {

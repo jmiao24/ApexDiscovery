@@ -31,7 +31,8 @@
     "externalBin": ["binaries/opencode", "binaries/uv"],
     "resources": {
       "../../../runtime/skills/external/ai4s-skills": "skills/",
-      "../../../runtime/skills/core": "skills-core/"
+      "../../../runtime/skills/core": "skills-core/",
+      "../../../examples/climate-trends": "examples/climate-trends/"
     },
     "icon": [
       "icons/32x32.png",

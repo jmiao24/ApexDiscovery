@@ -1,8 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useUiStore } from "@/lib/store";
 import { Composer } from "./Composer";
 
 describe("Composer", () => {
+  it("appends a prepared draft below text the user was already typing", () => {
+    useUiStore.setState({ composerDraft: null });
+    render(<Composer onSend={vi.fn()} />);
+    const input = screen.getByLabelText<HTMLTextAreaElement>("Ask anything");
+    fireEvent.change(input, { target: { value: "half-written thought" } });
+
+    act(() => useUiStore.getState().setComposerDraft("Reproduce `fig/plot.py`…"));
+    expect(input.value).toBe("half-written thought\n\nReproduce `fig/plot.py`…");
+    expect(useUiStore.getState().composerDraft).toBeNull(); // consumed once
+
+    // An empty composer takes the draft as-is.
+    fireEvent.change(input, { target: { value: "" } });
+    act(() => useUiStore.getState().setComposerDraft("just the draft"));
+    expect(input.value).toBe("just the draft");
+  });
+
   it("sends on Enter but never during IME composition", () => {
     const onSend = vi.fn();
     render(<Composer onSend={onSend} />);

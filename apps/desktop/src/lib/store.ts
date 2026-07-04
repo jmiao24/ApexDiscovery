@@ -17,10 +17,14 @@ interface UiState {
   inspectorOpen: boolean;
   sidebarCollapsed: boolean;
   paletteOpen: boolean;
+  /** One-shot text placed into the composer by another surface (e.g. the
+   *  provenance Reproduce action) — consumed on the next composer render. */
+  composerDraft: string | null;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   setInspectorOpen: (open: boolean) => void;
   setPaletteOpen: (open: boolean) => void;
+  setComposerDraft: (draft: string | null) => void;
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
@@ -35,4 +39,6 @@ export const useUiStore = create<UiState>((set, get) => ({
   toggleTheme: () => get().setTheme(get().theme === "light" ? "dark" : "light"),
   setInspectorOpen: (inspectorOpen) => set({ inspectorOpen }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+  composerDraft: null,
+  setComposerDraft: (composerDraft) => set({ composerDraft }),
 }));

@@ -45,10 +45,10 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
   figure **and** one report artifact, each linked to the code that made them,
   without the user leaving the app.
 - **Status.** Shipped: the empty session offers one-click workflow starters
-  (demo end-to-end analysis, analyze-my-data, audit-a-report); the demo starter
-  verifiably produces code → figure → report → stats in one turn, all files
-  surfaced as artifacts with provenance records. Gap: richer built-in example
-  projects (bci-trends is repo-only).
+  (demo end-to-end analysis, analyze-my-data, audit-a-report, and the
+  climate-trends example on real bundled data); the demo starter verifiably
+  produces code → figure → report → stats in one turn, all files surfaced as
+  artifacts with provenance records. Gap: bci-trends is still repo-only.
 
 ### P0-2 · Local data + local compute (restricted-environment friendly)
 
@@ -79,10 +79,12 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 - **Acceptance.** For any artifact, one click reveals its generating code +
   environment + inputs + originating conversation turn; re-running reproduces it.
 - **Status.** Shipped: every agent write appends a version record to
-  `.openscience/provenance.jsonl` (code, tool, model, session, timestamp); the
-  artifact History panel reveals per-version data + a link back to the
-  originating conversation. Gap: environment capture beyond the model (packages,
-  kernel), and re-run-to-reproduce.
+  `.openscience/provenance.jsonl` (code, tool, model, session, timestamp, and
+  the captured environment — Python version, OS/arch, app build); the artifact
+  History panel reveals per-version data + a link back to the originating
+  conversation, and a per-version **Reproduce** action drafts a prompt (never
+  auto-sent) that re-runs the recorded code and reports whether the regenerated
+  file matches. Gap: package-level environment capture (pip freeze / lockfile).
 
 ### P0-4 · Reviewer agent — traceable claims, not "no hallucinations"
 
@@ -120,8 +122,11 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 - **Acceptance.** At least one non-bio example project ships (e.g. a materials,
   geoscience-sensor, or general data-analysis workflow) alongside the bio demo;
   adding a connector for a new field requires no core code change.
-- **Status.** Skills + MCP management shipped and pluggable. Gap: a non-bio
-  showcase example (current demo is `examples/bci-trends/`).
+- **Status.** Skills + MCP management shipped and pluggable. Non-bio showcase
+  shipped: `examples/climate-trends/` (real NASA GISTEMP v4 data, public
+  domain, bundled in the installer) with a one-click "Explore an example"
+  starter that installs the files into the workspace (never overwriting user
+  edits) and runs the full trend/decadal/figure/report workflow.
 
 ### P1-2 · Domain connectors (databases + literature)
 
@@ -226,7 +231,13 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
   write/submit/manage Slurm batch scripts over SSH; optional Modal runner.
 - **Acceptance.** From the app, generate a Slurm batch script, submit over SSH,
   and track job status.
-- **Status.** Not started (roadmap v0.4).
+- **Status.** Shipped for the SSH + Slurm core: Settings has a "Cluster (HPC)"
+  card (pick a host from `~/.ssh/config` or type `user@host`, probe SSH + Slurm,
+  live job queue with cancel — all via the user's own ssh keys, nothing
+  installed on the cluster); the bundled `hpc-slurm` skill lets the agent write
+  a batch script into the workspace (provenance-tracked), submit it over SSH,
+  track it via squeue/sacct, and fetch results back. Gap: multi-environment
+  management and the Modal runner.
 
 ### P2-3 · Privacy posture, stated plainly
 
@@ -266,17 +277,17 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 
 | # | Requirement | Tier | Status |
 |---|---|---|---|
-| P0-1 | Full workflow end to end (not chat) | P0 | One-click starters shipped; example projects pending |
+| P0-1 | Full workflow end to end (not chat) | P0 | One-click starters + bundled real-data example shipped |
 | P0-2 | Local data + local compute | P0 | Done incl. data-flow card (R kernel pending) |
-| P0-3 | Artifact provenance / reproducibility | P0 | Versioned records + History UI shipped; re-run pending |
+| P0-3 | Artifact provenance / reproducibility | P0 | Versioned records + env capture + History UI + Reproduce shipped |
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | Skill + tagged/dismissible findings shipped |
-| P1-1 | Multi-discipline from day one | P1 | Pluggable; non-bio demo pending |
+| P1-1 | Multi-discipline from day one | P1 | Pluggable + non-bio climate example shipped |
 | P1-2 | Domain + literature connectors | P1 | Curated one-click connectors + BYO guide shipped |
 | P1-3 | Scientific renderers | P1 | Base previews done; domain viewers pending |
 | P1-4 | Windows + macOS installers | P1 | macOS done; Windows pending |
 | P1-5 | Interaction & visualization craft | P1 | Chart design system + palette + command palette shipped |
 | P2-1 | Notebook + larger-project handling | P2 | Notebook done; project ergonomics pending |
-| P2-2 | HPC / SSH / Slurm / Modal | P2 | Not started |
+| P2-2 | HPC / SSH / Slurm / Modal | P2 | SSH+Slurm shipped (cluster card + skill); Modal pending |
 | P2-3 | Plain-language privacy posture | P2 | Disclosure shipped; keychain migration open |
 | P2-4 | Beta stability & guardrails | P2 | Base done; reliability pass pending |
 

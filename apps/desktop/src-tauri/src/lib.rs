@@ -2,6 +2,8 @@
 // bundled OpenCode sidecar (isolated config/data + dedicated port; killed on exit).
 mod artifact_file;
 mod debug_log;
+mod examples;
+mod hpc;
 mod jupyter;
 mod kernel;
 mod opencode_config;
@@ -62,6 +64,13 @@ pub fn run() {
             provenance::list_provenance,
             science_mcp::science_mcp_python,
             science_mcp::setup_science_mcp,
+            examples::install_example,
+            hpc::list_ssh_hosts,
+            hpc::hpc_config,
+            hpc::set_hpc_config,
+            hpc::hpc_check,
+            hpc::hpc_jobs,
+            hpc::hpc_cancel,
             preview_server::preview_url,
             tools::detect_tools,
             debug_log::log_debug

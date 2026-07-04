@@ -78,7 +78,7 @@ fn python_candidates() -> Vec<String> {
     c
 }
 
-fn python_bin() -> Option<String> {
+pub(crate) fn python_bin() -> Option<String> {
     python_candidates()
         .into_iter()
         .find(|bin| Command::new(bin).arg("--version").output().is_ok())

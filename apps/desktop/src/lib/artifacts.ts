@@ -17,6 +17,7 @@ const EXT_KIND: Record<string, ArtifactKind> = {
   ipynb: "notebook",
   pdf: "report", tex: "report", md: "report", docx: "report", pptx: "report",
   csv: "table", tsv: "table", parquet: "table", xlsx: "table",
+  mol: "data", sdf: "data", smi: "data", smiles: "data",
 };
 
 const EXT_LANG: Record<string, string> = {
@@ -41,6 +42,7 @@ const REF_EXTS = [
   "pdf", "html", "htm", "svg", "png", "jpg", "jpeg", "gif", "webp",
   "csv", "tsv", "md", "tex", "json", "py", "ipynb", "r",
   "docx", "xlsx", "pptx",
+  "mol", "sdf", "smi", "smiles",
 ];
 const REF_RE = new RegExp(`[\\w./-]+\\.(?:${REF_EXTS.join("|")})\\b`, "gi");
 
@@ -85,7 +87,16 @@ export function mimeForExt(ext: string): string {
   return MIME[ext.toLowerCase()] ?? "application/octet-stream";
 }
 
-export type PreviewKind = "html" | "pdf" | "image" | "table" | "text" | "docx" | "xlsx" | "pptx";
+export type PreviewKind =
+  | "html"
+  | "pdf"
+  | "image"
+  | "table"
+  | "text"
+  | "docx"
+  | "xlsx"
+  | "pptx"
+  | "molecule";
 
 /** How a file should be previewed, from its extension. This is the previewer
  *  registry: native webview viewers first (pdf/html/image via the local file
@@ -98,6 +109,7 @@ export function previewKind(ext: string): PreviewKind {
   if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(e)) return "image";
   if (e === "csv" || e === "tsv") return "table";
   if (e === "docx" || e === "xlsx" || e === "pptx") return e;
+  if (["mol", "sdf", "smi", "smiles"].includes(e)) return "molecule";
   return "text";
 }
 

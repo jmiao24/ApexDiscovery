@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import { ArrowUp, Paperclip, X } from "lucide-react";
 import { addFilesToWorkspace, addTextToWorkspace, isTauri } from "@/lib/tauri";
+import { useUiStore } from "@/lib/store";
 import { toast } from "@/lib/toast";
 
 /** A paste longer than this becomes a workspace file chip instead of raw text. */
@@ -27,6 +28,18 @@ export function Composer({
   const [files, setFiles] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const composerDraft = useUiStore((s) => s.composerDraft);
+  const setComposerDraft = useUiStore((s) => s.setComposerDraft);
+
+  // Consume a draft another surface prepared (e.g. provenance "Reproduce") —
+  // prefilled, never auto-sent: the user reviews and presses send. Text the
+  // user was already typing is kept, with the draft appended below it.
+  useEffect(() => {
+    if (composerDraft === null) return;
+    setValue((v) => (v.trim() ? `${v.trimEnd()}\n\n${composerDraft}` : composerDraft));
+    setComposerDraft(null);
+    taRef.current?.focus();
+  }, [composerDraft, setComposerDraft]);
 
   // Auto-grow with the content, scroll internally beyond the cap.
   useEffect(() => {

@@ -32,6 +32,7 @@ import {
 } from "@/lib/tauri";
 import { setupScienceMcp } from "@/lib/tauri";
 import { openArtifactExternally } from "@/lib/artifactFile";
+import { ClusterCard } from "@/components/settings/ClusterCard";
 import { DataFlowCard } from "@/components/settings/DataFlowCard";
 import { SCIENCE_CONNECTORS, connectorConfig } from "@/lib/scienceConnectors";
 import { toast } from "@/lib/toast";
@@ -756,6 +757,9 @@ export function SettingsPage() {
             )}
           </div>
         </Card>
+
+        {/* ---- Cluster (HPC) ---- */}
+        <ClusterCard />
 
         {/* ---- Privacy & data flow ---- */}
         <DataFlowCard model={defaultModel} workspace={wsPath} />

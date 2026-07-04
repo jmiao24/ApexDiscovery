@@ -8,6 +8,7 @@ import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { ProvenancePanel } from "./ProvenancePanel";
 import { TablePreview } from "./TablePreview";
 import { DocxView, PptxView, XlsxView } from "./OfficePreview";
+import { MoleculeView } from "./MoleculeView";
 import { cn } from "@/lib/cn";
 
 /**
@@ -27,7 +28,7 @@ export function FilePreviewInspector({
   const ext = extOf(data.filename);
   const kind = previewKind(ext);
   const needsUrl = kind === "pdf" || kind === "image" || kind === "html";
-  const needsText = kind === "table" || kind === "text" || kind === "html";
+  const needsText = kind === "table" || kind === "text" || kind === "html" || kind === "molecule";
   const needsBytes = kind === "docx" || kind === "xlsx" || kind === "pptx";
 
   const [url, setUrl] = useState<string | null>(null);
@@ -76,7 +77,7 @@ export function FilePreviewInspector({
     };
   }, [data.path, data.content, kind, needsUrl, needsText, needsBytes]);
 
-  const canToggle = kind === "html";
+  const canToggle = kind === "html" || kind === "molecule";
 
   return (
     <div className="flex h-full flex-col">
@@ -162,6 +163,22 @@ function Body({
     if (kind === "docx") return <DocxView bytes={bytes} />;
     if (kind === "xlsx") return <XlsxView bytes={bytes} />;
     return <PptxView bytes={bytes} />;
+  }
+  if (kind === "molecule") {
+    if (showCode) {
+      return text !== null ? (
+        <div className="p-3">
+          <CodeViewer code={text} language={language} />
+        </div>
+      ) : (
+        <Note text="Source is available in the desktop app." />
+      );
+    }
+    return text !== null ? (
+      <MoleculeView filename={filename} text={text} />
+    ) : (
+      <Note text="Preview is available in the desktop app." />
+    );
   }
   if (kind === "html" && showCode) {
     return text !== null ? (

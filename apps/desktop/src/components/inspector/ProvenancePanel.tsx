@@ -1,10 +1,40 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2, MessageSquare } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, MessageSquare, RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { ProvenanceRecord } from "@ai4s/shared";
 import { listProvenance } from "@/lib/provenance";
+import { useUiStore } from "@/lib/store";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { cn } from "@/lib/cn";
+
+/** The prompt the Reproduce action drafts — prefilled, reviewed, user-sent. */
+export function reproducePrompt(r: ProvenanceRecord): string {
+  const env = r.env
+    ? ` It was produced with${r.env.python ? ` Python ${r.env.python} on` : ""} ${r.env.platform}.`
+    : "";
+  const content = r.content ?? "";
+  // A fence longer than any backtick run in the content, so embedded ``` in
+  // the recorded code (e.g. a generated report.md) cannot close it early.
+  const fence = "`".repeat(Math.max(3, longestBacktickRun(content) + 1));
+  // Records are capped at 100 KB (provenance.rs cap_content) — a truncated
+  // record is not runnable, so tell the agent where the full code lives.
+  const truncNote = content.endsWith("[truncated]")
+    ? " NOTE: the recorded code below is truncated at the store's size cap — read the full " +
+      `record for \`${r.path}\` from \`.openscience/provenance.jsonl\` before re-running.`
+    : "";
+  return (
+    `Reproduce \`${r.path}\` (provenance v${r.version}).${env} ` +
+    `Re-run its recorded generating code below, then compare the regenerated file ` +
+    `with the current \`${r.path}\` and report whether they match — and what changed if not.` +
+    `${truncNote}\n\n${fence}\n${content}\n${fence}`
+  );
+}
+
+function longestBacktickRun(text: string): number {
+  let max = 0;
+  for (const run of text.match(/`+/g) ?? []) max = Math.max(max, run.length);
+  return max;
+}
 
 /**
  * The provenance History of one artifact: every recorded version with the code
@@ -15,6 +45,14 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
   const [records, setRecords] = useState<ProvenanceRecord[] | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   const navigate = useNavigate();
+  const setComposerDraft = useUiStore((s) => s.setComposerDraft);
+
+  // Draft the reproduce prompt into the conversation the version came from —
+  // the user reviews and sends it (human in the loop, never auto-run).
+  const reproduce = (r: ProvenanceRecord) => {
+    setComposerDraft(reproducePrompt(r));
+    navigate(r.sessionId ? `/live/${r.sessionId}` : "/live");
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -76,8 +114,27 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                   {r.model && (
                     <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">{r.model}</span>
                   )}
+                  {r.env && (
+                    <span
+                      className="rounded bg-surface-2 px-1.5 py-0.5 font-mono"
+                      title="Environment this version was produced in"
+                    >
+                      {[r.env.python && `py ${r.env.python}`, r.env.platform, `app ${r.env.app}`]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  )}
                   {r.log && <span className="truncate">{r.log}</span>}
                   <span className="flex-1" />
+                  {r.content && (
+                    <button
+                      className="flex items-center gap-1 text-link hover:underline"
+                      onClick={() => reproduce(r)}
+                      title="Draft a prompt that re-runs this version's code and compares the result"
+                    >
+                      <RotateCcw size={12} /> Reproduce
+                    </button>
+                  )}
                   {r.sessionId && (
                     <button
                       className="flex items-center gap-1 text-link hover:underline"

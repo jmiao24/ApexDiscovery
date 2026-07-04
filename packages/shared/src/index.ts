@@ -289,6 +289,18 @@ export interface ProvenanceRecord {
   /** Text the tool wrote (capped); absent for binary or indirect writes. */
   content?: string;
   log?: string;
+  /** Runtime environment captured when the version was recorded. */
+  env?: ProvenanceEnv;
+}
+
+/** The environment a version was produced in — enough to reproduce. */
+export interface ProvenanceEnv {
+  /** Local Python version, e.g. "3.12.4". */
+  python?: string;
+  /** OS and architecture, e.g. "macos-aarch64". */
+  platform: string;
+  /** Open Science app version that recorded it. */
+  app: string;
 }
 
 export interface Citation {

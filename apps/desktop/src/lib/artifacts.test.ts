@@ -123,6 +123,13 @@ describe("previewKind", () => {
     expect(previewKind("xlsx")).toBe("xlsx");
     expect(previewKind("pptx")).toBe("pptx");
   });
+
+  it("renders chemical structure files as molecules", () => {
+    expect(previewKind("mol")).toBe("molecule");
+    expect(previewKind("sdf")).toBe("molecule");
+    expect(previewKind("smi")).toBe("molecule");
+    expect(previewKind("smiles")).toBe("molecule");
+  });
 });
 
 describe("refToArtifactBlock", () => {

@@ -1,4 +1,6 @@
-import { ChevronRight, FileSearch, FlaskConical, LineChart } from "lucide-react";
+import { ChevronRight, FileSearch, FlaskConical, Globe2, LineChart } from "lucide-react";
+import { installExample, isTauri } from "@/lib/tauri";
+import { toast } from "@/lib/toast";
 
 export interface WorkflowStarter {
   id: string;
@@ -6,6 +8,8 @@ export interface WorkflowStarter {
   title: string;
   description: string;
   prompt: string;
+  /** Side effect to run before sending the prompt (e.g. install example files). */
+  prepare?: () => Promise<void>;
 }
 
 /** One-click full-workflow prompts (P0-1): a single request that carries the
@@ -42,6 +46,23 @@ export const WORKFLOW_STARTERS: WorkflowStarter[] = [
       "citation, flag numbers with no traceable source, and check figures against the code that generated them. " +
       "Ask me which document to audit if there is more than one candidate.",
   },
+  {
+    id: "example-climate",
+    icon: <Globe2 size={17} strokeWidth={1.75} />,
+    title: "Explore an example: climate trends",
+    description: "Real NASA GISTEMP data — trend, decadal comparison, figure, and report.",
+    prompt:
+      "Analyze the real climate dataset at climate-trends/data/gistemp_global_means.csv " +
+      "(NASA GISTEMP v4 global land–ocean temperature anomalies in °C vs the 1951–1980 mean; " +
+      "the header is on line 2 and missing values are `***` — see climate-trends/README.md). " +
+      "Load the annual J-D series, quantify the warming rate (°C/decade) over the full record and " +
+      "over 1975–present, compare decadal means, save one publication-quality figure as " +
+      "climate-trends/warming_trend.png, and write climate-trends/report.md citing the dataset " +
+      "source — every number must come from the code you ran.",
+    prepare: async () => {
+      if (isTauri) await installExample("climate-trends");
+    },
+  },
 ];
 
 /**
@@ -69,7 +90,19 @@ export function WorkflowStarters({ onPick }: { onPick: (prompt: string) => void 
           {WORKFLOW_STARTERS.map((s) => (
             <button
               key={s.id}
-              onClick={() => onPick(s.prompt)}
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await s.prepare?.();
+                  } catch (e) {
+                    toast.error(
+                      `Could not set up the example: ${e instanceof Error ? e.message : String(e)}`,
+                    );
+                    return;
+                  }
+                  onPick(s.prompt);
+                })();
+              }}
               className="group flex w-full items-center gap-3.5 border-t border-border px-4 py-3.5 text-left transition-colors first:border-t-0 hover:bg-surface-2"
             >
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-2 text-accent ring-1 ring-border transition-colors group-hover:bg-surface">
