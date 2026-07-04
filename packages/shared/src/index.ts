@@ -156,7 +156,7 @@ export interface RunningJobsBlock {
 export interface StatusLineBlock {
   kind: "status-line";
   text: string; // e.g. "8 running · 16m 2s"
-  tone?: "running" | "done" | "review";
+  tone?: "running" | "done" | "review" | "error";
 }
 
 // ---- Inspector (right pane) ----

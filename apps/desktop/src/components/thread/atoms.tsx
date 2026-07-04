@@ -133,6 +133,7 @@ const TONE: Record<NonNullable<StatusLineBlock["tone"]>, string> = {
   running: "text-accent",
   done: "text-ok",
   review: "text-muted",
+  error: "text-error",
 };
 
 export function StatusLine({ block }: { block: StatusLineBlock }) {

@@ -88,6 +88,16 @@ interface RuntimeState {
   /** True when the user explicitly picked the active folder for the next new
    *  session; false means a new session gets its own fresh dated folder. */
   workspacePinned: boolean;
+  /** A deliberate workspace move is in flight (sidecar restart + reconnect).
+   *  The UI must not present it as a disconnection — no status flip, no
+   *  Connect button, no help card. Real failures surface after the retry
+   *  window is exhausted, once this clears. */
+  switching: boolean;
+  /** A sendPrompt is in flight (click → POST accepted). Locks the composer. */
+  sending: boolean;
+  /** Sessions with an active turn (send accepted, session.idle not yet seen).
+   *  Drives the composer lock and the "Working…" indicator. */
+  runningSessions: Record<string, true>;
   /** Switch to an existing folder, or (with `dated`) create a new dated one. */
   switchWorkspace: (target: { path: string } | { dated: string }) => Promise<void>;
   openSession: (id: string) => Promise<void>;
@@ -99,6 +109,19 @@ interface RuntimeState {
 
 let client: OpenCodeClient | null = null;
 const emptyThread = (): Thread => ({ blocks: [], index: {}, loaded: false });
+/** Threads key for the draft conversation — its blocks move to the real
+ *  session id once the session exists, so the page never visibly resets. */
+export const DRAFT_KEY = "draft";
+/** One bounded retry for the first POSTs after a sidecar restart — the old
+ *  connection occasionally dies mid-handshake ("Load failed"). */
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch {
+    await sleep(600);
+    return await fn();
+  }
+}
 /** Tool calls already written to provenance — success events can repeat per callId. */
 const recordedProvenance = new Set<string>();
 
@@ -124,6 +147,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   activeArtifact: null,
   workspace: null,
   workspacePinned: false,
+  switching: false,
+  sending: false,
+  runningSessions: {},
 
   openArtifact: (activeArtifact) => set({ activeArtifact }),
   closeArtifact: () => set({ activeArtifact: null }),
@@ -207,7 +233,30 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     c.onEvent((event) => {
       void logDebug(`event ← ${event.type}${"sessionId" in event ? " " + event.sessionId : ""}`);
       if (event.type === "error") {
-        set({ error: event.message });
+        // A session-scoped error belongs IN the conversation (a red status
+        // line where the user is looking), and it ends that session's turn so
+        // the composer unlocks. Errors without a session keep the banner.
+        const sid = event.sessionId;
+        if (sid) {
+          set((s) => {
+            const cur = s.threads[sid] ?? emptyThread();
+            const runningSessions = { ...s.runningSessions };
+            delete runningSessions[sid];
+            return {
+              runningSessions,
+              threads: {
+                ...s.threads,
+                [sid]: {
+                  ...cur,
+                  loaded: true,
+                  blocks: [...cur.blocks, { kind: "status-line", text: event.message, tone: "error" }],
+                },
+              },
+            };
+          });
+        } else {
+          set({ error: event.message });
+        }
         return;
       }
       // Interactive requests live outside the thread blocks (transient UI).
@@ -237,7 +286,13 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       set((s) => {
         const cur = s.threads[sid] ?? emptyThread();
         const folded = foldEvent({ blocks: cur.blocks, index: cur.index }, event);
-        return { threads: { ...s.threads, [sid]: { ...cur, ...folded, loaded: true } } };
+        // The turn is over — unlock the composer and drop the "Working…" row.
+        const runningSessions = { ...s.runningSessions };
+        if (event.type === "session.idle") delete runningSessions[sid];
+        return {
+          runningSessions,
+          threads: { ...s.threads, [sid]: { ...cur, ...folded, loaded: true } },
+        };
       });
       // A completed live write becomes a provenance version (once per call).
       if (event.type === "tool.updated" && !recordedProvenance.has(event.callId)) {
@@ -267,15 +322,21 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   // macOS TCC ("access Documents") blocks the sidecar until the user answers,
   // so the window must cover minutes, not seconds — giving up early strands
   // the user on an error screen that a single manual Connect would fix.
+  // Failed attempts are masked (status AND error): every workspace switch
+  // restarts the sidecar on purpose, and flashing "could not open the event
+  // stream" at the user mid-switch reads as breakage. The last error is
+  // surfaced only if the whole retry window is exhausted.
   connectRetry: async (tries = 120) => {
     set({ status: "connecting" });
+    let lastError: string | null = null;
     for (let i = 0; i < tries; i++) {
       await get().connect();
       if (get().status === "ready") return;
-      set({ status: "connecting" }); // mask transient failures while the sidecar boots
+      lastError = get().error ?? lastError;
+      set({ status: "connecting", error: null });
       await sleep(1000);
     }
-    set({ status: "error" });
+    set({ status: "error", error: lastError });
   },
 
   bootstrap: async () => {
@@ -312,9 +373,15 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
 
   // "New" opens a blank draft — no session is created until the first message (#3).
   // A fresh draft also drops any pinned folder: back to the dated-folder default.
-  startDraft: () => set({ currentId: null, workspacePinned: false }),
+  startDraft: () =>
+    set((s) => {
+      const threads = { ...s.threads };
+      delete threads[DRAFT_KEY]; // leftovers from an aborted first message
+      return { currentId: null, workspacePinned: false, threads };
+    }),
 
   switchWorkspace: async (target) => {
+    set({ switching: true });
     try {
       if ("dated" in target) await newDatedWorkspace(target.dated);
       else await setWorkspace(target.path);
@@ -328,6 +395,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       await Promise.all([get().refreshSessions(), get().loadCatalog()]);
     } catch (err) {
       set({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      set({ switching: false });
     }
   },
 
@@ -340,9 +409,14 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     // already match the active folder, skip this.
     const dir = get().sessions.find((s) => s.id === id)?.directory;
     if (dir && dir !== get().workspace) {
-      await setWorkspace(dir).catch(() => {});
-      await kernelReset().catch(() => {});
-      await get().connectRetry();
+      set({ switching: true });
+      try {
+        await setWorkspace(dir).catch(() => {});
+        await kernelReset().catch(() => {});
+        await get().connectRetry();
+      } finally {
+        set({ switching: false });
+      }
     }
     if (!client) return;
     // Recover any request the agent is blocked on (asked before connect/reload).
@@ -369,54 +443,90 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     }
   },
 
+  // The send lifecycle (new → input → send → response), so the user always
+  // knows where things stand:
+  //   1. The message echoes into the thread IMMEDIATELY — on a draft it goes
+  //      under DRAFT_KEY and is grafted onto the real session id later, so the
+  //      page never visibly resets when the session appears.
+  //   2. `sending` is true from click until the POST is accepted (locks the
+  //      composer); then the session is in `runningSessions` until its
+  //      session.idle / error event (keeps it locked, shows "Working…").
+  //   3. Failures land as a red status line inside the conversation.
   sendPrompt: async (text) => {
     if (!client) {
       set({ error: "Not connected to the OpenCode runtime." });
       return null;
     }
-    let id = get().currentId;
-    if (!id) {
-      // Lazy-create the session on the first message (#3). Unless the user
-      // pinned a folder via the workspace switcher, a new session gets its own
-      // fresh dated folder (~/Documents/OpenScience/<date-time>) first, so its
-      // files never pile up in the bare base folder.
-      try {
+    if (get().sending) return null; // one send at a time
+    const echoKey = get().currentId ?? DRAFT_KEY;
+    set((s) => {
+      const cur = s.threads[echoKey] ?? emptyThread();
+      return {
+        sending: true,
+        threads: {
+          ...s.threads,
+          [echoKey]: { ...cur, loaded: true, blocks: [...cur.blocks, { kind: "user", text }] },
+        },
+      };
+    });
+    try {
+      let id = get().currentId;
+      if (!id) {
+        // Lazy-create the session on the first message (#3). Unless the user
+        // pinned a folder via the workspace switcher, a new session gets its
+        // own fresh dated folder (~/Documents/OpenScience/<date-time>) first,
+        // so its files never pile up in the bare base folder.
         if (isTauri && !get().workspacePinned) {
-          await newDatedWorkspace(datedWorkspaceName());
-          await kernelReset().catch(() => {});
-          await get().connectRetry();
+          set({ switching: true });
+          try {
+            await newDatedWorkspace(datedWorkspaceName());
+            await kernelReset().catch(() => {});
+            await get().connectRetry();
+          } finally {
+            set({ switching: false });
+          }
           if (get().status !== "ready" || !client) {
             throw new Error("Runtime did not reconnect after creating the session folder.");
           }
         }
-        id = await client.createSession();
-      } catch (err) {
-        set({ error: err instanceof Error ? err.message : String(err) });
-        return null;
+        id = await withRetry(() => client!.createSession());
+        set((s) => {
+          // Graft the draft conversation onto the real session id.
+          const threads = { ...s.threads, [id!]: s.threads[DRAFT_KEY] ?? emptyThread() };
+          delete threads[DRAFT_KEY];
+          return { currentId: id, threads };
+        });
+        void get().refreshSessions();
       }
-      set((s) => ({
-        currentId: id,
-        threads: { ...s.threads, [id!]: { ...emptyThread(), loaded: true } },
-      }));
-      void get().refreshSessions();
-    }
-    const sid = id;
-    set((s) => {
-      const cur = s.threads[sid] ?? emptyThread();
-      return {
-        threads: { ...s.threads, [sid]: { ...cur, loaded: true, blocks: [...cur.blocks, { kind: "user", text }] } },
-      };
-    });
-    try {
+      const sid = id;
       void logDebug(`sendPrompt → ${sid}`);
-      await client.sendPrompt(sid, text);
+      await withRetry(() => client!.sendPrompt(sid, text));
       void logDebug("sendPrompt OK");
+      set((s) => ({ runningSessions: { ...s.runningSessions, [sid]: true } }));
+      return sid;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       void logDebug(`sendPrompt FAILED: ${msg}`);
-      set({ error: msg });
+      // The failure belongs next to the message that caused it.
+      const key = get().currentId ?? DRAFT_KEY;
+      set((s) => {
+        const cur = s.threads[key] ?? emptyThread();
+        return {
+          error: msg,
+          threads: {
+            ...s.threads,
+            [key]: {
+              ...cur,
+              loaded: true,
+              blocks: [...cur.blocks, { kind: "status-line", text: `Send failed: ${msg}`, tone: "error" }],
+            },
+          },
+        };
+      });
+      return get().currentId;
+    } finally {
+      set({ sending: false });
     }
-    return sid;
   },
 
   deleteSession: async (id) => {
@@ -430,9 +540,12 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     set((s) => {
       const threads = { ...s.threads };
       delete threads[id];
+      const runningSessions = { ...s.runningSessions };
+      delete runningSessions[id];
       return {
         sessions: s.sessions.filter((x) => x.id !== id),
         threads,
+        runningSessions,
         currentId: s.currentId === id ? null : s.currentId,
       };
     });

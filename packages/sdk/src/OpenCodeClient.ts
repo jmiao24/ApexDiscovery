@@ -178,9 +178,20 @@ export class OpenCodeClient {
     return json.id;
   }
 
-  /** List existing sessions (conversation history), newest first. */
+  /** List existing sessions (conversation history), newest first — across ALL
+   *  workspace folders. The plain `/session` list is scoped to the project the
+   *  sidecar's cwd resolves to, so history would appear to change when the user
+   *  switches folders; `/experimental/session` lists every project's sessions
+   *  (each item still carries its `directory`). The OpenCode version is pinned,
+   *  so the experimental route is stable for us; fall back to `/session` if a
+   *  server ever lacks it. */
   async listSessions(): Promise<SessionMeta[]> {
-    const res = await this.fetchImpl(`${this.baseUrl}/session`, { headers: this.headers() });
+    let res = await this.fetchImpl(`${this.baseUrl}/experimental/session`, {
+      headers: this.headers(),
+    });
+    if (!res.ok) {
+      res = await this.fetchImpl(`${this.baseUrl}/session`, { headers: this.headers() });
+    }
     if (!res.ok) throw new Error(`Failed to list sessions (${res.status})`);
     const arr = (await res.json()) as Array<{
       id: string;

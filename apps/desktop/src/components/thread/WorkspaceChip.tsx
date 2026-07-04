@@ -20,6 +20,7 @@ export function WorkspaceChip() {
   const currentId = useRuntimeStore((s) => s.currentId);
   const workspacePinned = useRuntimeStore((s) => s.workspacePinned);
   const switchWorkspace = useRuntimeStore((s) => s.switchWorkspace);
+  const sending = useRuntimeStore((s) => s.sending);
   const [busy, setBusy] = useState(false);
 
   if (!isTauri) return null;
@@ -49,7 +50,7 @@ export function WorkspaceChip() {
     <button
       className="flex items-center gap-1 rounded-input px-1.5 py-1 text-xs text-muted hover:bg-surface-2 hover:text-text disabled:opacity-60"
       onClick={() => void choose()}
-      disabled={busy}
+      disabled={busy || sending}
       title={
         workspacePinned
           ? `${workspace ?? ""} — click to choose a different folder`

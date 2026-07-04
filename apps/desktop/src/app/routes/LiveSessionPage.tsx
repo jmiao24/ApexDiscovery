@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Loader2, NotebookPen, PlugZap } from "lucide-react";
-import { useRuntimeStore } from "@/lib/runtime";
+import { DRAFT_KEY, useRuntimeStore } from "@/lib/runtime";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
 import { Composer } from "@/components/thread/Composer";
@@ -18,6 +18,9 @@ export function LiveSessionPage() {
   const navigate = useNavigate();
   const {
     status,
+    switching,
+    sending,
+    runningSessions,
     serverUrl,
     sessions,
     currentId,
@@ -37,8 +40,12 @@ export function LiveSessionPage() {
     replyPermission,
   } = useRuntimeStore();
 
-  const connected = status === "ready";
-  const connecting = status === "connecting";
+  // A deliberate workspace move restarts the sidecar — expected and brief, so
+  // the UI stays "connected" (no badge flip, no Connect button, no help card).
+  // Only a real failure (retry window exhausted, switching cleared) surfaces.
+  const connected = status === "ready" || switching;
+  const connecting = status === "connecting" && !switching;
+  const displayStatus = switching ? "ready" : status;
 
   useEffect(() => {
     if (sessionId) void openSession(sessionId);
@@ -58,9 +65,17 @@ export function LiveSessionPage() {
   };
   const onEvaluate = (expr: string) => void sendPrompt(`Evaluate in the notebook kernel:\n\`\`\`python\n${expr}\n\`\`\``);
 
-  const thread = currentId ? threads[currentId] : undefined;
+  // A draft shows its local thread (the first message echoes there instantly,
+  // before any session exists) — it is grafted onto the session id on create.
+  const thread = currentId ? threads[currentId] : threads[DRAFT_KEY];
   const title = sessions.find((s) => s.id === currentId)?.title;
   const isEmpty = !thread || thread.blocks.length === 0;
+  // The turn lifecycle: `sending` covers click → POST accepted (incl. the
+  // dated-folder setup on a first message); `running` covers the agent
+  // working until session.idle. Together they lock the composer and show the
+  // working indicator, so a sent message is never silently "nowhere".
+  const running = !!(currentId && runningSessions[currentId]);
+  const working = sending || running;
 
   // The oldest unanswered request for THIS session blocks the run — surface it.
   const activeQuestion = questions.find((q) => q.sessionId === currentId);
@@ -92,11 +107,14 @@ export function LiveSessionPage() {
       <div className="flex h-full min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b border-border px-6 py-2.5">
           <h1 className="truncate text-[13px] font-medium text-text">
-            {sessionId && title ? title : "New session"}
+            {/* A URL with a session id is never a draft — while its title or
+                history is still loading (cross-folder opens take a moment),
+                stay blank rather than flashing the "New session" empty state. */}
+            {sessionId ? (title ?? "") : "New session"}
           </h1>
           <WorkspaceChip />
           <div className="flex-1" />
-          <ConnBadge status={status} />
+          <ConnBadge status={displayStatus} />
           {uniqueNotebooks.map((nb) => (
             <button
               key={nb.path}
@@ -125,7 +143,12 @@ export function LiveSessionPage() {
 
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto flex max-w-[760px] flex-col gap-4 px-8 py-6">
-            {!connected && (
+            {/* Deliberate workspace switches don't render anything at all (they're
+                masked as connected); a genuine boot/reconnect shows only the
+                header badge's pulsing dot — anything appearing and disappearing
+                in the content flow makes the page jump. The help card is for
+                real error/offline states. */}
+            {!connected && !connecting && (
               <div className="rounded-card border border-border bg-surface p-5 shadow-card">
                 <div className="text-sm font-medium text-text">OpenCode runtime</div>
                 <p className="mt-1 text-sm text-muted">
@@ -142,8 +165,18 @@ export function LiveSessionPage() {
                 {error}
               </div>
             )}
-            {connected && isEmpty && <WorkflowStarters onPick={(p) => void onSend(p)} />}
+            {connected && isEmpty && !sessionId && (
+              <WorkflowStarters onPick={(p) => void onSend(p)} />
+            )}
             {thread && <BlockList blocks={thread.blocks} handlers={handlers} />}
+            {working && (
+              // Typing-indicator at the bottom of the conversation: the message
+              // just echoed above it, so the user always sees the send is alive.
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <Loader2 size={14} className="animate-spin" />
+                {sending && !currentId ? "Starting the session in its folder…" : "Working…"}
+              </div>
+            )}
           </div>
         </div>
 
@@ -160,8 +193,10 @@ export function LiveSessionPage() {
             )}
             <Composer
               onSend={onSend}
-              disabled={!connected}
-              placeholder={connected ? "Ask anything" : "Connect to chat"}
+              disabled={!connected || working}
+              placeholder={
+                working ? "Waiting for the reply…" : connected ? "Ask anything" : "Connect to chat"
+              }
             />
           </div>
         </div>
@@ -188,6 +223,7 @@ function ConnBadge({ status }: { status: string }) {
         className={cn(
           "h-1.5 w-1.5 rounded-full",
           status === "ready" ? "bg-ok" : status === "error" ? "bg-error" : "bg-muted",
+          status === "connecting" && "animate-pulse",
         )}
       />
       OpenCode · {status}
