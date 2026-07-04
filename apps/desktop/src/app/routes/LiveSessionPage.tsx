@@ -5,6 +5,7 @@ import { useRuntimeStore } from "@/lib/runtime";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
 import { Composer } from "@/components/thread/Composer";
+import { WorkspaceChip } from "@/components/thread/WorkspaceChip";
 import { WorkflowStarters } from "@/components/thread/WorkflowStarters";
 import { InteractionPrompt } from "@/components/thread/InteractionPrompt";
 import { InspectorShell } from "@/components/inspector/InspectorShell";
@@ -93,6 +94,7 @@ export function LiveSessionPage() {
           <h1 className="truncate text-[13px] font-medium text-text">
             {sessionId && title ? title : "New session"}
           </h1>
+          <WorkspaceChip />
           <div className="flex-1" />
           <ConnBadge status={status} />
           {uniqueNotebooks.map((nb) => (

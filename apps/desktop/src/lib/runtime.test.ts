@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OpenCodeEvent, HistoryMessage } from "@ai4s/sdk";
-import { foldEvent, historyToThread, tidyToolTitle, type FoldState } from "./runtime";
+import { datedWorkspaceName, foldEvent, historyToThread, tidyToolTitle, type FoldState } from "./runtime";
 
 const empty: FoldState = { blocks: [], index: {} };
 const S = "ses_1";
@@ -20,6 +20,13 @@ describe("tidyToolTitle", () => {
   it("leaves non-workspace titles unchanged", () => {
     expect(tidyToolTitle("search (done)")).toBe("search (done)");
     expect(tidyToolTitle("python3 -c \"import numpy\"")).toBe('python3 -c "import numpy"');
+  });
+});
+
+describe("datedWorkspaceName", () => {
+  it("formats a zero-padded YYYY-MM-DD-HHMM folder name", () => {
+    expect(datedWorkspaceName(new Date(2026, 6, 4, 16, 5))).toBe("2026-07-04-1605");
+    expect(datedWorkspaceName(new Date(2026, 0, 9, 3, 40))).toBe("2026-01-09-0340");
   });
 });
 

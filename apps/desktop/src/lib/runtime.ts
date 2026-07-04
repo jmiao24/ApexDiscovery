@@ -85,6 +85,9 @@ interface RuntimeState {
   startDraft: () => void;
   /** Active workspace folder (absolute path); null in the browser. */
   workspace: string | null;
+  /** True when the user explicitly picked the active folder for the next new
+   *  session; false means a new session gets its own fresh dated folder. */
+  workspacePinned: boolean;
   /** Switch to an existing folder, or (with `dated`) create a new dated one. */
   switchWorkspace: (target: { path: string } | { dated: string }) => Promise<void>;
   openSession: (id: string) => Promise<void>;
@@ -120,6 +123,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   permissions: [],
   activeArtifact: null,
   workspace: null,
+  workspacePinned: false,
 
   openArtifact: (activeArtifact) => set({ activeArtifact }),
   closeArtifact: () => set({ activeArtifact: null }),
@@ -307,7 +311,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   // "New" opens a blank draft — no session is created until the first message (#3).
-  startDraft: () => set({ currentId: null }),
+  // A fresh draft also drops any pinned folder: back to the dated-folder default.
+  startDraft: () => set({ currentId: null, workspacePinned: false }),
 
   switchWorkspace: async (target) => {
     try {
@@ -315,9 +320,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       else await setWorkspace(target.path);
       // The sidecar restarted into the new folder; reset the local kernel so it
       // respawns there, then reconnect (retrying while the restarted server comes
-      // up). connect() re-reads the active folder for skill scoping.
+      // up). connect() re-reads the active folder for skill scoping. An explicit
+      // switch pins the folder, so the next new session lands exactly there.
       await kernelReset().catch(() => {});
-      set({ currentId: null, activeArtifact: null });
+      set({ currentId: null, activeArtifact: null, workspacePinned: true });
       await get().connectRetry();
       await Promise.all([get().refreshSessions(), get().loadCatalog()]);
     } catch (err) {
@@ -370,8 +376,19 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     }
     let id = get().currentId;
     if (!id) {
-      // Lazy-create the session on the first message (#3).
+      // Lazy-create the session on the first message (#3). Unless the user
+      // pinned a folder via the workspace switcher, a new session gets its own
+      // fresh dated folder (~/Documents/OpenScience/<date-time>) first, so its
+      // files never pile up in the bare base folder.
       try {
+        if (isTauri && !get().workspacePinned) {
+          await newDatedWorkspace(datedWorkspaceName());
+          await kernelReset().catch(() => {});
+          await get().connectRetry();
+          if (get().status !== "ready" || !client) {
+            throw new Error("Runtime did not reconnect after creating the session folder.");
+          }
+        }
         id = await client.createSession();
       } catch (err) {
         set({ error: err instanceof Error ? err.message : String(err) });
@@ -459,6 +476,12 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     }
   },
 }));
+
+/** Dated folder name like `2026-07-04-1615` for a fresh per-session workspace. */
+export function datedWorkspaceName(now = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}`;
+}
 
 export interface FoldState {
   blocks: ThreadBlock[];

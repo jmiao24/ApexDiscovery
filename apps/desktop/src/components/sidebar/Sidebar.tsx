@@ -1,20 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import {
-  ChevronDown,
-  Files,
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  FolderTree,
-  NotebookPen,
-  Plus,
-  Settings,
-  Trash2,
-} from "lucide-react";
+import { Files, FolderTree, NotebookPen, Plus, Settings, Trash2 } from "lucide-react";
 import type { Project } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
-import { isTauri, pickFolder } from "@/lib/tauri";
+import { isTauri } from "@/lib/tauri";
 import { useRuntimeStore } from "@/lib/runtime";
 import { StatusPills } from "./StatusPills";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -71,8 +60,6 @@ export function Sidebar({ project }: { project: Project }) {
           <span className="text-[10px] uppercase tracking-widest text-muted">Beta</span>
         </div>
       </div>
-
-      {isTauri && <WorkspaceSwitcher />}
 
       <nav className="flex flex-col px-3">
         <NavRow icon={<Plus size={16} />} label="New" onClick={startNew} />
@@ -145,93 +132,6 @@ export function Sidebar({ project }: { project: Project }) {
         />
       )}
     </aside>
-  );
-}
-
-function baseName(path: string | null): string {
-  if (!path) return "Workspace";
-  return path.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || "Workspace";
-}
-
-/** Dated folder name like 2026-07-04-1615 for a one-click fresh workspace. */
-function datedName(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
-}
-
-/** Shows the active workspace folder and lets the user create a new dated folder
- *  or open an existing one — so sessions/files aren't all dumped in one place. */
-function WorkspaceSwitcher() {
-  const navigate = useNavigate();
-  const workspace = useRuntimeStore((s) => s.workspace);
-  const switchWorkspace = useRuntimeStore((s) => s.switchWorkspace);
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
-
-  const go = async (target: { path: string } | { dated: string }) => {
-    setOpen(false);
-    setBusy(true);
-    try {
-      await switchWorkspace(target);
-      navigate("/live");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="relative px-3 pb-2" ref={ref}>
-      <button
-        className="flex w-full items-center gap-1.5 rounded-input border border-border bg-surface-2/60 px-2 py-1.5 text-left text-xs text-text hover:bg-surface-2 disabled:opacity-60"
-        onClick={() => setOpen((v) => !v)}
-        disabled={busy}
-        title={workspace ?? undefined}
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        <Folder size={13} className="shrink-0 text-muted" />
-        <span className="flex-1 truncate font-medium">{busy ? "Switching…" : baseName(workspace)}</span>
-        <ChevronDown size={12} className="shrink-0 text-muted" />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute left-3 right-3 z-20 mt-1 overflow-hidden rounded-card border border-border bg-surface py-1 shadow-lg"
-        >
-          <button
-            role="menuitem"
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text hover:bg-surface-2"
-            onClick={() => void go({ dated: datedName() })}
-          >
-            <FolderPlus size={13} className="text-muted" /> New dated folder
-          </button>
-          <button
-            role="menuitem"
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text hover:bg-surface-2"
-            onClick={() =>
-              void (async () => {
-                const dir = await pickFolder();
-                if (dir) await go({ path: dir });
-                else setOpen(false);
-              })()
-            }
-          >
-            <FolderOpen size={13} className="text-muted" /> Open folder…
-          </button>
-        </div>
-      )}
-    </div>
   );
 }
 
