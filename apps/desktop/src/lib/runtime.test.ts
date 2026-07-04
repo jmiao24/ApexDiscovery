@@ -51,6 +51,13 @@ describe("foldEvent", () => {
     expect(s.blocks).toHaveLength(0);
   });
 
+  it("drops opaque todo tool rows from the conversation", () => {
+    const s = foldAll([
+      { type: "tool.updated", sessionId: S, callId: "t1", tool: "todowrite", status: "success", title: "4 todos" },
+    ]);
+    expect(s.blocks).toHaveLength(0);
+  });
+
   it("never blanks a tool row when the completed event reports an empty title", () => {
     // Completed MCP tool parts carry title: "" — the tool name must survive.
     const s = foldAll([

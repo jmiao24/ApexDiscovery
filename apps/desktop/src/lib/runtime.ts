@@ -467,8 +467,10 @@ export function foldEvent(state: FoldState, event: OpenCodeEvent): FoldState {
     }
     case "tool.updated": {
       // The interactive `question`/`permission` tools render as their own
-      // answerable card (InteractionPrompt), not as a blank thread row.
-      if (/question|permission|^ask$/i.test(event.tool)) return { blocks, index };
+      // answerable card (InteractionPrompt), not as a blank thread row. `todo*`
+      // tools only report an opaque "N todos" count with no useful content —
+      // pure noise in the conversation, so drop them.
+      if (/question|permission|^ask$|todo/i.test(event.tool)) return { blocks, index };
       const key = `tool:${event.callId}`;
       // Completed MCP tools report title as "" — fall back to the tool name,
       // never render a blank row.
@@ -534,8 +536,9 @@ export function historyToThread(messages: HistoryMessage[]): FoldState {
           if (review) blocks.push(review);
         }
         else if (p.type === "tool") {
-          // Interactive tools are surfaced by InteractionPrompt, not the thread.
-          if (/question|permission|^ask$/i.test(p.tool ?? "")) continue;
+          // Interactive tools are surfaced by InteractionPrompt, not the thread;
+          // `todo*` tools are opaque "N todos" noise — skip both.
+          if (/question|permission|^ask$|todo/i.test(p.tool ?? "")) continue;
           const status = mapToolStatus(p.state?.status);
           blocks.push({
             kind: "tool-call",

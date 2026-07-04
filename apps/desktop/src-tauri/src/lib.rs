@@ -6,7 +6,6 @@ mod examples;
 mod hpc;
 mod jupyter;
 mod kernel;
-mod keychain;
 mod opencode_config;
 mod preview_server;
 mod provenance;
@@ -83,15 +82,12 @@ pub fn run() {
         .run(|app, event| {
             // Clean up on exit. macOS Cmd+Q / Quit terminates via RunEvent::Exit
             // (ExitRequested is not always delivered), so handle BOTH — otherwise
-            // the OpenCode sidecar orphans and credentials never move to the
-            // keychain. The cleanup is idempotent, so running on both is safe.
+            // the OpenCode sidecar / kernel / Jupyter orphan on every quit. The
+            // cleanup is idempotent, so running on both is safe.
             if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
                 runtime::kill_child(&app.state::<RuntimeState>());
                 kernel::kill_kernel(&app.state::<KernelState>());
                 jupyter::kill_jupyter(&app.state::<JupyterState>());
-                // Move provider credentials back to the OS keychain at rest,
-                // now that OpenCode (which owns auth.json) has been stopped.
-                keychain::persist(app);
             }
         });
 }

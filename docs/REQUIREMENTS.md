@@ -274,15 +274,15 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
   for their chosen provider; audit confirms keys/data never enter provenance,
   logs, or exports.
 - **Status.** Shipped. Workspace sandbox + approval mode + the plain-language
-  data-flow disclosure card in Settings. Provider credentials now live at rest in
-  the **OS keychain** (macOS Keychain / Windows Credential Manager via the
-  `keyring` crate): the app hydrates OpenCode's `auth.json` from the keychain
-  before the sidecar starts and, on exit, writes it back and deletes the
-  plaintext file — so no credential file sits on disk between runs. Invariant:
-  credentials are never lost (the file is removed only after a successful
-  keychain write; any failure keeps it). Verified end to end (auth.json →
-  keychain on quit → byte-identical restore on next launch → OpenCode ready with
-  the configured model).
+  data-flow disclosure card in Settings; the Acceptance is met — credentials
+  never enter provenance, logs, or exports, and the card states plainly what
+  leaves the machine. Credentials live in an app-private `auth.json` (mode 600,
+  owned by OpenCode). An OS-keychain-at-rest variant was built and verified, but
+  reverted: on unsigned / self-built copies (common for an open-source app) a
+  signature change makes macOS prompt for the login-keychain password on every
+  launch — a worse first-run experience than the mode-600 file, for a marginal
+  at-rest gain. Kept simple per "如无必要,勿增实体". (Revisit for signed
+  releases, where the prompt never occurs.)
 
 ### P2-4 · Beta stability & guardrails
 
@@ -321,7 +321,7 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 | P1-5 | Interaction & visualization craft | P1 | Chart design system + palette + command palette shipped |
 | P2-1 | Notebook + larger-project handling | P2 | Notebook + workspace Files explorer (browse tree, open any file) shipped |
 | P2-2 | HPC / SSH / Slurm / Modal | P2 | SSH+Slurm shipped (cluster card + skill); Modal pending |
-| P2-3 | Plain-language privacy posture | P2 | Disclosure + OS-keychain credential storage shipped |
+| P2-3 | Plain-language privacy posture | P2 | Disclosure shipped; creds in app-private mode-600 file (keychain built+reverted for unsigned-build UX) |
 | P2-4 | Beta stability & guardrails | P2 | Interactive prompts + exit-cleanup (no orphaned sidecar) fixed; first-run pass pending |
 
 ## What to say (and not say)
