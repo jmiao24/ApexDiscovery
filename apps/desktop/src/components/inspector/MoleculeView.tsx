@@ -31,6 +31,12 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
 
   const format = useMemo(() => moleculeFormatFor(filename), [filename]);
   const isMacromolecule = useMemo(() => looksLikeMacromolecule(text), [text]);
+  // Cartoon depicts a residue backbone — meaningless for small molecules, and
+  // 3Dmol crashes reading a missing atom.resn. Offer it only for macromolecules.
+  const styleOptions = useMemo(
+    () => STYLE_OPTIONS.filter((o) => o.value !== "cartoon" || isMacromolecule),
+    [isMacromolecule],
+  );
 
   const [styleMode, setStyleMode] = useState<MoleculeStyleMode>(() =>
     defaultStyleMode(filename, text),
@@ -178,7 +184,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
           <Atom size={13} /> 3D
         </div>
         <div className="flex rounded bg-surface-2 p-0.5">
-          {STYLE_OPTIONS.map((o) => (
+          {styleOptions.map((o) => (
             <button
               key={o.value}
               type="button"
@@ -223,14 +229,12 @@ function applyStyle(viewer: GLViewer, mode: MoleculeStyleMode, isMacromolecule: 
     viewer.setStyle({}, { sphere: { colorscheme: "Jmol", scale: 0.36 } });
     return;
   }
-  if (mode === "cartoon") {
-    if (isMacromolecule) {
-      viewer.setStyle({}, { cartoon: { color: "spectrum" } });
-      // Ligands/hetero atoms have no secondary structure — show them as sticks.
-      viewer.setStyle({ hetflag: true }, { stick: { colorscheme: "Jmol", radius: 0.12 } });
-    } else {
-      viewer.setStyle({}, { cartoon: { color: "spectrum" }, stick: { colorscheme: "Jmol", radius: 0.12 } });
-    }
+  // Cartoon needs a residue backbone; on a small molecule 3Dmol dereferences a
+  // missing atom.resn and throws, so only draw it for macromolecules.
+  if (mode === "cartoon" && isMacromolecule) {
+    viewer.setStyle({}, { cartoon: { color: "spectrum" } });
+    // Ligands/hetero atoms have no secondary structure — show them as sticks.
+    viewer.setStyle({ hetflag: true }, { stick: { colorscheme: "Jmol", radius: 0.12 } });
     return;
   }
   viewer.setStyle({}, { stick: { colorscheme: "Jmol", radius: 0.18 }, sphere: { colorscheme: "Jmol", scale: 0.26 } });

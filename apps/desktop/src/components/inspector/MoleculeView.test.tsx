@@ -54,6 +54,19 @@ describe("MoleculeView", () => {
     );
   });
 
+  it("offers Cartoon only for macromolecules (small molecules lack residues)", async () => {
+    const { rerender } = render(<MoleculeView filename="ligand.mol" text="small molecule" />);
+    await waitFor(() => expect(viewer.addModel).toHaveBeenCalled());
+    // A small molecule: cartoon would crash 3Dmol on missing resn, so it's hidden.
+    expect(screen.queryByRole("button", { name: "Cartoon" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stick" })).toBeInTheDocument();
+
+    // A protein (many alpha carbons) gets the cartoon option.
+    const protein = Array.from({ length: 25 }, (_, i) => `ATOM  ${i} CA  ALA`).join("\n");
+    rerender(<MoleculeView filename="1abc.pdb" text={protein} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cartoon" })).toBeInTheDocument());
+  });
+
   it("explains a SMILES file with no parseable structures", async () => {
     render(<MoleculeView filename="empty.smi" text={"   \n# comment\n"} />);
     expect(await screen.findByText(/No chemical structures found/)).toBeInTheDocument();
