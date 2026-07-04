@@ -11,6 +11,8 @@ workbench — an open alternative to Claude Science and similar AI-for-science p
 Not a chat box: a workbench that ties literature, code, figures, reports, and review
 into one auditable, reproducible workflow.
 
+<p><b>English</b> · <a href="./README.zh.md">中文</a></p>
+
 <p>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/version-v0.1-orange" alt="v0.1">
