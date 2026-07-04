@@ -137,16 +137,23 @@ fn rscript_candidates() -> Vec<String> {
     c
 }
 
+/// Probe an interpreter with the SAME PATH the kernel will run it under, so
+/// detection and execution resolve to the same binary (e.g. bare `python3` →
+/// the user's anaconda, not a system Python).
+fn interpreter_ok(bin: &str) -> bool {
+    let mut c = Command::new(bin);
+    c.arg("--version");
+    #[cfg(unix)]
+    c.env("PATH", crate::runtime::enriched_path());
+    c.output().is_ok()
+}
+
 pub(crate) fn python_bin() -> Option<String> {
-    python_candidates()
-        .into_iter()
-        .find(|bin| Command::new(bin).arg("--version").output().is_ok())
+    python_candidates().into_iter().find(|bin| interpreter_ok(bin))
 }
 
 pub(crate) fn rscript_bin() -> Option<String> {
-    rscript_candidates()
-        .into_iter()
-        .find(|bin| Command::new(bin).arg("--version").output().is_ok())
+    rscript_candidates().into_iter().find(|bin| interpreter_ok(bin))
 }
 
 fn spawn_kernel(app: &AppHandle, lang: &str) -> Result<Kernel, String> {
@@ -175,11 +182,17 @@ fn spawn_kernel(app: &AppHandle, lang: &str) -> Result<Kernel, String> {
         }
         _ => return Err(format!("unsupported kernel language: {lang}")),
     };
-    let mut child = cmd
-        .current_dir(workspace)
+    cmd.current_dir(workspace)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+    // Give the kernel the SAME PATH as the OpenCode sidecar so it runs the
+    // user's scientific Python (anaconda/homebrew) — the one the agent uses,
+    // with numpy/matplotlib/etc. A Finder-launched app otherwise has a minimal
+    // PATH and `python3` resolves to a bare system Python (no matplotlib).
+    #[cfg(unix)]
+    cmd.env("PATH", crate::runtime::enriched_path());
+    let mut child = cmd
         .spawn()
         .map_err(|e| format!("failed to start {lang} kernel: {e}"))?;
     let stdin = child.stdin.take().ok_or("no kernel stdin")?;

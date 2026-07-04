@@ -176,7 +176,7 @@ fn copy_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
 /// well-known scientific tool locations that actually exist on this machine —
 /// the same order a terminal profile would produce.
 #[cfg(unix)]
-fn enriched_path() -> String {
+pub(crate) fn enriched_path() -> String {
     let base = std::env::var("PATH").unwrap_or_default();
     let home = std::env::var("HOME").unwrap_or_default();
     let extras = [
