@@ -8,6 +8,7 @@ mod opencode_config;
 mod preview_server;
 mod provenance;
 mod runtime;
+mod science_mcp;
 mod tools;
 
 use jupyter::JupyterState;
@@ -59,6 +60,8 @@ pub fn run() {
             artifact_file::write_workspace_file,
             provenance::record_provenance,
             provenance::list_provenance,
+            science_mcp::science_mcp_python,
+            science_mcp::setup_science_mcp,
             preview_server::preview_url,
             tools::detect_tools,
             debug_log::log_debug

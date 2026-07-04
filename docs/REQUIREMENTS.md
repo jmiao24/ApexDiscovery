@@ -134,8 +134,12 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 - **Acceptance.** A user can, from chat, query at least PubMed + arXiv +
   Crossref and get results the reviewer can later audit; a "bring your own MCP"
   path is documented and works.
-- **Status.** MCP add/remove + live status shipped; Jupyter MCP integrated. Gap:
-  the curated science-connector set + a one-page "connect your lab tools" guide.
+- **Status.** Shipped: Settings lists curated open-source science MCP connectors
+  (literature: arXiv/PubMed/Crossref/Semantic Scholar via paper-search-mcp; bio:
+  PubMed/trials/variants via biomcp) with one-click Enable that provisions them
+  into an isolated env via the bundled uv and registers them; plus
+  `docs/CONNECT_YOUR_TOOLS.md` for bring-your-own MCP/skills. We integrate
+  existing open-source servers, not reimplement them. Gap: broader curated set.
 
 ### P1-3 · Scientific renderers (native viewers)
 
@@ -258,7 +262,7 @@ are "just Jupyter + a chatbot" — the exact criticism leveled at competitors.
 | P0-3 | Artifact provenance / reproducibility | P0 | Versioned records + History UI shipped; re-run pending |
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | Skill + tagged/dismissible findings shipped |
 | P1-1 | Multi-discipline from day one | P1 | Pluggable; non-bio demo pending |
-| P1-2 | Domain + literature connectors | P1 | MCP done; science set pending |
+| P1-2 | Domain + literature connectors | P1 | Curated one-click connectors + BYO guide shipped |
 | P1-3 | Scientific renderers | P1 | Base previews done; domain viewers pending |
 | P1-4 | Windows + macOS installers | P1 | macOS done; Windows pending |
 | P1-5 | Interaction & visualization craft | P1 | Aesthetic base done; chart system + polish pending |

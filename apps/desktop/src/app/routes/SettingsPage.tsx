@@ -30,8 +30,10 @@ import {
   workspacePath,
   type JupyterStatus,
 } from "@/lib/tauri";
+import { setupScienceMcp } from "@/lib/tauri";
 import { openArtifactExternally } from "@/lib/artifactFile";
 import { DataFlowCard } from "@/components/settings/DataFlowCard";
+import { SCIENCE_CONNECTORS, connectorConfig } from "@/lib/scienceConnectors";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 
@@ -53,6 +55,8 @@ export function SettingsPage() {
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [jupyter, setJupyter] = useState<JupyterStatus | null>(null);
   const [settingUpJupyter, setSettingUpJupyter] = useState(false);
+  // Which curated science connector is currently being provisioned, by id.
+  const [enablingConnector, setEnablingConnector] = useState<string | null>(null);
 
   // Add-MCP-server form.
   const [mName, setMName] = useState("");
@@ -230,6 +234,26 @@ export function SettingsPage() {
       toast.error(`Jupyter setup failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setSettingUpJupyter(false);
+    }
+  };
+
+  // One click: uv provisions the open-source connector into the shared science
+  // env, then its MCP entry is written into OpenCode's config.
+  const enableConnector = async (id: string) => {
+    const c = SCIENCE_CONNECTORS.find((x) => x.id === id);
+    if (!c) return;
+    setEnablingConnector(id);
+    try {
+      toast.success(`Setting up ${c.label} — first run downloads a managed Python, please wait…`);
+      const python = await setupScienceMcp(c.pkg);
+      await getClient()!.addMcpServer(c.id, connectorConfig(c, python));
+      toast.success(`${c.label} enabled — the agent can now use it from chat.`);
+      await refresh();
+      await loadCatalog();
+    } catch (e) {
+      toast.error(`${c.label} setup failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setEnablingConnector(null);
     }
   };
 
@@ -573,6 +597,39 @@ export function SettingsPage() {
             <p className="text-[13px] text-muted">Connect the runtime to configure MCP servers.</p>
           ) : (
             <div className="overflow-hidden rounded-input border border-border">
+              {/* Curated open-source science connectors — one-click enable. */}
+              {isTauri &&
+                SCIENCE_CONNECTORS.filter((c) => !mcpServers.some((s) => s.name === c.id)).map(
+                  (c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center gap-2.5 border-b border-border bg-surface px-3 py-2.5 text-[13px]"
+                    >
+                      <Search size={14} className="shrink-0 text-muted" />
+                      <div className="min-w-0 flex-1">
+                        <span className="font-medium text-text">{c.label}</span>
+                        <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted ring-1 ring-border">
+                          open source
+                        </span>
+                        <div className="truncate text-xs text-muted">{c.description}</div>
+                        <div className="truncate font-mono text-[11px] text-muted/70">{c.source}</div>
+                      </div>
+                      <button
+                        className={btnAccent("h-8")}
+                        onClick={() => void enableConnector(c.id)}
+                        disabled={enablingConnector !== null || busy}
+                      >
+                        {enablingConnector === c.id ? (
+                          <>
+                            <Loader2 size={12} className="animate-spin" /> Setting up…
+                          </>
+                        ) : (
+                          "Enable"
+                        )}
+                      </button>
+                    </div>
+                  ),
+                )}
               {/* Featured: one-click Jupyter (shown until its MCP entry exists). */}
               {isTauri && !mcpServers.some((s) => s.name === "jupyter") && (
                 <div className="flex items-center gap-2.5 border-b border-border bg-surface px-3 py-2.5 text-[13px]">
