@@ -22,6 +22,45 @@ runtime (bundled as a sidecar), MCP, scientific skills, and an artifact provenan
 - **Multi-domain** — starting with AI4S, expanding to materials, chemistry, biology,
   medicine, and engineering.
 
+## See it in action
+
+**One prompt → a complete, traceable analysis.** Simulate data, fit a model, save a
+publication-grade figure, and write a report where every number traces to the code.
+
+![End-to-end dose–response analysis: the agent runs code and produces a fitted figure and a report](./docs/assets/showcase-workflow.webp)
+
+**Every artifact traces back to its code, inputs, and conversation** — one click on a
+figure reveals the script that made it and the versions behind it.
+
+![Artifact inspector showing a figure's generating code, inputs, and provenance](./docs/assets/showcase-provenance.webp)
+
+**Literature → verifiable report.** Search papers, draft a manuscript rendered as a
+PDF, and audit it for citations, unsourced numbers, and figure↔code consistency.
+
+![Literature survey producing a rendered PDF manuscript with a traceability review](./docs/assets/showcase-literature.webp)
+
+<details>
+<summary><b>More screenshots</b> — notebooks, experiment sweeps, and the skills library</summary>
+
+<br>
+
+**Conversation-first notebooks.** The agent drives a real Jupyter kernel; cells and
+figures appear live beside the chat.
+
+![The agent driving a Jupyter notebook with a live matplotlib figure](./docs/assets/showcase-notebook.webp)
+
+**Run and track experiments.** Sweep parameters, keep a persistent kernel, and surface
+results as traceable artifacts.
+
+![An experiment sweep table alongside a live analysis notebook](./docs/assets/showcase-experiment.webp)
+
+**Pluggable scientific skills.** Bundled skills for literature, experiments, figures,
+and integrity — plus one-click open-source connectors and bring-your-own.
+
+![The skills library listing bundled scientific skills](./docs/assets/showcase-skills.webp)
+
+</details>
+
 ## Status
 
 `v0.1` in development — desktop MVP. See [`PROGRESS.md`](./PROGRESS.md) for the log
