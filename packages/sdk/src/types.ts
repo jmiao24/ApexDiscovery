@@ -29,6 +29,9 @@ export interface ToolUpdatedEvent {
   input?: Record<string, unknown>;
   /** Tool result text, when the tool returned one. */
   output?: string;
+  /** A `task` tool's spawned subagent session — that session's interactive
+   *  requests (question/permission) belong to THIS conversation. */
+  childSessionId?: string;
 }
 export interface SessionIdleEvent {
   type: "session.idle";
@@ -106,6 +109,8 @@ export interface SessionMeta {
   slug?: string;
   /** Workspace folder this session operates in (absolute path). */
   directory?: string;
+  /** Set on subagent sessions: the session whose task tool spawned this one. */
+  parentId?: string;
 }
 
 export interface SkillInfo {
@@ -130,6 +135,10 @@ export interface CommandInfo {
   source?: string;
   /** Agent the command pins, when it does. */
   agent?: string;
+  /** The prompt text the command expands to. OpenCode stores that EXPANSION
+   *  as the user message in history — the template lets the app reverse-map
+   *  it back to the "/name" the user actually typed. */
+  template?: string;
 }
 
 /** A message loaded from history (GET /session/:id/message). */
@@ -140,6 +149,9 @@ export interface HistoryMessage {
 export interface HistoryPart {
   type: string;
   text?: string;
+  /** True on runtime-generated text (e.g. the "tool was executed by the user"
+   *  marker a "!" shell run leaves in history) — not something the user typed. */
+  synthetic?: boolean;
   tool?: string;
   state?: {
     status?: string;

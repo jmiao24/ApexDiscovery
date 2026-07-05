@@ -44,6 +44,8 @@ pub fn run() {
             runtime::stop_runtime,
             runtime::workspace_path,
             runtime::workspace_base,
+            runtime::set_workspace_base,
+            runtime::open_workspace_base,
             runtime::set_workspace,
             runtime::new_dated_workspace,
             runtime::pick_folder,

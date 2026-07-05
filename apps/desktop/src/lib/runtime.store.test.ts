@@ -14,8 +14,14 @@ const mocks = vi.hoisted(() => ({
   fireEvent: (_e: unknown) => {},
   runShell: vi.fn(),
   runCommand: vi.fn(),
+  replyPermission: vi.fn(),
   /** Next runShell call throws (HTTP-level failure). */
   failShell: false,
+  /** Next runCommand call throws before any event (HTTP-level failure). */
+  failCommand: false,
+  /** Next runCommand call streams an event, then throws — the WKWebView
+   *  ~60 s fetch kill on a long sync turn ("Load failed"). */
+  dropCommandPost: false,
 }));
 
 vi.mock("./tauri", () => ({
@@ -86,20 +92,30 @@ vi.mock("@ai4s/sdk", () => {
     }
     async runCommand(sid: string, name: string, args?: string) {
       mocks.runCommand(sid, name, args);
+      if (mocks.failCommand) throw new Error("command exploded");
+      if (mocks.dropCommandPost) {
+        mocks.fireEvent({ type: "text.updated", sessionId: sid, partId: "t1", text: "working…" });
+        throw new Error("Load failed");
+      }
       mocks.fireEvent({ type: "session.idle", sessionId: sid });
+    }
+    async replyPermission(requestId: string, reply: string) {
+      mocks.replyPermission(requestId, reply);
     }
     close() {}
   }
   return { OpenCodeClient, DEFAULT_OPENCODE_URL: "http://127.0.0.1:4096" };
 });
 
-import { DRAFT_KEY, useRuntimeStore } from "./runtime";
+import { DRAFT_KEY, rootSessionOf, useRuntimeStore } from "./runtime";
 
 beforeEach(async () => {
   vi.clearAllMocks();
   mocks.failConnects = 0;
   mocks.failCreates = 0;
   mocks.failShell = false;
+  mocks.failCommand = false;
+  mocks.dropCommandPost = false;
   useRuntimeStore.setState({
     currentId: null,
     workspacePinned: false,
@@ -107,6 +123,8 @@ beforeEach(async () => {
     error: null,
     sending: false,
     runningSessions: {},
+    permissions: [],
+    sessionParents: {},
   });
   await useRuntimeStore.getState().connect();
   expect(useRuntimeStore.getState().status).toBe("ready");
@@ -299,5 +317,78 @@ describe("per-session workspace folders", () => {
     expect(useRuntimeStore.getState().workspacePinned).toBe(true);
     useRuntimeStore.getState().startDraft();
     expect(useRuntimeStore.getState().workspacePinned).toBe(false);
+  });
+});
+
+// A task tool spawns a subagent in a CHILD session; its permission asks carry
+// the child's id, and a sync POST held open for a long turn is killed by
+// WKWebView at ~60 s. Both must not strand the conversation.
+describe("subagent permission asks and long sync turns", () => {
+  it("maps a task tool's child session to the parent conversation", async () => {
+    const id = await useRuntimeStore.getState().sendPrompt("explore the repo");
+    mocks.fireEvent({
+      type: "tool.updated",
+      sessionId: id,
+      callId: "c1",
+      tool: "task",
+      status: "running",
+      title: "Explore repo",
+      childSessionId: "ses_child",
+    });
+    mocks.fireEvent({
+      type: "permission.asked",
+      sessionId: "ses_child",
+      requestId: "per_1",
+      action: "external_directory",
+      resources: ["/repo/*"],
+    });
+    const s = useRuntimeStore.getState();
+    expect(s.sessionParents["ses_child"]).toBe(id);
+    expect(rootSessionOf(s.sessionParents, "ses_child")).toBe(id);
+    expect(s.permissions).toHaveLength(1);
+  });
+
+  it("keeps the turn alive when a sync POST dies mid-turn but SSE kept streaming", async () => {
+    mocks.dropCommandPost = true;
+    const id = await useRuntimeStore.getState().runCommand("growth-marketing");
+    expect(id).toBe("ses_new");
+    const s = useRuntimeStore.getState();
+    expect(
+      s.threads["ses_new"].blocks.some((b) => b.kind === "status-line" && b.tone === "error"),
+    ).toBe(false);
+    expect(s.runningSessions["ses_new"]).toBe(true); // still working server-side
+    expect(s.sending).toBe(false); // composer input unlocked for the queue
+    mocks.fireEvent({ type: "session.idle", sessionId: "ses_new" });
+    expect(useRuntimeStore.getState().runningSessions["ses_new"]).toBeUndefined();
+  });
+
+  it("a command POST that fails before any event still shows the red line", async () => {
+    mocks.failCommand = true;
+    await useRuntimeStore.getState().runCommand("init");
+    const s = useRuntimeStore.getState();
+    const blocks = s.threads["ses_new"].blocks;
+    expect(blocks[blocks.length - 1]).toMatchObject({ kind: "status-line", tone: "error" });
+    expect(s.runningSessions["ses_new"]).toBeUndefined();
+    expect(s.sending).toBe(false);
+  });
+
+  it("one reply answers all identical pending asks (same session, action, resources)", async () => {
+    await useRuntimeStore.getState().sendPrompt("go");
+    const ask = (requestId: string) =>
+      mocks.fireEvent({
+        type: "permission.asked",
+        sessionId: "ses_child",
+        requestId,
+        action: "external_directory",
+        resources: ["/repo/*"],
+      });
+    ask("per_a");
+    ask("per_b");
+    ask("per_c");
+    expect(useRuntimeStore.getState().permissions).toHaveLength(3);
+    await useRuntimeStore.getState().replyPermission("per_a", "always");
+    expect(mocks.replyPermission).toHaveBeenCalledTimes(3);
+    expect(mocks.replyPermission).toHaveBeenCalledWith("per_b", "always");
+    expect(useRuntimeStore.getState().permissions).toHaveLength(0);
   });
 });

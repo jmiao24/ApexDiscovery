@@ -35,6 +35,12 @@ fn active_workspace_file(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(runtime_root(app)?.join("active-workspace.txt"))
 }
 
+/// File recording the user's chosen BASE folder — the parent every new dated
+/// session workspace is created under (Settings → Workspace).
+fn base_workspace_file(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(runtime_root(app)?.join("base-workspace.txt"))
+}
+
 /// The active workspace folder OpenCode / the kernel / previews / provenance all
 /// operate in. Defaults to the base folder (`~/Documents/OpenScience`) until the
 /// user opens or creates another one; the choice persists across restarts.
@@ -50,10 +56,19 @@ pub fn workspace_dir(app: &AppHandle) -> Result<PathBuf, String> {
     base_workspace_dir(app)
 }
 
-/// The default workspace root: `~/Documents/OpenScience` (no space — the agent
-/// runs shell commands against this path, and unquoted spaces break them). Falls
-/// back to `$HOME/Documents`. New dated folders are created under here.
+/// The workspace root new dated session folders are created under. A folder
+/// the user picked in Settings wins; the default is `~/Documents/OpenScience`
+/// (no space — the agent runs shell commands against this path, and unquoted
+/// spaces break them), falling back to `$HOME/Documents`.
 pub fn base_workspace_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Ok(f) = base_workspace_file(app) {
+        if let Ok(s) = std::fs::read_to_string(&f) {
+            let dir = PathBuf::from(s.trim());
+            if dir.is_dir() {
+                return Ok(dir);
+            }
+        }
+    }
     let docs = match app.path().document_dir() {
         Ok(d) => d,
         Err(_) => {
@@ -303,16 +318,40 @@ pub fn workspace_base(app: AppHandle) -> Result<String, String> {
     Ok(base_workspace_dir(&app)?.to_string_lossy().to_string())
 }
 
-/// Switch the active workspace folder: create it if needed, persist the choice,
-/// and restart the sidecar so its working directory (which scopes the agent's
-/// sessions and files) becomes the new folder. The kernel / Files / provenance
-/// read the same folder via `workspace_dir`. `path` must be absolute. Scoping is
-/// by the sidecar cwd, not a `?directory=` query — the latter routes turns to a
-/// scope the global event stream never sees.
+/// Choose the base folder (Settings → Workspace → Change). Creates it if
+/// needed and persists the choice; every NEW session's dated folder is created
+/// under it. Existing sessions keep their folders.
+#[tauri::command]
+pub fn set_workspace_base(app: AppHandle, path: String) -> Result<String, String> {
+    let dir = PathBuf::from(&path);
+    if !dir.is_absolute() {
+        return Err("workspace base must be absolute".into());
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| format!("could not create folder: {e}"))?;
+    let canon = dir.canonicalize().map_err(|e| e.to_string())?;
+    std::fs::write(base_workspace_file(&app)?, canon.to_string_lossy().as_bytes())
+        .map_err(|e| e.to_string())?;
+    Ok(canon.to_string_lossy().to_string())
+}
+
+/// Reveal the base workspace folder in the OS file manager. (The sandboxed
+/// `open_path` resolves inside the ACTIVE workspace only, which may be a dated
+/// subfolder — the base needs its own door.)
+#[tauri::command]
+pub fn open_workspace_base(app: AppHandle) -> Result<(), String> {
+    crate::artifact_file::os_open(&base_workspace_dir(&app)?)
+}
+
+/// Switch the active workspace folder: create it if needed and persist the
+/// choice. The kernel / Files / provenance read the folder via `workspace_dir`;
+/// the agent runtime is scoped per request — the frontend reconnects its event
+/// stream with `?directory=` and creates sessions with it (a bare `/event`
+/// stream would not see other folders' instances, so the scoped stream is
+/// required). `path` must be absolute.
 #[tauri::command]
 pub fn set_workspace(
     app: AppHandle,
-    state: State<'_, RuntimeState>,
+    _state: State<'_, RuntimeState>,
     path: String,
 ) -> Result<String, String> {
     let dir = PathBuf::from(&path);
@@ -324,13 +363,10 @@ pub fn set_workspace(
     std::fs::write(active_workspace_file(&app)?, canon.to_string_lossy().as_bytes())
         .map_err(|e| e.to_string())?;
 
-    // Restart the sidecar so its cwd is the new folder (the frontend reconnects).
-    if state.url.lock().unwrap().is_some() {
-        kill_child(&state);
-        let port = { *state.port.lock().unwrap().get_or_insert_with(free_port) };
-        let child = spawn_sidecar(&app, port)?;
-        *state.child.lock().unwrap() = Some(child);
-    }
+    // No sidecar restart: OpenCode serves every folder from one process via
+    // per-directory instances, and the frontend reconnects its event stream
+    // with `?directory=<new folder>`. Restarting here used to cost 3-6 s per
+    // history-session switch (process boot + reconnect polling).
     Ok(canon.to_string_lossy().to_string())
 }
 

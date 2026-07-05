@@ -71,6 +71,9 @@ interface RuntimeState {
   /** Pending interactive requests the agent is blocked on, newest last. */
   questions: QuestionAskedEvent[];
   permissions: PermissionAskedEvent[];
+  /** Subagent session → the session whose task tool spawned it, learned from
+   *  task tool events (live) and the session list (recovery after reload). */
+  sessionParents: Record<string, string>;
   /** Artifact opened in the live inspector pane, if any. */
   activeArtifact: ArtifactBlock | null;
   openArtifact: (a: ArtifactBlock) => void;
@@ -92,10 +95,10 @@ interface RuntimeState {
   /** True when the user explicitly picked the active folder for the next new
    *  session; false means a new session gets its own fresh dated folder. */
   workspacePinned: boolean;
-  /** A deliberate workspace move is in flight (sidecar restart + reconnect).
-   *  The UI must not present it as a disconnection — no status flip, no
-   *  Connect button, no help card. Real failures surface after the retry
-   *  window is exhausted, once this clears. */
+  /** A deliberate workspace move is in flight (event-stream reconnect into the
+   *  new folder). The UI must not present it as a disconnection — no status
+   *  flip, no Connect button, no help card. Real failures surface after the
+   *  retry window is exhausted, once this clears. */
   switching: boolean;
   /** A sendPrompt is in flight (click → POST accepted). Locks the composer. */
   sending: boolean;
@@ -137,6 +140,21 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 /** Tool calls already written to provenance — success events can repeat per callId. */
 const recordedProvenance = new Set<string>();
+
+/** Last SSE arrival per session (monotonic sequence, not wall time). Lets a
+ *  failed sync POST tell "the connection died but the turn is alive" (events
+ *  kept arriving after the POST began) from "the send never took" — WKWebView
+ *  kills any fetch at ~60 s, long before a long agent turn finishes. */
+let sseSeq = 0;
+const sseLast = new Map<string, number>();
+
+/** Resolve a (possibly nested) subagent session to its top-level session —
+ *  a subagent's question/permission belongs to the conversation the user sees. */
+export function rootSessionOf(parents: Record<string, string>, sessionId: string): string {
+  let cur = sessionId;
+  for (let hop = 0; parents[cur] && hop < 10; hop++) cur = parents[cur];
+  return cur;
+}
 
 type StoreSet = {
   (partial: Partial<RuntimeState>): void;
@@ -219,26 +237,38 @@ async function performTurn(
         runningSessions: { ...s.runningSessions, [sid]: true },
         ...(shell ? { shellTurns: { ...s.shellTurns, [sid]: true as const } } : {}),
       }));
+      const mark = sseSeq;
       try {
         await post(sid);
       } catch (err) {
-        // A failed POST produces no events — drop the shell flag here. (On
-        // success the session.idle event clears it, never the POST settling:
-        // SSE frames and the POST response race on separate connections, and
-        // the bash-output event may land after the POST resolves.)
-        set((s) => {
-          const shellTurns = { ...s.shellTurns };
-          delete shellTurns[sid];
-          return { shellTurns };
-        });
-        throw err;
-      } finally {
+        // The POST rejected — but shell/command POSTs are held open for the
+        // WHOLE turn, and WKWebView kills any fetch at ~60 s. If SSE kept
+        // streaming this session since the POST began, the turn is alive
+        // server-side: keep the running lock (session.idle or a session error
+        // will clear it) and don't report a failure that didn't happen.
+        if ((sseLast.get(sid) ?? 0) > mark) {
+          void logDebug(`turn POST dropped mid-turn, still running → ${sid}`);
+          return sid;
+        }
+        // A genuinely failed POST produces no events — drop both flags here.
+        // (On success the session.idle event clears the shell flag, never the
+        // POST settling: SSE frames and the POST response race on separate
+        // connections, and the bash-output event may land after the POST
+        // resolves.)
         set((s) => {
           const runningSessions = { ...s.runningSessions };
+          const shellTurns = { ...s.shellTurns };
           delete runningSessions[sid];
-          return { runningSessions };
+          delete shellTurns[sid];
+          return { runningSessions, shellTurns };
         });
+        throw err;
       }
+      set((s) => {
+        const runningSessions = { ...s.runningSessions };
+        delete runningSessions[sid];
+        return { runningSessions };
+      });
     } else {
       await post(sid);
       set((s) => ({ runningSessions: { ...s.runningSessions, [sid]: true } }));
@@ -290,6 +320,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   error: null,
   questions: [],
   permissions: [],
+  sessionParents: {},
   activeArtifact: null,
   workspace: null,
   workspacePinned: false,
@@ -324,9 +355,15 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   replyPermission: async (requestId, reply) => {
     const p = get().permissions.find((x) => x.requestId === requestId);
     if (!p || !client) return;
-    set((s) => ({ permissions: s.permissions.filter((x) => x.requestId !== requestId) }));
+    // Identical pending asks (same session, action and resources — e.g. three
+    // parallel reads into one folder) are ONE question to the user: answer
+    // them all with one click instead of re-asking for each tool call.
+    const sig = (x: PermissionAskedEvent) =>
+      `${x.sessionId}|${x.action}|${x.resources.join("|")}`;
+    const batch = get().permissions.filter((x) => sig(x) === sig(p));
+    set((s) => ({ permissions: s.permissions.filter((x) => sig(x) !== sig(p)) }));
     try {
-      await client.replyPermission(requestId, reply);
+      await Promise.all(batch.map((x) => client!.replyPermission(x.requestId, reply)));
     } catch (err) {
       set({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -346,14 +383,15 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         client.getDefaultModel().catch(() => null),
         client.listCommands().catch(() => []),
       ]);
+      set({ agents, defaultModel, commands });
       let skills = firstSkills;
       // The first workspace-scoped /api/skill call triggers OpenCode's lazy
-      // instance init and can answer before the scan finishes — retry once.
-      if (skills.length === 0) {
-        await sleep(1500);
+      // instance init and can answer before the scan finishes — poll briefly.
+      for (let i = 0; skills.length === 0 && i < 4; i++) {
+        await sleep(400);
         skills = await client.listSkills();
       }
-      set({ skills, agents, defaultModel, commands });
+      set({ skills });
     } catch {
       /* ignore transient failures */
     }
@@ -380,6 +418,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     });
     c.onEvent((event) => {
       void logDebug(`event ← ${event.type}${"sessionId" in event ? " " + event.sessionId : ""}`);
+      if ("sessionId" in event && event.sessionId) sseLast.set(event.sessionId, ++sseSeq);
       if (event.type === "error") {
         // A session-scoped error belongs IN the conversation (a red status
         // line where the user is looking), and it ends that session's turn so
@@ -431,6 +470,18 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       }
       const sid = event.sessionId;
       if (!sid) return;
+      // A task tool names the subagent session it spawned — remember the
+      // parent link so the child's permission/question asks surface in THIS
+      // conversation, and refresh the list so the child's title is known.
+      if (
+        event.type === "tool.updated" &&
+        event.childSessionId &&
+        get().sessionParents[event.childSessionId] !== sid
+      ) {
+        const child = event.childSessionId;
+        set((s) => ({ sessionParents: { ...s.sessionParents, [child]: sid } }));
+        void get().refreshSessions();
+      }
       set((s) => {
         const cur = s.threads[sid] ?? emptyThread();
         const folded = foldEvent(
@@ -469,7 +520,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       void logDebug("connect OK");
       set({ error: null });
       await get().refreshSessions();
-      await get().loadCatalog();
+      // Catalog (skills/agents/commands) fills in behind the page — a session
+      // switch must not wait on it to show the conversation.
+      void get().loadCatalog();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       void logDebug(`connect FAILED: ${msg}`);
@@ -481,9 +534,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   // macOS TCC ("access Documents") blocks the sidecar until the user answers,
   // so the window must cover minutes, not seconds — giving up early strands
   // the user on an error screen that a single manual Connect would fix.
-  // Failed attempts are masked (status AND error): every workspace switch
-  // restarts the sidecar on purpose, and flashing "could not open the event
-  // stream" at the user mid-switch reads as breakage. The last error is
+  // Failed attempts are masked (status AND error): workspace switches
+  // reconnect the event stream on purpose, and flashing "could not open the
+  // event stream" at the user mid-switch reads as breakage. The last error is
   // surfaced only if the whole retry window is exhausted.
   connectRetry: async (tries = 120) => {
     set({ status: "connecting" });
@@ -493,7 +546,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       if (get().status === "ready") return;
       lastError = get().error ?? lastError;
       set({ status: "connecting", error: null });
-      await sleep(1000);
+      // Quick retries first — the server is usually up within a second (a
+      // reconnect finds it already listening); back off to 1 s for the long
+      // tail (first boot blocked on macOS TCC can take minutes).
+      await sleep(i < 8 ? 250 : 1000);
     }
     set({ status: "error", error: lastError });
   },
@@ -524,7 +580,14 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   refreshSessions: async () => {
     if (!client) return;
     try {
-      set({ sessions: await client.listSessions() });
+      const sessions = await client.listSessions();
+      set((s) => {
+        // The list also names each subagent session's parent — the recovery
+        // path for parent links after a reload (no live task event to learn from).
+        const sessionParents = { ...s.sessionParents };
+        for (const m of sessions) if (m.parentId) sessionParents[m.id] = m.parentId;
+        return { sessions, sessionParents };
+      });
     } catch {
       /* ignore transient list failures */
     }
@@ -544,10 +607,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     try {
       if ("dated" in target) await newDatedWorkspace(target.dated);
       else await setWorkspace(target.path);
-      // The sidecar restarted into the new folder; reset the local kernel so it
-      // respawns there, then reconnect (retrying while the restarted server comes
-      // up). connect() re-reads the active folder for skill scoping. An explicit
-      // switch pins the folder, so the next new session lands exactly there.
+      // Reset the local kernel so it respawns in the new folder, then reconnect
+      // the event stream scoped to it (connect() re-reads the active folder —
+      // the sidecar itself keeps running). An explicit switch pins the folder,
+      // so the next new session lands exactly there.
       await kernelReset().catch(() => {});
       set({ currentId: null, activeArtifact: null, workspacePinned: true });
       await get().connectRetry();
@@ -562,10 +625,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   openSession: async (id) => {
     set({ currentId: id });
     if (!client) return;
-    // Follow the session into its own workspace folder: switch the sidecar's cwd
-    // to it (restart) and reconnect, so the agent, kernel and Files all operate
-    // where the session's files live. Sessions with no recorded folder, or that
-    // already match the active folder, skip this.
+    // Follow the session into its own workspace folder: record it as active and
+    // reconnect the event stream scoped to it, so the agent, kernel and Files
+    // all operate where the session's files live. Sessions with no recorded
+    // folder, or that already match the active folder, skip this.
     const dir = get().sessions.find((s) => s.id === id)?.directory;
     if (dir && dir !== get().workspace) {
       set({ switching: true });
@@ -585,10 +648,16 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
           client!.listQuestions(id),
           client!.listPermissions(id),
         ]);
-        set((s) => ({
-          questions: [...s.questions.filter((q) => q.sessionId !== id), ...qs],
-          permissions: [...s.permissions.filter((p) => p.sessionId !== id), ...ps],
-        }));
+        // Both lists are workspace-scoped (they include subagent sessions'
+        // asks) — replace by requestId so live SSE copies don't duplicate.
+        set((s) => {
+          const qIds = new Set(qs.map((q) => q.requestId));
+          const pIds = new Set(ps.map((p) => p.requestId));
+          return {
+            questions: [...s.questions.filter((q) => !qIds.has(q.requestId)), ...qs],
+            permissions: [...s.permissions.filter((p) => !pIds.has(p.requestId)), ...ps],
+          };
+        });
       } catch {
         /* pending-request recovery is best-effort */
       }
@@ -596,7 +665,12 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     if (get().threads[id]?.loaded) return;
     try {
       const messages = await client.getMessages(id);
-      set((s) => ({ threads: { ...s.threads, [id]: { ...historyToThread(messages), loaded: true } } }));
+      set((s) => ({
+        threads: {
+          ...s.threads,
+          [id]: { ...historyToThread(messages, s.commands), loaded: true },
+        },
+      }));
     } catch (err) {
       set({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -801,16 +875,42 @@ function mapToolStatus(status?: string): ToolCallStatus {
 }
 
 /** Convert loaded message history into thread blocks. */
-export function historyToThread(messages: HistoryMessage[]): FoldState {
+export function historyToThread(messages: HistoryMessage[], commands?: CommandInfo[]): FoldState {
   const blocks: ThreadBlock[] = [];
+  // OpenCode stores a slash command's EXPANDED template as the user message,
+  // with any typed arguments appended after it (no marker) — show the
+  // "/name args" the user actually typed instead. Longest template first, so
+  // one template being a prefix of another's expansion can't mis-attribute.
+  const templates = (commands ?? [])
+    .filter((c) => c.template?.trim())
+    .map((c) => ({ name: c.name, template: c.template!.trim() }))
+    .sort((a, b) => b.template.length - a.template.length);
+  const asTypedCommand = (text: string): string | undefined => {
+    const hit = templates.find((t) => text.startsWith(t.template));
+    if (!hit) return undefined;
+    const args = text.slice(hit.template.length).trim();
+    return args ? `/${hit.name} ${args}` : `/${hit.name}`;
+  };
+  // A step frozen mid-run (the runtime restarted or the turn was killed before
+  // it finished) must not spin forever in history — render it quietly and say
+  // once, at the end, that the turn was interrupted.
+  let interrupted = false;
+  // A user-typed "!" command is recorded as a synthetic user text plus a bash
+  // tool part on the next assistant message. Render it like the live path:
+  // the "! cmd" echo and the output inline — never the synthetic marker text.
+  let shellTurn = false;
   for (const m of messages) {
     if (m.role === "user") {
+      shellTurn = m.parts.some((p) => p.type === "text" && p.synthetic);
+      if (shellTurn) continue;
       const text = m.parts
         .filter((p) => p.type === "text")
         .map((p) => p.text ?? "")
         .join("")
         .trim();
-      if (text) blocks.push({ kind: "user", text });
+      const command = asTypedCommand(text);
+      if (command) blocks.push({ kind: "user", text: command });
+      else if (text) blocks.push({ kind: "user", text });
     } else {
       for (const p of m.parts) {
         if (p.type === "text" && p.text?.trim()) {
@@ -823,10 +923,19 @@ export function historyToThread(messages: HistoryMessage[]): FoldState {
           // `todo*` tools are opaque "N todos" noise — skip both.
           if (/question|permission|^ask$|todo/i.test(p.tool ?? "")) continue;
           const status = mapToolStatus(p.state?.status);
+          const frozen = status === "running" || status === "pending";
+          if (frozen) interrupted = true;
+          const command =
+            typeof p.state?.input?.command === "string" ? p.state.input.command : "";
+          const userShell = shellTurn && p.tool === "bash";
+          if (userShell) blocks.push({ kind: "user", text: `! ${command}` });
           blocks.push({
             kind: "tool-call",
-            title: tidyToolTitle(p.state?.title?.trim() || p.tool || "tool"),
-            status,
+            title: tidyToolTitle(p.state?.title?.trim() || command || p.tool || "tool"),
+            status: frozen ? "pending" : status,
+            ...(userShell && p.state?.output?.trim()
+              ? { outputSummary: p.state.output.replace(/\s+$/, "") }
+              : {}),
           });
           const artifact = deriveArtifact({
             type: "tool.updated",
@@ -840,7 +949,15 @@ export function historyToThread(messages: HistoryMessage[]): FoldState {
           if (artifact) blocks.push(artifact);
         }
       }
+      shellTurn = false;
     }
+  }
+  if (interrupted) {
+    blocks.push({
+      kind: "status-line",
+      text: "Interrupted — this turn did not finish. Send a new message to continue.",
+      tone: "error",
+    });
   }
   return { blocks, index: {} };
 }

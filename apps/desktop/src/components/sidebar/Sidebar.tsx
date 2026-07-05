@@ -27,7 +27,11 @@ export function Sidebar({ project }: { project: Project }) {
   };
 
   const rows: Row[] = [
-    ...sessions.map((s) => ({ id: s.id, title: s.title, to: `/live/${s.id}`, kind: "session" as const })),
+    // Subagent child sessions are internals of their parent conversation —
+    // their asks and progress surface there, so they get no row of their own.
+    ...sessions
+      .filter((s) => !s.parentId)
+      .map((s) => ({ id: s.id, title: s.title, to: `/live/${s.id}`, kind: "session" as const })),
     ...project.sessions
       .filter((e) => !hiddenExamples.includes(e.id))
       .map((e) => ({ id: e.id, title: e.title, to: `/example/${e.id}`, kind: "example" as const })),

@@ -163,10 +163,8 @@ pub fn read_artifact(app: AppHandle, path: String) -> Result<ArtifactFile, Strin
     Ok(ArtifactFile { path, mime: mime.to_string(), encoding, data, size })
 }
 
-/// Open a workspace file in the OS default application.
-#[tauri::command]
-pub fn open_path(app: AppHandle, path: String) -> Result<(), String> {
-    let full = resolve_in_workspace(&app, &path)?;
+/// Open an absolute path with the OS default application / file manager.
+pub fn os_open(full: &Path) -> Result<(), String> {
     let full_s = full.to_string_lossy().to_string();
     #[cfg(target_os = "macos")]
     let mut cmd = std::process::Command::new("open");
@@ -181,6 +179,13 @@ pub fn open_path(app: AppHandle, path: String) -> Result<(), String> {
     cmd.arg(full_s);
     cmd.spawn().map_err(|e| format!("open failed: {e}"))?;
     Ok(())
+}
+
+/// Open a workspace file in the OS default application.
+#[tauri::command]
+pub fn open_path(app: AppHandle, path: String) -> Result<(), String> {
+    let full = resolve_in_workspace(&app, &path)?;
+    os_open(&full)
 }
 
 #[derive(serde::Serialize)]

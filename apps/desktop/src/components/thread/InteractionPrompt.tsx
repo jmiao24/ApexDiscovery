@@ -12,12 +12,15 @@ import { cn } from "@/lib/cn";
 export function InteractionPrompt({
   question,
   permission,
+  origin,
   onAnswer,
   onReject,
   onPermission,
 }: {
   question?: QuestionAskedEvent;
   permission?: PermissionAskedEvent;
+  /** Who is asking, when it isn't the main agent — a subagent session's title. */
+  origin?: string;
   onAnswer: (requestId: string, answers: string[][]) => void;
   onReject: (requestId: string) => void;
   onPermission: (requestId: string, reply: PermissionReply) => void;
@@ -27,23 +30,36 @@ export function InteractionPrompt({
       <QuestionCard
         key={question.requestId}
         question={question}
+        origin={origin}
         onAnswer={onAnswer}
         onReject={onReject}
       />
     );
   }
   if (permission) {
-    return <PermissionCard key={permission.requestId} permission={permission} onReply={onPermission} />;
+    return (
+      <PermissionCard
+        key={permission.requestId}
+        permission={permission}
+        origin={origin}
+        onReply={onPermission}
+      />
+    );
   }
   return null;
 }
 
+/** "external_directory" → "external directory" — readable, still explicit. */
+const actionLabel = (action: string) => action.replace(/[_-]+/g, " ");
+
 function QuestionCard({
   question,
+  origin,
   onAnswer,
   onReject,
 }: {
   question: QuestionAskedEvent;
+  origin?: string;
   onAnswer: (requestId: string, answers: string[][]) => void;
   onReject: (requestId: string) => void;
 }) {
@@ -72,15 +88,18 @@ function QuestionCard({
 
   return (
     <div className="rounded-card border border-accent/40 bg-surface shadow-card">
-      <header className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-        <HelpCircle size={15} className="text-accent" />
-        <span className="text-sm font-medium text-text">The agent needs your input</span>
-        <button
-          className="ml-auto text-xs text-muted hover:text-text"
-          onClick={() => onReject(question.requestId)}
-        >
-          Skip
-        </button>
+      <header className="border-b border-border px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <HelpCircle size={15} className="text-accent" />
+          <span className="text-sm font-medium text-text">The agent needs your input</span>
+          <button
+            className="ml-auto text-xs text-muted hover:text-text"
+            onClick={() => onReject(question.requestId)}
+          >
+            Skip
+          </button>
+        </div>
+        {origin && <div className="mt-0.5 pl-6 text-xs text-muted">Asked by {origin}</div>}
       </header>
 
       <div className="space-y-4 px-4 py-3.5">
@@ -163,18 +182,23 @@ function QuestionCard({
 
 function PermissionCard({
   permission,
+  origin,
   onReply,
 }: {
   permission: PermissionAskedEvent;
+  origin?: string;
   onReply: (requestId: string, reply: PermissionReply) => void;
 }) {
   return (
     <div className="rounded-card border border-warn/40 bg-surface shadow-card">
-      <header className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-        <ShieldQuestion size={15} className="text-warn" />
-        <span className="text-sm font-medium text-text">
-          Allow the agent to <span className="font-mono">{permission.action}</span>?
-        </span>
+      <header className="border-b border-border px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <ShieldQuestion size={15} className="text-warn" />
+          <span className="text-sm font-medium text-text">
+            The agent asks permission: <span className="font-mono">{actionLabel(permission.action)}</span>
+          </span>
+        </div>
+        {origin && <div className="mt-0.5 pl-6 text-xs text-muted">Asked by {origin}</div>}
       </header>
       {permission.resources.length > 0 && (
         <div className="px-4 py-3">

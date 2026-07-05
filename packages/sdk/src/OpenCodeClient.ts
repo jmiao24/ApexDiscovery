@@ -47,8 +47,12 @@ export class OpenCodeClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly authHeader: string | null;
-  /** Workspace folder, for directory-scoped lookups (skills/questions/permissions).
-   *  The agent's own working directory is the sidecar's cwd, set at spawn. */
+  /** Workspace folder this client is scoped to. OpenCode serves many folders
+   *  from ONE process (per-directory instances): the event stream, session
+   *  creation and the directory-scoped lookups all carry `?directory=`, so
+   *  switching folders is a reconnect — never a sidecar restart. Session-scoped
+   *  calls (`/session/:id/…`) need no directory: the server routes them by the
+   *  session's own recorded folder (verified live: `pwd` runs in it). */
   private readonly directory: string | null;
   private status: RuntimeStatus = "offline";
   private abort: AbortController | null = null;
@@ -100,7 +104,7 @@ export class OpenCodeClient {
     if (canUseEventSource) {
       return new Promise((resolve, reject) => {
         let opened = false;
-        const es = new EventSource(`${this.baseUrl}/event`);
+        const es = new EventSource(`${this.baseUrl}/event${this.dirQuery()}`);
         this.es = es;
         es.onopen = () => {
           opened = true;
@@ -131,7 +135,7 @@ export class OpenCodeClient {
     this.abort = new AbortController();
     return new Promise((resolve, reject) => {
       let opened = false;
-      this.fetchImpl(`${this.baseUrl}/event`, {
+      this.fetchImpl(`${this.baseUrl}/event${this.dirQuery()}`, {
         headers: { Accept: "text/event-stream", ...this.headers() },
         signal: this.abort!.signal,
       })
@@ -169,7 +173,9 @@ export class OpenCodeClient {
    *  working directory (set at spawn), not a query param — passing `?directory=`
    *  here routes the turn to a scope whose events the global stream never sees. */
   async createSession(): Promise<string> {
-    const res = await this.fetchImpl(`${this.baseUrl}/session`, {
+    // The directory decides where the session lives and works — without it the
+    // server would put it in the process's boot folder, not the active one.
+    const res = await this.fetchImpl(`${this.baseUrl}/session${this.dirQuery()}`, {
       method: "POST",
       headers: this.headers(true),
       body: "{}",
@@ -199,12 +205,14 @@ export class OpenCodeClient {
       title?: string;
       slug?: string;
       directory?: string;
+      parentID?: string | null;
     }>;
     return arr.map((s) => ({
       id: s.id,
       title: s.title ?? "Untitled",
       slug: s.slug,
       directory: s.directory,
+      parentId: s.parentID ?? undefined,
     }));
   }
 
@@ -422,12 +430,16 @@ export class OpenCodeClient {
       description?: string;
       source?: string;
       agent?: string;
+      // A string for config commands and skills; MCP prompts report an
+      // argument-schema OBJECT here — only a string is a usable template.
+      template?: unknown;
     }>;
     return arr.map((c) => ({
       name: c.name,
       description: c.description,
       source: c.source,
       agent: c.agent,
+      template: typeof c.template === "string" ? c.template : undefined,
     }));
   }
 
@@ -529,9 +541,13 @@ export class OpenCodeClient {
       headers: this.headers(),
     });
     if (!res.ok) return [];
+    // Same dual field names as the SSE event: `permission`/`patterns` (V2)
+    // with `action`/`resources` as the legacy fallback.
     const arr = (await res.json()) as Array<{
       id: string;
       sessionID: string;
+      permission?: string;
+      patterns?: string[];
       action?: string;
       resources?: string[];
     }>;
@@ -539,8 +555,8 @@ export class OpenCodeClient {
       type: "permission.asked" as const,
       sessionId: p.sessionID,
       requestId: p.id,
-      action: p.action ?? "action",
-      resources: p.resources ?? [],
+      action: p.permission ?? p.action ?? "action",
+      resources: p.patterns ?? p.resources ?? [],
     }));
   }
 
@@ -622,8 +638,11 @@ export class OpenCodeClient {
               title?: string;
               input?: Record<string, unknown>;
               output?: string;
+              metadata?: { sessionId?: unknown };
             };
           };
+          // A task tool's metadata names the subagent session it spawned.
+          const child = tp.state?.metadata?.sessionId;
           this.emit({
             type: "tool.updated",
             sessionId,
@@ -633,6 +652,7 @@ export class OpenCodeClient {
             title: tp.state?.title,
             input: tp.state?.input,
             output: typeof tp.state?.output === "string" ? tp.state.output : undefined,
+            childSessionId: typeof child === "string" ? child : undefined,
           });
         }
         break;
@@ -682,9 +702,13 @@ export class OpenCodeClient {
       }
       case "permission.v2.asked":
       case "permission.asked": {
+        // The V2 server names the fields `permission` + `patterns`;
+        // older payloads used `action` + `resources`. Accept both.
         const p = props as {
           id?: string;
           sessionID?: string;
+          permission?: string;
+          patterns?: string[];
           action?: string;
           resources?: string[];
         };
@@ -692,8 +716,8 @@ export class OpenCodeClient {
           type: "permission.asked",
           sessionId: String(p.sessionID ?? ""),
           requestId: String(p.id ?? ""),
-          action: String(p.action ?? "action"),
-          resources: p.resources ?? [],
+          action: String(p.permission ?? p.action ?? "action"),
+          resources: p.patterns ?? p.resources ?? [],
         });
         break;
       }

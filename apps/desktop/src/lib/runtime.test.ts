@@ -118,4 +118,97 @@ describe("historyToThread", () => {
     expect(t.blocks.map((b) => b.kind)).toEqual(["user", "agent", "tool-call"]);
     expect(t.blocks[2]).toMatchObject({ kind: "tool-call", status: "success" });
   });
+
+  it("renders a user-run '!' shell turn like the live path: '! cmd' + inline output", () => {
+    // OpenCode records a "!" run as a synthetic user text + a bash tool part.
+    const msgs: HistoryMessage[] = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "The following tool was executed by the user", synthetic: true }],
+      },
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "tool",
+            tool: "bash",
+            state: { status: "completed", title: "", input: { command: "pwd" }, output: "/ws/here\n" },
+          },
+        ],
+      },
+    ];
+    const t = historyToThread(msgs);
+    expect(t.blocks).toEqual([
+      { kind: "user", text: "! pwd" },
+      { kind: "tool-call", title: "pwd", status: "success", outputSummary: "/ws/here" },
+    ]);
+  });
+
+  it("falls back to the bash command as the row title (agent steps too)", () => {
+    const msgs: HistoryMessage[] = [
+      {
+        role: "assistant",
+        parts: [
+          { type: "tool", tool: "bash", state: { status: "completed", title: "", input: { command: "ls -la" } } },
+        ],
+      },
+    ];
+    const t = historyToThread(msgs);
+    expect(t.blocks[0]).toMatchObject({ kind: "tool-call", title: "ls -la" });
+    // An agent bash step (no synthetic marker) never shows inline output.
+    expect(t.blocks[0]).not.toHaveProperty("outputSummary");
+  });
+
+  it("never spins in history: frozen running/pending steps become quiet + one interrupted line", () => {
+    const msgs: HistoryMessage[] = [
+      { role: "user", parts: [{ type: "text", text: "explore" }] },
+      {
+        role: "assistant",
+        parts: [
+          { type: "tool", tool: "read", state: { status: "running", title: "README.md" } },
+          { type: "tool", tool: "glob", state: { status: "pending", title: "*.md" } },
+        ],
+      },
+    ];
+    const t = historyToThread(msgs);
+    expect(t.blocks[1]).toMatchObject({ kind: "tool-call", status: "pending" });
+    expect(t.blocks[2]).toMatchObject({ kind: "tool-call", status: "pending" });
+    const last = t.blocks[t.blocks.length - 1];
+    expect(last).toMatchObject({ kind: "status-line", tone: "error" });
+  });
+
+  it("shows a slash command as what the user typed, not its expanded template", () => {
+    // OpenCode stores the EXPANDED command/skill template as the user message,
+    // with typed arguments appended — reverse-map via the known templates.
+    const template = "\nThis skill guides growth for indie AI products…\n\n## Core Philosophy\n…";
+    const msgs: HistoryMessage[] = [
+      { role: "user", parts: [{ type: "text", text: template.trim() }] },
+      { role: "assistant", parts: [{ type: "text", text: "on it" }] },
+      { role: "user", parts: [{ type: "text", text: `${template.trim()}\n\n帮我设计增长方式` }] },
+    ];
+    const t = historyToThread(msgs, [
+      { name: "growth-marketing", source: "skill", template },
+    ]);
+    expect(t.blocks[0]).toEqual({ kind: "user", text: "/growth-marketing" });
+    expect(t.blocks[2]).toEqual({ kind: "user", text: "/growth-marketing 帮我设计增长方式" });
+  });
+
+  it("leaves a long pasted user text alone when it matches no template", () => {
+    const msgs: HistoryMessage[] = [
+      { role: "user", parts: [{ type: "text", text: "a genuinely long pasted question…" }] },
+    ];
+    const t = historyToThread(msgs, [{ name: "init", template: "something else" }]);
+    expect(t.blocks[0]).toEqual({ kind: "user", text: "a genuinely long pasted question…" });
+  });
+
+  it("adds no interrupted line when every step finished", () => {
+    const msgs: HistoryMessage[] = [
+      {
+        role: "assistant",
+        parts: [{ type: "tool", tool: "read", state: { status: "completed", title: "README.md" } }],
+      },
+    ];
+    const t = historyToThread(msgs);
+    expect(t.blocks.every((b) => b.kind !== "status-line")).toBe(true);
+  });
 });

@@ -24,14 +24,16 @@ import {
   isTauri,
   jupyterStatus,
   openExternal,
+  openWorkspaceBase,
+  pickFolder,
   removeConfigEntry,
   setupJupyter,
+  setWorkspaceBase,
   startJupyter,
-  workspacePath,
+  workspaceBase,
   type JupyterStatus,
 } from "@/lib/tauri";
 import { setupScienceMcp } from "@/lib/tauri";
-import { openArtifactExternally } from "@/lib/artifactFile";
 import { ClusterCard } from "@/components/settings/ClusterCard";
 import { DataFlowCard } from "@/components/settings/DataFlowCard";
 import { SCIENCE_CONNECTORS, connectorConfig } from "@/lib/scienceConnectors";
@@ -109,8 +111,21 @@ export function SettingsPage() {
     if (connected) void refresh();
   }, [connected, refresh]);
   useEffect(() => {
-    void workspacePath().then(setWsPath);
+    // The BASE folder — the parent every session's dated subfolder is created
+    // under. (The per-session active folder shows in the conversation header.)
+    void workspaceBase().then(setWsPath);
   }, []);
+
+  const changeWorkspaceBase = async () => {
+    const picked = await pickFolder();
+    if (!picked) return;
+    try {
+      setWsPath(await setWorkspaceBase(picked));
+      toast.success("New sessions will be created in this folder.");
+    } catch (err) {
+      toast.error(`Could not set the folder: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(true);
@@ -740,7 +755,10 @@ export function SettingsPage() {
         </Card>
 
         {/* ---- Workspace ---- */}
-        <Card title="Workspace" hint="Local-first — your files and the agent's outputs live here">
+        <Card
+          title="Workspace"
+          hint="Local-first — each session works in its own dated subfolder created here"
+        >
           <div className="flex items-center gap-2">
             <span
               className={cn(
@@ -751,9 +769,14 @@ export function SettingsPage() {
               {wsPath ?? "available in the desktop app"}
             </span>
             {wsPath && (
-              <button className={btnGhost("gap-1.5")} onClick={() => void openArtifactExternally(".")}>
-                <FolderOpen size={13} /> Reveal
-              </button>
+              <>
+                <button className={btnGhost("gap-1.5")} onClick={() => void changeWorkspaceBase()}>
+                  Change…
+                </button>
+                <button className={btnGhost("gap-1.5")} onClick={() => void openWorkspaceBase()}>
+                  <FolderOpen size={13} /> Reveal
+                </button>
+              </>
             )}
           </div>
         </Card>

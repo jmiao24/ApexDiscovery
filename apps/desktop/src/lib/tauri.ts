@@ -166,8 +166,24 @@ export async function workspaceBase(): Promise<string | null> {
   }
 }
 
-/** Switch the active workspace folder (creates it if needed, restarts the
- *  sidecar). Returns the canonical path. Throws in the browser. */
+/** Choose the base folder new session workspaces are created under.
+ *  Returns the canonical path. Throws in the browser. */
+export async function setWorkspaceBase(path: string): Promise<string> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("set_workspace_base", { path });
+}
+
+/** Reveal the base workspace folder in the OS file manager. */
+export async function openWorkspaceBase(): Promise<void> {
+  if (!isTauri) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("open_workspace_base");
+}
+
+/** Switch the active workspace folder (creates it if needed; the runtime
+ *  rescopes via `?directory=` — no restart). Returns the canonical path.
+ *  Throws in the browser. */
 export async function setWorkspace(path: string): Promise<string> {
   if (!isTauri) throw new Error("not running in the desktop app");
   const { invoke } = await import("@tauri-apps/api/core");

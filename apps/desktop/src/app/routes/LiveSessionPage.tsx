@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Loader2, NotebookPen, PlugZap } from "lucide-react";
-import { DRAFT_KEY, useRuntimeStore } from "@/lib/runtime";
+import { DRAFT_KEY, rootSessionOf, useRuntimeStore } from "@/lib/runtime";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
 import { Composer } from "@/components/thread/Composer";
@@ -28,6 +28,7 @@ export function LiveSessionPage() {
     error,
     questions,
     permissions,
+    sessionParents,
     activeArtifact,
     commands,
     connect,
@@ -74,6 +75,9 @@ export function LiveSessionPage() {
   // A draft shows its local thread (the first message echoes there instantly,
   // before any session exists) — it is grafted onto the session id on create.
   const thread = currentId ? threads[currentId] : threads[DRAFT_KEY];
+  // Opening a session fetches its history (cross-folder opens also restart the
+  // sidecar) — show skeleton shapes meanwhile, never a blank page.
+  const historyLoading = connected && !!sessionId && !thread?.loaded;
   const title = sessions.find((s) => s.id === currentId)?.title;
   const isEmpty = !thread || thread.blocks.length === 0;
   // The turn lifecycle: `sending` covers click → POST accepted (incl. the
@@ -83,9 +87,19 @@ export function LiveSessionPage() {
   const running = !!(currentId && runningSessions[currentId]);
   const working = sending || running;
 
-  // The oldest unanswered request for THIS session blocks the run — surface it.
-  const activeQuestion = questions.find((q) => q.sessionId === currentId);
-  const activePermission = permissions.find((p) => p.sessionId === currentId);
+  // The oldest unanswered request blocks the run — surface it. Requests from
+  // subagents carry their CHILD session id; resolve through the parent chain
+  // so they still land in the conversation the user is looking at.
+  const belongsHere = (sid: string) =>
+    !!currentId && (sid === currentId || rootSessionOf(sessionParents, sid) === currentId);
+  const activeQuestion = questions.find((q) => belongsHere(q.sessionId));
+  const activePermission = permissions.find((p) => belongsHere(p.sessionId));
+  const activeRequest = activeQuestion ?? activePermission;
+  // Name the subagent on the card when the ask isn't from the main agent.
+  const requestOrigin =
+    activeRequest && activeRequest.sessionId !== currentId
+      ? (sessions.find((s) => s.id === activeRequest.sessionId)?.title ?? "a subagent")
+      : undefined;
 
   // Notebooks the agent touched in THIS session — the conversation ↔ notebook map.
   const sessionNotebooks = (thread?.blocks ?? []).filter(
@@ -174,13 +188,18 @@ export function LiveSessionPage() {
             {connected && isEmpty && !sessionId && (
               <WorkflowStarters onPick={(p) => void onSend(p)} />
             )}
-            {thread && <BlockList blocks={thread.blocks} handlers={handlers} />}
+            {historyLoading && <ThreadSkeleton />}
+            {!historyLoading && thread && <BlockList blocks={thread.blocks} handlers={handlers} />}
             {working && (
               // Typing-indicator at the bottom of the conversation: the message
               // just echoed above it, so the user always sees the send is alive.
               <div className="flex items-center gap-2 text-sm text-muted">
                 <Loader2 size={14} className="animate-spin" />
-                {sending && !currentId ? "Starting the session in its folder…" : "Working…"}
+                {activeRequest
+                  ? "Paused — the agent needs your answer below"
+                  : sending && !currentId
+                    ? "Starting the session in its folder…"
+                    : "Working…"}
               </div>
             )}
           </div>
@@ -188,10 +207,11 @@ export function LiveSessionPage() {
 
         <div className="px-8 pb-5 pt-2">
           <div className="mx-auto max-w-[760px] space-y-3">
-            {(activeQuestion || activePermission) && (
+            {activeRequest && (
               <InteractionPrompt
                 question={activeQuestion}
                 permission={activeQuestion ? undefined : activePermission}
+                origin={requestOrigin}
                 onAnswer={(id, answers) => void answerQuestion(id, answers)}
                 onReject={(id) => void rejectQuestion(id)}
                 onPermission={(id, reply) => void replyPermission(id, reply)}
@@ -220,6 +240,28 @@ export function LiveSessionPage() {
           />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Loading placeholder mirroring the thread's real shapes: a user card, agent
+ *  text lines, a quiet tool row — so the page never sits blank while history
+ *  loads and nothing jumps when the content arrives. */
+function ThreadSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4" aria-hidden>
+      <div className="h-11 rounded-card bg-surface-2" />
+      <div className="space-y-2.5 px-1 pt-1">
+        <div className="h-3.5 w-11/12 rounded bg-surface-2" />
+        <div className="h-3.5 w-4/5 rounded bg-surface-2" />
+        <div className="h-3.5 w-2/3 rounded bg-surface-2" />
+      </div>
+      <div className="ml-2 h-4 w-2/5 rounded bg-surface-2 opacity-60" />
+      <div className="h-11 rounded-card bg-surface-2" />
+      <div className="space-y-2.5 px-1 pt-1">
+        <div className="h-3.5 w-5/6 rounded bg-surface-2" />
+        <div className="h-3.5 w-3/5 rounded bg-surface-2" />
+      </div>
     </div>
   );
 }
