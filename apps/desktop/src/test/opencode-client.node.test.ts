@@ -39,6 +39,16 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
     expect(types).toContain("text.updated");
     expect(types).toContain("tool.updated");
 
+    // Text streams live: each message.part.delta yields the accumulated text,
+    // it does not sit silent until the full part arrives at text-end.
+    const p1 = events
+      .filter((e): e is Extract<OpenCodeEvent, { type: "text.updated" }> =>
+        e.type === "text.updated" && e.partId === "p1",
+      )
+      .map((e) => e.text);
+    expect(p1).toContain("Planning ");
+    expect(p1[p1.length - 1]).toBe("Planning the analysis. ");
+
     const toolDone = events.find(
       (e): e is Extract<OpenCodeEvent, { type: "tool.updated" }> =>
         e.type === "tool.updated" && e.status === "success",

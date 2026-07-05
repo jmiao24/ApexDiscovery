@@ -20,6 +20,13 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
     const push = (obj: unknown) => clients.forEach((c) => send(c, obj));
     const P = (part: Record<string, unknown>) =>
       push({ type: "message.part.updated", properties: { part: { sessionID, ...part } } });
+    // Real OpenCode streams text as an empty part at text-start, per-token
+    // message.part.delta events, then the full part again at text-end.
+    const D = (partID: string, delta: string) =>
+      push({ type: "message.part.delta", properties: { sessionID, messageID: "m1", partID, field: "text", delta } });
+    P({ id: "p1", type: "text", text: "" });
+    D("p1", "Planning ");
+    D("p1", "the analysis. ");
     P({ id: "p1", type: "text", text: "Planning the analysis. " });
     P({ id: "c1", type: "tool", callID: "c1", tool: "literature-search", state: { status: "running", title: "literature-search (OpenAlex)" } });
     P({ id: "c1", type: "tool", callID: "c1", tool: "literature-search", state: { status: "completed", title: "literature-search (OpenAlex, PubMed)" } });

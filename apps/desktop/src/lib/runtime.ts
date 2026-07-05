@@ -417,7 +417,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       set({ status });
     });
     c.onEvent((event) => {
-      void logDebug(`event ← ${event.type}${"sessionId" in event ? " " + event.sessionId : ""}`);
+      // text.updated now fires per streamed token — logging each one would
+      // flood debug.log with an IPC call per token.
+      if (event.type !== "text.updated")
+        void logDebug(`event ← ${event.type}${"sessionId" in event ? " " + event.sessionId : ""}`);
       if ("sessionId" in event && event.sessionId) sseLast.set(event.sessionId, ++sseSeq);
       if (event.type === "error") {
         // A session-scoped error belongs IN the conversation (a red status
@@ -822,13 +825,15 @@ export function foldEvent(
       // pure noise in the conversation, so drop them.
       if (/question|permission|^ask$|todo/i.test(event.tool)) return { blocks, index };
       const key = `tool:${event.callId}`;
-      // Completed MCP tools (and the shell endpoint) report title as "" —
-      // fall back to the bash command line, then the tool name; never render
-      // a blank row.
+      // Completed MCP tools (and the shell endpoint) report title as "" — and
+      // file tools (write/edit/read) only get a title on completion. Fall back
+      // to the bash command line, then the file path from the tool's input,
+      // then the tool name; never render a blank row.
       const command = typeof event.input?.command === "string" ? event.input.command : "";
+      const filePath = typeof event.input?.filePath === "string" ? event.input.filePath : "";
       const block: ThreadBlock = {
         kind: "tool-call",
-        title: tidyToolTitle(event.title?.trim() || command || event.tool || "tool"),
+        title: tidyToolTitle(event.title?.trim() || command || filePath || event.tool || "tool"),
         status: event.status,
         // A user-typed "!" command ran for its output — show it inline.
         // Agent bash steps stay quiet single-line log entries.
@@ -927,11 +932,13 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
           if (frozen) interrupted = true;
           const command =
             typeof p.state?.input?.command === "string" ? p.state.input.command : "";
+          const filePath =
+            typeof p.state?.input?.filePath === "string" ? p.state.input.filePath : "";
           const userShell = shellTurn && p.tool === "bash";
           if (userShell) blocks.push({ kind: "user", text: `! ${command}` });
           blocks.push({
             kind: "tool-call",
-            title: tidyToolTitle(p.state?.title?.trim() || command || p.tool || "tool"),
+            title: tidyToolTitle(p.state?.title?.trim() || command || filePath || p.tool || "tool"),
             status: frozen ? "pending" : status,
             ...(userShell && p.state?.output?.trim()
               ? { outputSummary: p.state.output.replace(/\s+$/, "") }

@@ -79,6 +79,19 @@ describe("foldEvent", () => {
     });
   });
 
+  it("shows the file path for a file tool that has no title yet", () => {
+    // OpenCode only sets a write/edit tool's title on completion — while the
+    // tool runs, the file path in its input is the only thing worth showing.
+    const s = foldAll([
+      { type: "tool.updated", sessionId: S, callId: "c1", tool: "write", status: "running", input: { filePath: "/Users/asq/Documents/OpenScience/2026-07-04/index.html", content: "<!doctype html>" } },
+    ]);
+    expect(s.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      status: "running",
+      title: "2026-07-04/index.html",
+    });
+  });
+
   it("surfaces a written file as an artifact block, deduped by path", () => {
     const s = foldAll([
       { type: "tool.updated", sessionId: S, callId: "c1", tool: "write", status: "running", input: { filePath: "fig.py" } },

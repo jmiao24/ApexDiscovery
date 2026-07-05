@@ -62,6 +62,11 @@ export class OpenCodeClient {
   private readonly statusListeners = new Set<StatusListener>();
   /** messageID → role, learned from message.updated, to skip echoed user parts. */
   private readonly roles = new Map<string, string>();
+  /** partID → accumulated text of a streaming text part. OpenCode publishes the
+   *  full part only at text-start (empty) and text-end; every token in between
+   *  arrives as a message.part.delta that must be summed here — otherwise the
+   *  app shows nothing until the whole passage is finished. */
+  private readonly textStreams = new Map<string, { sessionId: string; text: string }>();
 
   constructor(opts: OpenCodeClientOptions = {}) {
     this.baseUrl = (opts.baseUrl ?? DEFAULT_OPENCODE_URL).replace(/\/$/, "");
@@ -628,6 +633,7 @@ export class OpenCodeClient {
         const sessionId = String(part.sessionID ?? "");
         if (part.type === "text") {
           const t = part as { id: string; text: string };
+          this.textStreams.set(t.id, { sessionId, text: t.text ?? "" });
           this.emit({ type: "text.updated", sessionId, partId: t.id, text: t.text ?? "" });
         } else if (part.type === "tool") {
           const tp = part as {
@@ -657,9 +663,30 @@ export class OpenCodeClient {
         }
         break;
       }
-      case "session.idle":
-        this.emit({ type: "session.idle", sessionId: String(props.sessionID ?? "") });
+      case "message.part.delta": {
+        // One streamed token. Only text parts are accumulated (reasoning parts
+        // never get seeded by message.part.updated, so their deltas fall out).
+        const d = props as { partID?: string; field?: string; delta?: string };
+        if (d.field !== "text" || !d.partID || typeof d.delta !== "string") return;
+        const acc = this.textStreams.get(String(d.partID));
+        if (!acc) return;
+        acc.text += d.delta;
+        this.emit({
+          type: "text.updated",
+          sessionId: acc.sessionId,
+          partId: String(d.partID),
+          text: acc.text,
+        });
         break;
+      }
+      case "session.idle": {
+        const sessionId = String(props.sessionID ?? "");
+        // The turn is over — its text parts can no longer receive deltas.
+        for (const [partId, acc] of this.textStreams)
+          if (acc.sessionId === sessionId) this.textStreams.delete(partId);
+        this.emit({ type: "session.idle", sessionId });
+        break;
+      }
       // Interactive requests — support V2 (this server) and the bare names.
       case "question.v2.asked":
       case "question.asked": {
