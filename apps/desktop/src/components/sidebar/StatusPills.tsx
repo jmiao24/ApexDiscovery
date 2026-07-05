@@ -36,9 +36,11 @@ export function StatusPills() {
 function Pill({ dot, label, value }: { dot: string; label: string; value: string }) {
   return (
     <div className="flex items-center gap-2 px-2">
-      <span className={cn("h-1.5 w-1.5 rounded-full", dot)} />
-      <span>{label}</span>
-      <span className="ml-auto capitalize text-text/70">{value}</span>
+      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
+      <span className="shrink-0">{label}</span>
+      <span className="ml-auto min-w-0 truncate capitalize text-text/70" title={value}>
+        {value}
+      </span>
     </div>
   );
 }
