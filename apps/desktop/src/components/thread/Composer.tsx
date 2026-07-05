@@ -11,6 +11,29 @@ const PASTE_AS_FILE_LINES = 25;
 /** Max composer height before it scrolls internally. */
 const MAX_HEIGHT_PX = 160;
 
+// Terminal-style input history: every sent input (prompt, "!cmd", "/name args")
+// in its typed form, shared across sessions, newest last, ↑/↓ to recall.
+const HISTORY_KEY = "ai4s.inputHistory";
+const HISTORY_MAX = 100;
+function readHistory(): string[] {
+  try {
+    const arr = JSON.parse(window.localStorage.getItem(HISTORY_KEY) ?? "[]");
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function recordHistory(entry: string): void {
+  if (!entry) return;
+  const prev = readHistory();
+  if (prev[prev.length - 1] === entry) return; // consecutive duplicate
+  try {
+    window.localStorage.setItem(HISTORY_KEY, JSON.stringify([...prev, entry].slice(-HISTORY_MAX)));
+  } catch {
+    /* full or unavailable storage never blocks a send */
+  }
+}
+
 /** A "/" palette entry — the runtime's config commands, skills and MCP prompts. */
 export interface ComposerCommand {
   name: string;
@@ -52,14 +75,18 @@ export function Composer({
   const [sel, setSel] = useState(0);
   /** Esc closed the palette for the current input; typing reopens it. */
   const [paletteClosed, setPaletteClosed] = useState(false);
+  /** A committed slash command: shown as a chip, the input holds arguments. */
+  const [command, setCommand] = useState<string | null>(null);
+  /** ↑/↓ history navigation; `draft` is what was typed before recalling. */
+  const [hist, setHist] = useState<{ index: number; draft: string } | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const composerDraft = useUiStore((s) => s.composerDraft);
   const setComposerDraft = useUiStore((s) => s.setComposerDraft);
 
-  const shellMode = !!onRunShell && value.startsWith("!");
+  const shellMode = !!onRunShell && !command && value.startsWith("!");
   // The palette is open while the command NAME is being typed ("/na…"); the
   // first space ends name-typing (arguments follow) and closes it.
-  const slashTyping = !!onRunCommand && /^\/\S*$/.test(value);
+  const slashTyping = !!onRunCommand && !command && /^\/\S*$/.test(value);
   const query = slashTyping ? value.slice(1).toLowerCase() : "";
   const matches = slashTyping
     ? commands
@@ -79,8 +106,35 @@ export function Composer({
     setPaletteClosed(false);
   }, [value]);
 
+  // Committing a command turns it into a chip; the input then holds only the
+  // arguments — the "/name" can never degrade into ordinary prompt text.
   const pick = (c: ComposerCommand) => {
-    setValue(`/${c.name} `);
+    setCommand(c.name);
+    setValue("");
+    taRef.current?.focus();
+  };
+
+  const onChange = (v: string) => {
+    setHist(null); // an edit leaves history navigation
+    // A full known command name followed by whitespace commits it, same as a
+    // pick — whether typed ("/init ") or pasted whole ("/init focus\n…"); the
+    // remainder becomes the arguments. Unknown names (paths) stay plain text.
+    if (onRunCommand && !command) {
+      const m = /^\/(\S+)\s([\s\S]*)$/.exec(v);
+      if (m && commands.some((c) => c.name === m[1])) {
+        setCommand(m[1]);
+        setValue(m[2]);
+        taRef.current?.focus();
+        return;
+      }
+    }
+    setValue(v);
+  };
+
+  const unchip = () => {
+    if (!command) return;
+    setValue(value ? `/${command} ${value}` : `/${command}`);
+    setCommand(null);
     taRef.current?.focus();
   };
 
@@ -105,11 +159,21 @@ export function Composer({
   const submit = () => {
     if (disabled) return;
     const text = value.trim();
+    setHist(null);
+    // A chipped command runs as itself — arguments optional.
+    if (command) {
+      onRunCommand?.(command, text);
+      recordHistory(text ? `/${command} ${text}` : `/${command}`);
+      setCommand(null);
+      setValue("");
+      return;
+    }
     // "!" — run the rest of the line as a shell command (no model turn).
     if (shellMode) {
-      const command = value.slice(1).trim();
-      if (!command) return;
-      onRunShell?.(command);
+      const line = value.slice(1).trim();
+      if (!line) return;
+      onRunShell?.(line);
+      recordHistory(`!${line}`);
       setValue("");
       return;
     }
@@ -119,6 +183,7 @@ export function Composer({
       const name = text.slice(1).split(/\s/, 1)[0];
       if (commands.some((c) => c.name === name)) {
         onRunCommand(name, text.slice(1 + name.length).trim());
+        recordHistory(text);
         setValue("");
         return;
       }
@@ -127,6 +192,7 @@ export function Composer({
     const fileNote =
       files.length > 0 ? `Files added to the workspace: ${files.join(", ")}` : "";
     onSend?.(text && fileNote ? `${text}\n\n${fileNote}` : text || fileNote);
+    if (text) recordHistory(text);
     setValue("");
     setFiles([]);
   };
@@ -157,6 +223,42 @@ export function Composer({
         pick(matches[selIndex]);
         return;
       }
+    }
+    // Backspace on an empty input dissolves the command chip back into text.
+    if (e.key === "Backspace" && command && value === "") {
+      e.preventDefault();
+      unchip();
+      return;
+    }
+    // Terminal-style history: ↑ at the very start of the input recalls the
+    // previous sent input; while navigating, ↑/↓ walk older/newer and walking
+    // past the newest restores the unsent draft. Any edit leaves navigation.
+    if (e.key === "ArrowUp" && !command) {
+      const el = taRef.current;
+      const atStart = !!el && el.selectionStart === 0 && el.selectionEnd === 0;
+      if (hist || atStart) {
+        const entries = readHistory();
+        const index = (hist ? hist.index : entries.length) - 1;
+        if (index >= 0) {
+          e.preventDefault();
+          setHist({ index, draft: hist ? hist.draft : value });
+          setValue(entries[index]);
+        }
+        return;
+      }
+    }
+    if (e.key === "ArrowDown" && hist) {
+      e.preventDefault();
+      const entries = readHistory();
+      const index = hist.index + 1;
+      if (index < entries.length) {
+        setHist({ ...hist, index });
+        setValue(entries[index]);
+      } else {
+        setValue(hist.draft);
+        setHist(null);
+      }
+      return;
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -198,13 +300,17 @@ export function Composer({
   const canAttach = isTauri && !!onSend;
   const canSend =
     !disabled &&
-    (shellMode ? value.slice(1).trim().length > 0 : !!value.trim() || files.length > 0);
+    (command
+      ? true // a chipped command may run without arguments
+      : shellMode
+        ? value.slice(1).trim().length > 0
+        : !!value.trim() || files.length > 0);
 
   return (
     <div
       className={cn(
         "relative rounded-card border bg-surface px-2 py-2 shadow-card",
-        shellMode ? "border-warn/60" : "border-border",
+        shellMode ? "border-warn/60" : command ? "border-accent/50" : "border-border",
       )}
     >
       {paletteOpen && (
@@ -262,7 +368,21 @@ export function Composer({
         </div>
       )}
       <div className="flex items-end gap-1.5">
-        {shellMode ? (
+        {command ? (
+          <span
+            className="flex h-7 shrink-0 items-center gap-1 rounded-input bg-accent/15 pl-2 pr-1 font-mono text-xs text-accent"
+            title="Runs this command — type arguments, or press Backspace to edit the name"
+          >
+            /{command}
+            <button
+              className="rounded p-0.5 hover:bg-accent/20"
+              aria-label="Remove command"
+              onClick={unchip}
+            >
+              <X size={11} />
+            </button>
+          </span>
+        ) : shellMode ? (
           <span
             className="flex h-7 shrink-0 items-center gap-1 rounded-input bg-warn/15 px-1.5 font-mono text-xs text-warn"
             title="Runs directly in the session's workspace folder"
@@ -287,13 +407,19 @@ export function Composer({
           ref={taRef}
           rows={1}
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
-          placeholder={shellMode ? "Run a shell command in the workspace folder" : placeholder}
+          placeholder={
+            command
+              ? "Arguments (optional) — Enter to run"
+              : shellMode
+                ? "Run a shell command in the workspace folder"
+                : placeholder
+          }
           className={cn(
             "max-h-[160px] w-full resize-none self-center bg-transparent px-1.5 py-0.5 text-sm leading-6 text-text outline-none placeholder:text-muted",
-            shellMode && "font-mono",
+            (shellMode || command) && "font-mono",
           )}
           aria-label="Ask anything"
         />

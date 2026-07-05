@@ -93,14 +93,16 @@ describe("Composer '!' shell mode", () => {
 });
 
 describe("Composer '/' command palette", () => {
-  it("opens on '/', filters while typing, and Enter autocompletes the selection", () => {
+  it("opens on '/', filters while typing, and Enter commits the pick into a chip", () => {
     render(<Composer onSend={vi.fn()} onRunCommand={vi.fn()} commands={COMMANDS} />);
     const input = screen.getByLabelText<HTMLTextAreaElement>("Ask anything");
     fireEvent.change(input, { target: { value: "/ana" } });
     expect(screen.getByRole("listbox")).toBeInTheDocument();
     expect(screen.getAllByRole("option")).toHaveLength(1);
     fireEvent.keyDown(input, { key: "Enter" }); // autocomplete, not send
-    expect(input.value).toBe("/analyze-data ");
+    // The command becomes a distinct chip; the input holds only the arguments.
+    expect(screen.getByText("/analyze-data")).toBeInTheDocument();
+    expect(input.value).toBe("");
     expect(screen.queryByRole("listbox")).toBeNull(); // arguments next
   });
 
@@ -137,5 +139,131 @@ describe("Composer '/' command palette", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onSend).toHaveBeenCalledWith("/etc/hosts looks wrong");
     expect(onRunCommand).not.toHaveBeenCalled();
+  });
+});
+
+describe("Composer command chip", () => {
+  it("typing a known '/name' plus space commits it into a chip; Enter runs it with args", () => {
+    const onRunCommand = vi.fn();
+    render(<Composer onSend={vi.fn()} onRunCommand={onRunCommand} commands={COMMANDS} />);
+    const input = screen.getByLabelText<HTMLTextAreaElement>("Ask anything");
+    fireEvent.change(input, { target: { value: "/init " } });
+    expect(screen.getByText("/init")).toBeInTheDocument(); // the chip
+    expect(input.value).toBe("");
+    fireEvent.change(input, { target: { value: "focus on tests" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onRunCommand).toHaveBeenCalledWith("init", "focus on tests");
+    expect(screen.queryByText("/init")).toBeNull(); // chip cleared after send
+  });
+
+  it("a chipped command runs with no arguments", () => {
+    const onRunCommand = vi.fn();
+    render(<Composer onSend={vi.fn()} onRunCommand={onRunCommand} commands={COMMANDS} />);
+    const input = screen.getByLabelText("Ask anything");
+    fireEvent.change(input, { target: { value: "/init " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onRunCommand).toHaveBeenCalledWith("init", "");
+  });
+
+  it("an unknown '/name' plus space never chips", () => {
+    render(<Composer onSend={vi.fn()} onRunCommand={vi.fn()} commands={COMMANDS} />);
+    const input = screen.getByLabelText<HTMLTextAreaElement>("Ask anything");
+    fireEvent.change(input, { target: { value: "/etc/hosts " } });
+    expect(input.value).toBe("/etc/hosts ");
+  });
+
+  it("pasting '/name args' chips the command and keeps the args (multi-line too)", () => {
+    const onRunCommand = vi.fn();
+    render(<Composer onSend={vi.fn()} onRunCommand={onRunCommand} commands={COMMANDS} />);
+    const input = screen.getByLabelText<HTMLTextAreaElement>("Ask anything");
+    // A paste arrives as one change event with the full text already in place.
+    fireEvent.change(input, { target: { value: "/init focus on tests\nand the docs" } });
+    expect(screen.getByLabelText("Remove command")).toBeInTheDocument(); // the chip
+    expect(input.value).toBe("focus on tests\nand the docs");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onRunCommand).toHaveBeenCalledWith("init", "focus on tests\nand the docs");
+  });
+
+  it("pasting an unknown '/path args' stays a plain prompt", () => {
+    render(<Composer onSend={vi.fn()} onRunCommand={vi.fn()} commands={COMMANDS} />);
+    const input = screen.getByLabelText<HTMLTextAreaElement>("Ask anything");
+    fireEvent.change(input, { target: { value: "/etc/hosts looks wrong" } });
+    expect(screen.queryByLabelText("Remove command")).toBeNull();
+    expect(input.value).toBe("/etc/hosts looks wrong");
+  });
+
+  it("Backspace on an empty input un-chips back to editable text", () => {
+    render(<Composer onSend={vi.fn()} onRunCommand={vi.fn()} commands={COMMANDS} />);
+    const input = screen.getByLabelText<HTMLTextAreaElement>("Ask anything");
+    fireEvent.change(input, { target: { value: "/init " } });
+    expect(screen.getByLabelText("Remove command")).toBeInTheDocument(); // the chip
+    fireEvent.keyDown(input, { key: "Backspace" });
+    expect(screen.queryByLabelText("Remove command")).toBeNull();
+    expect(input.value).toBe("/init"); // name editable again, palette reopens
+  });
+});
+
+describe("Composer input history (↑/↓)", () => {
+  const send = (input: HTMLElement, text: string) => {
+    fireEvent.change(input, { target: { value: text } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  };
+
+  it("ArrowUp recalls sent inputs newest-first; ArrowDown returns to the draft", () => {
+    window.localStorage.clear();
+    render(<Composer onSend={vi.fn()} />);
+    const input = screen.getByLabelText<HTMLTextAreaElement>("Ask anything");
+    send(input, "first message");
+    send(input, "second message");
+
+    fireEvent.change(input, { target: { value: "a draft" } });
+    input.setSelectionRange(0, 0);
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.value).toBe("second message");
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.value).toBe("first message");
+    fireEvent.keyDown(input, { key: "ArrowUp" }); // past the oldest: stays
+    expect(input.value).toBe("first message");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input.value).toBe("second message");
+    fireEvent.keyDown(input, { key: "ArrowDown" }); // past the newest: draft back
+    expect(input.value).toBe("a draft");
+  });
+
+  it("recalls '!' shell and '/' command sends in their typed form", () => {
+    window.localStorage.clear();
+    const onRunShell = vi.fn();
+    const onRunCommand = vi.fn();
+    render(
+      <Composer onSend={vi.fn()} onRunShell={onRunShell} onRunCommand={onRunCommand} commands={COMMANDS} />,
+    );
+    const input = screen.getByLabelText<HTMLTextAreaElement>("Ask anything");
+    send(input, "!pwd");
+    fireEvent.change(input, { target: { value: "/init " } }); // chips
+    fireEvent.change(input, { target: { value: "focus" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    input.setSelectionRange(0, 0);
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.value).toBe("/init focus");
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.value).toBe("!pwd");
+  });
+
+  it("does not navigate history while the caret is mid-text or the palette is open", () => {
+    window.localStorage.clear();
+    render(<Composer onSend={vi.fn()} onRunCommand={vi.fn()} commands={COMMANDS} />);
+    const input = screen.getByLabelText<HTMLTextAreaElement>("Ask anything");
+    send(input, "older entry");
+
+    fireEvent.change(input, { target: { value: "typing" } });
+    input.setSelectionRange(3, 3); // caret mid-text: ArrowUp is caret movement
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.value).toBe("typing");
+
+    fireEvent.change(input, { target: { value: "/" } }); // palette open: ↑ drives it
+    input.setSelectionRange(0, 0);
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.value).toBe("/");
   });
 });
