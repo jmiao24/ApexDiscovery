@@ -28,9 +28,28 @@ struct Kernel {
     code_file: Option<PathBuf>,
 }
 
-/// Persistent kernels keyed by language.
+/// Persistent kernels keyed by `kernel_key` — one per notebook (Jupyter
+/// semantics: each notebook gets its own kernel, cwd = the notebook's folder,
+/// no state bleed between notebooks).
 #[derive(Default)]
 pub struct KernelState(Mutex<HashMap<String, Kernel>>);
+
+/// Map key for a kernel: `<lang>:<absolute notebook path>`, or `<lang>:@workspace`
+/// for legacy notebook-less execution in the active workspace.
+fn kernel_key(lang: &str, notebook_abs: Option<&std::path::Path>) -> String {
+    match notebook_abs {
+        Some(p) => format!("{lang}:{}", p.to_string_lossy()),
+        None => format!("{lang}:@workspace"),
+    }
+}
+
+/// Stable filename suffix for per-kernel scratch files (the R code file).
+fn key_hash(key: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    key.hash(&mut h);
+    format!("{:016x}", h.finish())
+}
 
 #[derive(serde::Serialize)]
 pub struct ExecResult {
@@ -156,9 +175,7 @@ pub(crate) fn rscript_bin() -> Option<String> {
     rscript_candidates().into_iter().find(|bin| interpreter_ok(bin))
 }
 
-fn spawn_kernel(app: &AppHandle, lang: &str) -> Result<Kernel, String> {
-    // Run in the agent's workspace so notebook code sees the same files it produced.
-    let workspace = crate::runtime::workspace_dir(app)?;
+fn spawn_kernel(app: &AppHandle, lang: &str, cwd: &std::path::Path, key: &str) -> Result<Kernel, String> {
     let (mut cmd, code_file) = match lang {
         "python" => {
             let script = materialize(app, "kernel_bridge.py", PY_BRIDGE_SRC)?;
@@ -174,7 +191,8 @@ fn spawn_kernel(app: &AppHandle, lang: &str) -> Result<Kernel, String> {
             let rscript = rscript_bin().ok_or(
                 "no R found — install R (r-project.org) to run R notebooks",
             )?;
-            let code_file = kernel_dir(app)?.join("r_cell.R");
+            // One code file per kernel — concurrent R notebooks must not share it.
+            let code_file = kernel_dir(app)?.join(format!("r_cell_{}.R", key_hash(key)));
             std::fs::write(&code_file, "").map_err(|e| e.to_string())?;
             let mut c = Command::new(rscript);
             c.arg(script).arg(&code_file);
@@ -182,7 +200,7 @@ fn spawn_kernel(app: &AppHandle, lang: &str) -> Result<Kernel, String> {
         }
         _ => return Err(format!("unsupported kernel language: {lang}")),
     };
-    cmd.current_dir(workspace)
+    cmd.current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
@@ -235,40 +253,59 @@ fn exec_on(k: &mut Kernel, code: &str) -> Result<ExecResult, String> {
     })
 }
 
-/// Execute one cell in the persistent local kernel for `language` (default python),
-/// starting it on first use.
+/// Execute one cell in the persistent local kernel for this notebook (Jupyter
+/// semantics: one kernel per notebook, working directory = the notebook's
+/// folder), starting it on first use. `notebook` is a `root`-relative .ipynb
+/// path; without it the kernel runs in the active workspace (legacy behavior).
 #[tauri::command]
 pub fn kernel_execute(
     app: AppHandle,
     state: State<'_, KernelState>,
     code: String,
     language: Option<String>,
+    notebook: Option<String>,
+    root: Option<String>,
 ) -> Result<ExecResult, String> {
     let lang = normalize_lang(language.as_deref().unwrap_or("python"))?;
+    let (cwd, key) = match notebook.as_deref().filter(|s| !s.trim().is_empty()) {
+        Some(nb) => {
+            let scope = crate::artifact_file::scope_root(&app, root.as_deref())?;
+            let abs = crate::artifact_file::resolve_under(&scope, nb)?;
+            let dir = abs
+                .parent()
+                .ok_or("notebook has no parent directory")?
+                .to_path_buf();
+            (dir, kernel_key(lang, Some(&abs)))
+        }
+        None => (crate::runtime::workspace_dir(&app)?, kernel_key(lang, None)),
+    };
     let mut guard = state.0.lock().unwrap();
-    if !guard.contains_key(lang) {
-        let k = spawn_kernel(&app, lang)?;
-        guard.insert(lang.to_string(), k);
+    if !guard.contains_key(&key) {
+        let k = spawn_kernel(&app, lang, &cwd, &key)?;
+        guard.insert(key.clone(), k);
     }
-    let k = guard.get_mut(lang).unwrap();
+    let k = guard.get_mut(&key).unwrap();
     match exec_on(k, &code) {
         Ok(r) => Ok(r),
         Err(e) => {
             // The child likely died; drop it so the next call respawns cleanly.
-            guard.remove(lang);
+            guard.remove(&key);
             Err(e)
         }
     }
 }
 
-/// Restart a kernel (clears its state). Omit `language` to reset all kernels.
+/// Restart kernels (clears their state). Omit `language` to reset everything;
+/// with `language`, every kernel of that language is killed.
 #[tauri::command]
 pub fn kernel_reset(state: State<'_, KernelState>, language: Option<String>) {
     let mut guard = state.0.lock().unwrap();
-    match language.as_deref() {
-        Some(l) => {
-            if let Ok(lang) = normalize_lang(l) {
-                if let Some(mut k) = guard.remove(lang) {
+    match language.as_deref().and_then(|l| normalize_lang(l).ok()) {
+        Some(lang) => {
+            let prefix = format!("{lang}:");
+            let keys: Vec<String> = guard.keys().filter(|k| k.starts_with(&prefix)).cloned().collect();
+            for key in keys {
+                if let Some(mut k) = guard.remove(&key) {
                     let _ = k.child.kill();
                 }
             }
@@ -295,6 +332,22 @@ mod tests {
         let mut line = String::new();
         stdout.read_line(&mut line).unwrap();
         serde_json::from_str(line.trim()).unwrap()
+    }
+
+    #[test]
+    fn kernel_keys_isolate_notebooks_and_languages() {
+        let a = std::path::Path::new("/ws/2026-07-05/analysis.ipynb");
+        let b = std::path::Path::new("/ws/2026-07-04/analysis.ipynb");
+        // Same basename in different folders → different kernels; language
+        // is part of the key; the legacy no-notebook key stays stable.
+        assert_ne!(kernel_key("python", Some(a)), kernel_key("python", Some(b)));
+        assert_ne!(kernel_key("python", Some(a)), kernel_key("r", Some(a)));
+        assert_eq!(kernel_key("python", None), "python:@workspace");
+        // Distinct keys get distinct R scratch files.
+        assert_ne!(
+            key_hash(&kernel_key("r", Some(a))),
+            key_hash(&kernel_key("r", Some(b)))
+        );
     }
 
     #[test]

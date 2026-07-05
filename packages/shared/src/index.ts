@@ -127,6 +127,7 @@ export type ArtifactKind =
   | "report"
   | "table"
   | "notebook"
+  | "model"
   | "data";
 
 export interface ArtifactBlock {
@@ -168,11 +169,17 @@ export type Inspector =
   | FilePreviewInspector
   | NotebookFileInspector;
 
+/** Folder tree a root-relative file path resolves in: the active session
+ *  workspace (default) or the base folder all session workspaces live under. */
+export type FileRoot = "workspace" | "base";
+
 /** A real .ipynb in the workspace, opened in the runnable notebook editor. */
 export interface NotebookFileInspector {
   variant: "notebook-file";
-  /** Workspace-relative path of the notebook. */
+  /** Root-relative path of the notebook. */
   path: string;
+  /** Folder tree `path` resolves in (default "workspace"). */
+  root?: FileRoot;
 }
 
 /** A workspace file surfaced for preview — the agent wrote it OR code produced it.
@@ -185,6 +192,8 @@ export interface FilePreviewInspector {
   language?: string;
   /** Inline text content when known (write/edit tools); else loaded from disk. */
   content?: string;
+  /** Folder tree `path` resolves in (default "workspace"). */
+  root?: FileRoot;
 }
 
 export interface ArtifactVersion {

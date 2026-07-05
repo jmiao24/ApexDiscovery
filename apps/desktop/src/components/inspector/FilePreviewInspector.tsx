@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Code2, Eye, ExternalLink, History, Loader2, X } from "lucide-react";
 import type { FilePreviewInspector as FilePreviewInspectorT } from "@ai4s/shared";
 import { extOf, previewKind, type PreviewKind } from "@/lib/artifacts";
@@ -10,7 +10,9 @@ import { ProvenancePanel } from "./ProvenancePanel";
 import { TablePreview } from "./TablePreview";
 import { DocxView, PptxView, XlsxView } from "./OfficePreview";
 import { MoleculeView } from "./MoleculeView";
+import { MeshView } from "./MeshView";
 import { GenomeView } from "./GenomeView";
+import { useScrollMemory } from "@/lib/scrollMemory";
 import { cn } from "@/lib/cn";
 
 /**
@@ -33,7 +35,7 @@ export function FilePreviewInspector({
   const needsText =
     kind === "table" || kind === "text" || kind === "html" || kind === "markdown" ||
     kind === "molecule" || kind === "genome";
-  const needsBytes = kind === "docx" || kind === "xlsx" || kind === "pptx";
+  const needsBytes = kind === "docx" || kind === "xlsx" || kind === "pptx" || kind === "mesh";
 
   const [url, setUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(data.content ?? null);
@@ -57,7 +59,7 @@ export function FilePreviewInspector({
     (async () => {
       try {
         if (needsUrl) {
-          const u = await previewUrl(data.path);
+          const u = await previewUrl(data.path, data.root);
           if (cancelled) return;
           setUrl(u);
           // Browser dev has no local server; html can still preview inline content.
@@ -66,14 +68,14 @@ export function FilePreviewInspector({
           }
         }
         if (needsText && data.content === undefined) {
-          const f = await readArtifact(data.path);
+          const f = await readArtifact(data.path, data.root);
           if (cancelled) return;
           if (f && f.encoding === "utf8") setText(f.data);
           else if (!f && kind !== "html" && kind !== "markdown")
             setError("Preview is available in the desktop app.");
         }
         if (needsBytes) {
-          const f = await readArtifact(data.path);
+          const f = await readArtifact(data.path, data.root);
           if (cancelled) return;
           if (f && f.encoding === "base64") setBytes(base64ToBytes(f.data));
           else setError("Preview is available in the desktop app.");
@@ -87,10 +89,19 @@ export function FilePreviewInspector({
     return () => {
       cancelled = true;
     };
-  }, [data.path, data.content, kind, needsUrl, needsText, needsBytes]);
+  }, [data.path, data.content, data.root, kind, needsUrl, needsText, needsBytes]);
 
   const canToggle =
     kind === "html" || kind === "markdown" || kind === "molecule" || kind === "genome";
+
+  // Where the user was in this file, restored when they come back to it —
+  // history browsing keeps its own offset so the two don't clobber each other.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const onScroll = useScrollMemory(
+    scrollRef,
+    showHistory ? `history:${data.path}` : `file:${data.path}`,
+    showHistory || !loading,
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -121,7 +132,7 @@ export function FilePreviewInspector({
           className="text-muted hover:text-text"
           aria-label="Open externally"
           title="Open in the default app"
-          onClick={() => void openArtifactExternally(data.path)}
+          onClick={() => void openArtifactExternally(data.path, data.root)}
         >
           <ExternalLink size={16} />
         </button>
@@ -130,7 +141,7 @@ export function FilePreviewInspector({
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-auto bg-surface-2">
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto bg-surface-2">
         {showHistory && <ProvenancePanel path={data.path} language={data.language} />}
         {!showHistory && loading && (
           <div className="flex items-center gap-2 p-4 text-sm text-muted">
@@ -146,6 +157,7 @@ export function FilePreviewInspector({
             bytes={bytes}
             showCode={tab === "code"}
             filename={data.filename}
+            path={data.path}
             language={data.language}
           />
         )}
@@ -161,6 +173,7 @@ function Body({
   bytes,
   showCode,
   filename,
+  path,
   language,
 }: {
   kind: PreviewKind;
@@ -169,13 +182,23 @@ function Body({
   bytes: ArrayBuffer | null;
   showCode: boolean;
   filename: string;
+  path: string;
   language?: string;
 }) {
   if (kind === "docx" || kind === "xlsx" || kind === "pptx") {
+    // Office views scroll internally (the outer pane never does), so they
+    // carry their own scroll memory, keyed apart from the outer container's.
     if (!bytes) return <Note text="Preview is available in the desktop app." />;
-    if (kind === "docx") return <DocxView bytes={bytes} />;
-    if (kind === "xlsx") return <XlsxView bytes={bytes} />;
-    return <PptxView bytes={bytes} />;
+    if (kind === "docx") return <DocxView bytes={bytes} scrollKey={`office:${path}`} />;
+    if (kind === "xlsx") return <XlsxView bytes={bytes} scrollKey={`office:${path}`} />;
+    return <PptxView bytes={bytes} scrollKey={`office:${path}`} />;
+  }
+  if (kind === "mesh") {
+    return bytes !== null ? (
+      <MeshView filename={filename} bytes={bytes} />
+    ) : (
+      <Note text="Preview is available in the desktop app." />
+    );
   }
   if (kind === "molecule") {
     if (showCode) {

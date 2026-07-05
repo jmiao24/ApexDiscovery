@@ -8,9 +8,10 @@
 // resets (lists, margins, img sizing) plus the theme's inherited font/colors
 // (light text in dark mode) wreck the layout. The shadow root blocks the
 // stylesheets; the base style below resets what still inherits.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useScrollMemory } from "@/lib/scrollMemory";
 import type { SheetHtml } from "@/lib/xlsx";
 
 /** Document-neutral canvas: black text, CJK-aware fonts, light gray backdrop. */
@@ -64,11 +65,13 @@ function RenderState({ error, loading }: { error: string | null; loading: boolea
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-export function DocxView({ bytes }: { bytes: ArrayBuffer }) {
+export function DocxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: string }) {
   const { hostRef, page } = useShadowPage();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Reading position, restored when the same document is reopened.
+  const onScroll = useScrollMemory(wrapRef, scrollKey, !loading);
 
   useEffect(() => {
     if (!page) return;
@@ -116,7 +119,7 @@ export function DocxView({ bytes }: { bytes: ArrayBuffer }) {
   }, [bytes, page]);
 
   return (
-    <div ref={wrapRef} className="h-full overflow-auto">
+    <div ref={wrapRef} onScroll={onScroll} className="h-full overflow-auto">
       <RenderState error={error} loading={loading} />
       <div ref={hostRef} />
     </div>
@@ -136,8 +139,9 @@ const SHEET_CSS = `
   td { border: 1px solid #ece7e0; padding: 3px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 `;
 
-export function XlsxView({ bytes }: { bytes: ArrayBuffer }) {
+export function XlsxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: string }) {
   const { hostRef, page } = useShadowPage(SHEET_CSS);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const [sheets, setSheets] = useState<SheetHtml[] | null>(null);
   const [active, setActive] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -162,9 +166,12 @@ export function XlsxView({ bytes }: { bytes: ArrayBuffer }) {
   }, [bytes]);
 
   const sheet = sheets?.[Math.min(active, sheets.length - 1)];
-  useEffect(() => {
+  // Layout effect (in this hook order): the sheet HTML must be in the DOM
+  // before the scroll restore below runs, or the offset would clamp to 0.
+  useLayoutEffect(() => {
     if (page && sheet) page.innerHTML = sheet.html; // cell text is escaped by SheetJS
   }, [page, sheet]);
+  const onScroll = useScrollMemory(wrapRef, scrollKey, !!(page && sheet));
 
   if (error || !sheets) return <RenderState error={error} loading={!sheets} />;
   if (sheets.length === 0) return <div className="p-4 text-sm text-muted">This workbook has no sheets.</div>;
@@ -186,7 +193,7 @@ export function XlsxView({ bytes }: { bytes: ArrayBuffer }) {
           ))}
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={wrapRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto">
         <div ref={hostRef} />
       </div>
       <div className="border-t border-border px-4 py-1.5 text-xs text-muted">
@@ -204,11 +211,13 @@ const SLIDES_CSS = `
   .page > div > div { margin: 0 auto 16px; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
 `;
 
-export function PptxView({ bytes }: { bytes: ArrayBuffer }) {
+export function PptxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: string }) {
   const { hostRef, page } = useShadowPage(SLIDES_CSS);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Reading position, restored when the same deck is reopened.
+  const onScroll = useScrollMemory(wrapRef, scrollKey, !loading);
 
   useEffect(() => {
     if (!page) return;
@@ -236,7 +245,7 @@ export function PptxView({ bytes }: { bytes: ArrayBuffer }) {
   }, [bytes, page]);
 
   return (
-    <div ref={wrapRef} className="h-full overflow-auto">
+    <div ref={wrapRef} onScroll={onScroll} className="h-full overflow-auto">
       <RenderState error={error} loading={loading} />
       <div ref={hostRef} />
     </div>

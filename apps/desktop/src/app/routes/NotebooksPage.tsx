@@ -8,18 +8,22 @@ import { NotebookEditor } from "@/components/notebook/NotebookEditor";
 import { toast } from "@/lib/toast";
 
 /**
- * Notebooks live in the agent workspace as real .ipynb files: the user runs
- * cells on the app's local Python kernel, and the agent reads/edits the same
- * files — that shared file is the collaboration surface.
+ * Notebooks live in session workspaces as real .ipynb files: the user runs
+ * cells on the app's local kernel, and the agent reads/edits the same files —
+ * that shared file is the collaboration surface. This page is GLOBAL: it lists
+ * every notebook under the base folder, across all session folders, newest
+ * first. A notebook's kernel always runs in the notebook's own folder.
  */
 export function NotebooksPage() {
   const [entries, setEntries] = useState<NotebookEntry[]>([]);
-  const [open, setOpen] = useState<string | null>(null);
+  /** Open notebook + the tree its path resolves in ("base" = listed here;
+   *  "workspace" = just created in the active session folder). */
+  const [open, setOpen] = useState<{ path: string; root: "workspace" | "base" } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
-    setEntries(await listNotebooks());
+    setEntries(await listNotebooks("base"));
   }, []);
   useEffect(() => {
     void refresh();
@@ -41,7 +45,7 @@ export function NotebooksPage() {
       const base = language === "r" ? "notebook-r.ipynb" : "notebook.ipynb";
       const name = await addTextToWorkspace(base, emptyIpynb(language));
       await refresh();
-      setOpen(name);
+      setOpen({ path: name, root: "workspace" });
     } catch (err) {
       toast.error(`Could not create notebook: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -50,7 +54,8 @@ export function NotebooksPage() {
   if (open) {
     return (
       <NotebookEditor
-        path={open}
+        path={open.path}
+        root={open.root}
         onBack={() => {
           setOpen(null);
           void refresh();
@@ -99,8 +104,8 @@ export function NotebooksPage() {
           </div>
         </div>
         <p className="mt-1 text-sm text-muted">
-          Jupyter notebooks in your workspace. Cells run on the local Python or R kernel; the
-          agent works on the same files.
+          All Jupyter notebooks across your session folders, newest first. Cells run on the
+          local Python or R kernel in the notebook's own folder; the agent works on the same files.
         </p>
 
         <div className="mt-5 space-y-1.5">
@@ -111,19 +116,29 @@ export function NotebooksPage() {
                 : "Notebooks are available in the desktop app."}
             </div>
           )}
-          {entries.map((e) => (
-            <button
-              key={e.path}
-              onClick={() => setOpen(e.path)}
-              className="flex w-full items-center gap-2.5 rounded-card border border-border bg-surface px-4 py-2.5 text-left hover:bg-surface-2"
-            >
-              <NotebookPen size={15} className="shrink-0 text-muted" />
-              <span className="truncate text-sm text-text">{e.path}</span>
-              <span className="ml-auto shrink-0 text-xs text-muted">
-                {new Date(e.modified * 1000).toLocaleString()}
-              </span>
-            </button>
-          ))}
+          {entries.map((e) => {
+            const slash = e.path.lastIndexOf("/");
+            const folder = slash >= 0 ? e.path.slice(0, slash) : "";
+            const name = slash >= 0 ? e.path.slice(slash + 1) : e.path;
+            return (
+              <button
+                key={e.path}
+                onClick={() => setOpen({ path: e.path, root: "base" })}
+                className="flex w-full items-center gap-2.5 rounded-card border border-border bg-surface px-4 py-2.5 text-left hover:bg-surface-2"
+              >
+                <NotebookPen size={15} className="shrink-0 text-muted" />
+                <span className="truncate text-sm text-text">{name}</span>
+                {folder && (
+                  <span className="max-w-[40%] truncate rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-muted">
+                    {folder}
+                  </span>
+                )}
+                <span className="ml-auto shrink-0 text-xs text-muted">
+                  {new Date(e.modified * 1000).toLocaleString()}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

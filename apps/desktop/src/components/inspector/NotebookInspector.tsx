@@ -1,8 +1,9 @@
-import { useState, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import { ChevronDown, CornerDownLeft, NotebookPen, X } from "lucide-react";
 import type { NotebookCell, NotebookInspector as NotebookInspectorT } from "@ai4s/shared";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { formatExecResult, kernelExecute } from "@/lib/kernel";
+import { useScrollMemory } from "@/lib/scrollMemory";
 
 export function NotebookInspector({
   data,
@@ -17,6 +18,9 @@ export function NotebookInspector({
   const [cells, setCells] = useState<NotebookCell[]>(data.cells);
   const [expr, setExpr] = useState("");
   const [busy, setBusy] = useState(false);
+  // Viewing position, restored when this notebook is reopened.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const onScroll = useScrollMemory(scrollRef, `nb:${data.name}`);
 
   const evaluate = async () => {
     const code = expr.trim();
@@ -78,7 +82,7 @@ export function NotebookInspector({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto p-4">
         {cells.map((cell) => (
           <div key={cell.index} className="mb-4">
             <div className="mb-1 flex items-center gap-2 text-xs text-muted">

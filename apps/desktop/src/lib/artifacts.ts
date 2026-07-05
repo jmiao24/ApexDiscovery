@@ -19,6 +19,7 @@ const EXT_KIND: Record<string, ArtifactKind> = {
   csv: "table", tsv: "table", parquet: "table", xlsx: "table",
   mol: "data", sdf: "data", smi: "data", smiles: "data",
   bed: "data", bedgraph: "data", bdg: "data", gff: "data", gff3: "data", gtf: "data", vcf: "data",
+  stl: "model", obj: "model", ply: "model", gltf: "model", glb: "model",
 };
 
 const EXT_LANG: Record<string, string> = {
@@ -45,6 +46,7 @@ const REF_EXTS = [
   "docx", "xlsx", "pptx",
   "mol", "mol2", "sdf", "smi", "smiles", "cif", "mcif", "mmcif", "pdb", "pqr", "xyz", "cube",
   "bed", "bedgraph", "bdg", "gff", "gff3", "gtf", "vcf",
+  "stl", "obj", "ply", "gltf", "glb",
 ];
 const REF_RE = new RegExp(`[\\w./-]+\\.(?:${REF_EXTS.join("|")})\\b`, "gi");
 
@@ -102,7 +104,11 @@ export type PreviewKind =
   | "xlsx"
   | "pptx"
   | "molecule"
+  | "mesh"
   | "genome";
+
+/** 3D mesh / CAD formats rendered by the three.js viewer. */
+export const MESH_EXTS = ["stl", "obj", "ply", "gltf", "glb"];
 
 /** How a file should be previewed, from its extension. This is the previewer
  *  registry: native webview viewers first (pdf/html/image via the local file
@@ -116,6 +122,7 @@ export function previewKind(ext: string): PreviewKind {
   if (e === "csv" || e === "tsv") return "table";
   if (e === "md" || e === "markdown") return "markdown";
   if (e === "docx" || e === "xlsx" || e === "pptx") return e;
+  if (MESH_EXTS.includes(e)) return "mesh";
   if (["mol", "mol2", "sdf", "smi", "smiles", "cif", "mcif", "mmcif", "pdb", "pqr", "xyz", "cube"].includes(e))
     return "molecule";
   if (["bed", "bedgraph", "bdg", "gff", "gff3", "gtf", "vcf"].includes(e)) return "genome";

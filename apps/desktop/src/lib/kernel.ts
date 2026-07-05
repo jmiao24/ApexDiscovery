@@ -1,5 +1,6 @@
 // Bridge to the local Python kernel (desktop only). In a plain browser these are
 // no-ops so the app still runs in `pnpm dev`; the notebook then shows a hint.
+import type { FileRoot } from "@ai4s/shared";
 import { isTauri } from "./tauri";
 
 export interface ExecResult {
@@ -18,16 +19,20 @@ export function isCodeLanguage(lang: string): lang is KernelLanguage {
 }
 
 /**
- * Run one cell in the persistent local kernel for `language` (default python).
- * Returns null outside the desktop app.
+ * Run one cell in the persistent local kernel for this notebook (Jupyter
+ * semantics: one kernel per notebook, working directory = the notebook's
+ * folder). `notebook` is the root-relative .ipynb path; omitting it runs in
+ * the active workspace. Returns null outside the desktop app.
  */
 export async function kernelExecute(
   code: string,
   language: KernelLanguage = "python",
+  notebook?: string,
+  root?: FileRoot,
 ): Promise<ExecResult | null> {
   if (!isTauri) return null;
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<ExecResult>("kernel_execute", { code, language });
+  return invoke<ExecResult>("kernel_execute", { code, language, notebook, root });
 }
 
 /** Restart the local kernel(s) — e.g. after switching workspace folder so the

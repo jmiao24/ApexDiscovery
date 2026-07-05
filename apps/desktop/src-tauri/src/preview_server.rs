@@ -70,7 +70,7 @@ fn write_response(stream: &mut TcpStream, status: &str, mime: &str, body: &[u8],
     }
 }
 
-fn handle(mut stream: TcpStream, root: PathBuf) {
+fn handle<F: Fn(&str) -> Option<PathBuf>>(mut stream: TcpStream, root_of: &F) {
     // Read the full request head (until \r\n\r\n) — it may arrive in several
     // TCP segments. We only serve GET/HEAD; bodies are ignored.
     let mut buf = Vec::with_capacity(1024);
@@ -99,7 +99,22 @@ fn handle(mut stream: TcpStream, root: PathBuf) {
         write_response(&mut stream, "405 Method Not Allowed", "text/plain", b"method not allowed", false);
         return;
     }
-    let rel = percent_decode(raw_path.split('?').next().unwrap_or("/").trim_start_matches('/'));
+    let decoded = percent_decode(raw_path.split('?').next().unwrap_or("/").trim_start_matches('/'));
+    // URLs are scope-prefixed: /w/<path> serves the active workspace, /b/<path>
+    // the base folder — each resolved (and sandboxed) against its own root.
+    let (root, rel) = match decoded.split_once('/') {
+        Some((scope, rest)) if !rest.is_empty() => match root_of(scope) {
+            Some(root) => (root, rest.to_string()),
+            None => {
+                write_response(&mut stream, "404 Not Found", "text/plain", b"not found", head_only);
+                return;
+            }
+        },
+        _ => {
+            write_response(&mut stream, "404 Not Found", "text/plain", b"not found", head_only);
+            return;
+        }
+    };
     let full = match resolve_under(&root, &rel) {
         Ok(p) if p.is_file() => p,
         _ => {
@@ -115,13 +130,14 @@ fn handle(mut stream: TcpStream, root: PathBuf) {
     }
 }
 
-/// Serve files on a fresh loopback port, resolving each request against the
-/// root `root_of` returns AT THAT MOMENT — the active workspace moves when the
-/// user switches sessions, so a root captured at start-up would go stale.
-/// Returns the port; runs for the app's lifetime.
+/// Serve files on a fresh loopback port. Each request names its scope in the
+/// URL (`/w/…` or `/b/…`) and `root_of(scope)` resolves the root AT THAT
+/// MOMENT — the active workspace moves when the user switches sessions, so a
+/// root captured at start-up would go stale. Returns the port; runs for the
+/// app's lifetime.
 pub fn serve<F>(root_of: F) -> std::io::Result<u16>
 where
-    F: Fn() -> Option<PathBuf> + Send + Sync + 'static,
+    F: Fn(&str) -> Option<PathBuf> + Send + Sync + 'static,
 {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
@@ -129,13 +145,7 @@ where
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
             let root_of = root_of.clone();
-            std::thread::spawn(move || match root_of() {
-                Some(root) => handle(stream, root),
-                None => {
-                    let mut stream = stream;
-                    write_response(&mut stream, "404 Not Found", "text/plain", b"not found", false);
-                }
-            });
+            std::thread::spawn(move || handle(stream, root_of.as_ref()));
         }
     });
     Ok(port)
@@ -163,26 +173,38 @@ pub fn relativize(root: &Path, path: &str) -> Result<String, String> {
     Ok(parts.join("/"))
 }
 
-/// URL a workspace file is previewable at (starts the server on first use).
+/// URL a file is previewable at (starts the server on first use). `root`
+/// chooses the tree: the active workspace (default) or the base folder.
 #[tauri::command]
 pub fn preview_url(
     app: AppHandle,
     state: State<'_, PreviewState>,
     path: String,
+    root: Option<String>,
 ) -> Result<String, String> {
     let mut guard = state.0.lock().unwrap();
     let port = match *guard {
         Some(p) => p,
         None => {
             let handle = app.clone();
-            let p = serve(move || workspace_dir(&handle).ok()).map_err(|e| e.to_string())?;
+            let p = serve(move |scope| match scope {
+                "w" => workspace_dir(&handle).ok(),
+                "b" => crate::runtime::base_workspace_dir(&handle).ok(),
+                _ => None,
+            })
+            .map_err(|e| e.to_string())?;
             *guard = Some(p);
             p
         }
     };
-    let rel = relativize(&workspace_dir(&app)?, &path)?;
+    let scope = match root.as_deref().unwrap_or("workspace") {
+        "workspace" => "w",
+        "base" => "b",
+        other => return Err(format!("unknown root scope: {other}")),
+    };
+    let rel = relativize(&crate::artifact_file::scope_root(&app, root.as_deref())?, &path)?;
     let encoded: Vec<String> = rel.split('/').map(encode_segment).collect();
-    Ok(format!("http://127.0.0.1:{port}/{}", encoded.join("/")))
+    Ok(format!("http://127.0.0.1:{port}/{scope}/{}", encoded.join("/")))
 }
 
 #[cfg(test)]
@@ -236,16 +258,25 @@ mod tests {
 
         let current = Arc::new(Mutex::new(a.clone()));
         let for_server = current.clone();
-        let port = serve(move || Some(for_server.lock().unwrap().clone())).unwrap();
+        let port = serve(move |scope| {
+            (scope == "w").then(|| for_server.lock().unwrap().clone())
+        })
+        .unwrap();
 
-        let (h, body) = get(port, "/f.html");
+        let (h, body) = get(port, "/w/f.html");
         assert!(h.starts_with("HTTP/1.1 200"), "{h}");
         assert_eq!(body, b"in-a");
 
         *current.lock().unwrap() = b.clone();
-        let (h, body) = get(port, "/f.html");
+        let (h, body) = get(port, "/w/f.html");
         assert!(h.starts_with("HTTP/1.1 200"), "{h}");
         assert_eq!(body, b"in-b");
+
+        // An unknown scope (or a bare unscoped path) never serves anything.
+        let (h, _) = get(port, "/x/f.html");
+        assert!(h.starts_with("HTTP/1.1 404"), "{h}");
+        let (h, _) = get(port, "/f.html");
+        assert!(h.starts_with("HTTP/1.1 404"), "{h}");
 
         let _ = std::fs::remove_dir_all(a);
         let _ = std::fs::remove_dir_all(b);
@@ -260,25 +291,25 @@ mod tests {
 
         let port = serve({
             let root = root.clone();
-            move || Some(root.clone())
+            move |scope| (scope == "w").then(|| root.clone())
         })
         .unwrap();
 
-        let (h, body) = get(port, "/sub/a.pdf");
+        let (h, body) = get(port, "/w/sub/a.pdf");
         assert!(h.starts_with("HTTP/1.1 200"), "{h}");
         assert!(h.contains("Content-Type: application/pdf"), "{h}");
         assert_eq!(body, b"%PDF-1.4 fake");
 
-        let (h, _) = get(port, "/b.html");
+        let (h, _) = get(port, "/w/b.html");
         assert!(h.contains("Content-Type: text/html"), "{h}");
 
         // Traversal out of the root must 404.
-        let (h, _) = get(port, "/../../../etc/hosts");
+        let (h, _) = get(port, "/w/../../../etc/hosts");
         assert!(h.starts_with("HTTP/1.1 404"), "{h}");
-        let (h, _) = get(port, "/%2e%2e/%2e%2e/etc/hosts");
+        let (h, _) = get(port, "/w/%2e%2e/%2e%2e/etc/hosts");
         assert!(h.starts_with("HTTP/1.1 404"), "{h}");
 
-        let (h, _) = get(port, "/missing.pdf");
+        let (h, _) = get(port, "/w/missing.pdf");
         assert!(h.starts_with("HTTP/1.1 404"), "{h}");
 
         let _ = std::fs::remove_dir_all(root);

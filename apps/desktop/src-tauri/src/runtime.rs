@@ -367,6 +367,9 @@ pub fn set_workspace(
     // per-directory instances, and the frontend reconnects its event stream
     // with `?directory=<new folder>`. Restarting here used to cost 3-6 s per
     // history-session switch (process boot + reconnect polling).
+    // Jupyter-lab, however, pins its root_dir at spawn time — re-root it (in
+    // the background) so agent-created notebooks land in the new folder.
+    crate::jupyter::reroot_jupyter(&app);
     Ok(canon.to_string_lossy().to_string())
 }
 

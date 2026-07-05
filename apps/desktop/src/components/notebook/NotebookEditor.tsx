@@ -11,6 +11,7 @@ import {
   type KernelLanguage,
 } from "@/lib/kernel";
 import { toast } from "@/lib/toast";
+import { useScrollMemory } from "@/lib/scrollMemory";
 import { cn } from "@/lib/cn";
 
 /**
@@ -20,10 +21,14 @@ import { cn } from "@/lib/cn";
  */
 export function NotebookEditor({
   path,
+  root,
   onBack,
   onClose,
 }: {
   path: string;
+  /** Folder tree `path` resolves in (default the active workspace). The
+   *  kernel also runs with the notebook's own folder as cwd. */
+  root?: "workspace" | "base";
   /** Back navigation (full-page use). */
   onBack?: () => void;
   /** Close the pane (inspector use). */
@@ -44,7 +49,7 @@ export function NotebookEditor({
   const load = useCallback(async () => {
     setError(null);
     try {
-      const f = await readArtifact(path);
+      const f = await readArtifact(path, root);
       if (!f || f.encoding !== "utf8") throw new Error("could not read the notebook");
       rawRef.current = f.data;
       setLanguage(notebookLanguage(f.data));
@@ -53,7 +58,7 @@ export function NotebookEditor({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [path]);
+  }, [path, root]);
 
   useEffect(() => {
     void load();
@@ -66,7 +71,7 @@ export function NotebookEditor({
       if (!savedRef.current) return; // never clobber unsaved local edits
       void (async () => {
         try {
-          const f = await readArtifact(path);
+          const f = await readArtifact(path, root);
           if (f && f.encoding === "utf8" && rawRef.current !== null && f.data !== rawRef.current) {
             rawRef.current = f.data;
             setLanguage(notebookLanguage(f.data));
@@ -78,20 +83,20 @@ export function NotebookEditor({
       })();
     }, 2000);
     return () => clearInterval(t);
-  }, [path]);
+  }, [path, root]);
 
   const save = useCallback(async () => {
     const current = cellsRef.current;
     if (!current) return;
     try {
       const out = serializeIpynb(current);
-      await writeWorkspaceFile(path, out);
+      await writeWorkspaceFile(path, out, root);
       rawRef.current = out; // our own write is not an external change
       setSaved(true);
     } catch (e) {
       toast.error(`Could not save: ${e instanceof Error ? e.message : String(e)}`);
     }
-  }, [path]);
+  }, [path, root]);
 
   // Debounced autosave: runs AFTER React commits the latest cells, so the file
   // always gets the freshest state (saving inside handlers would race setState).
@@ -112,7 +117,7 @@ export function NotebookEditor({
     update(cell.index, { output: "running…" });
     try {
       const lang = isCodeLanguage(cell.language) ? cell.language : language;
-      const res = await kernelExecute(cell.code, lang);
+      const res = await kernelExecute(cell.code, lang, path, root);
       update(cell.index, {
         output: res ? formatExecResult(res) : "(local kernel available only in the desktop app)",
       });
@@ -135,6 +140,11 @@ export function NotebookEditor({
     setCells((c) => c?.filter((cell) => cell.index !== index) ?? null);
     setSaved(false);
   };
+
+  // Where the user was in this notebook, restored when they come back to it
+  // (session switch, pane reopen) — once the cells are in, so the offset holds.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const onScroll = useScrollMemory(scrollRef, `file:${path}`, cells !== null);
 
   const onCellKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>, cell: NotebookCell) => {
     if ((e.metaKey || e.ctrlKey || e.shiftKey) && e.key === "Enter") {
@@ -190,7 +200,7 @@ export function NotebookEditor({
           <ProvenancePanel path={path} language={language} />
         </div>
       )}
-      <div className={cn("flex-1 overflow-y-auto", showHistory && "hidden")}>
+      <div ref={scrollRef} onScroll={onScroll} className={cn("flex-1 overflow-y-auto", showHistory && "hidden")}>
         <div className="mx-auto max-w-3xl px-6 py-5">
           {error && <div className="text-sm text-error">{error}</div>}
           {!error && !cells && (

@@ -22,6 +22,9 @@ const PIP_SPEC: &[&str] = &[
 pub struct JupyterState {
     child: Mutex<Option<CommandChild>>,
     running: Mutex<bool>,
+    /// Serializes start / re-root so overlapping workspace switches can never
+    /// leave two jupyter-lab processes fighting over the fixed port.
+    lifecycle: Mutex<()>,
 }
 
 fn env_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -48,10 +51,13 @@ fn pid_path(app: &AppHandle) -> Result<PathBuf, String> {
 /// and precise: never touches unrelated processes.
 fn kill_orphan_jupyter(app: &AppHandle) {
     // Unix: match the env's own jupyter-lab path — scoped, proven, no PID reuse risk.
+    // SIGKILL, not SIGTERM: a wedged orphan survives TERM (observed in the field —
+    // jupyter's graceful shutdown hangs on dead kernels) and these are our own
+    // headless processes from a dead app run, so there is nothing to save.
     #[cfg(unix)]
     if let Ok(dir) = env_dir(app) {
         let pattern = format!("{}/bin/jupyter-lab", dir.to_string_lossy());
-        let _ = std::process::Command::new("pkill").args(["-f", &pattern]).output();
+        let _ = std::process::Command::new("pkill").args(["-9", "-f", &pattern]).output();
         std::thread::sleep(std::time::Duration::from_millis(400));
     }
     // Windows: taskkill the recorded PID, filtered to python.exe so a recycled
@@ -208,17 +214,24 @@ pub async fn setup_jupyter(app: AppHandle) -> Result<(), String> {
 /// so the agent and the app's Notebooks page see the same files.
 #[tauri::command]
 pub fn start_jupyter(app: AppHandle, state: State<'_, JupyterState>) -> Result<JupyterStatus, String> {
+    let _guard = state.lifecycle.lock().unwrap();
     if *state.running.lock().unwrap() {
         return Ok(status_of(&app, &state));
     }
-    let lab = bin(&app, "jupyter-lab")?;
+    spawn_lab(&app, &state)
+}
+
+/// Spawn jupyter-lab rooted in the CURRENT active workspace. Caller holds the
+/// lifecycle lock and has ensured no managed instance is running.
+fn spawn_lab(app: &AppHandle, state: &JupyterState) -> Result<JupyterStatus, String> {
+    let lab = bin(app, "jupyter-lab")?;
     if !lab.exists() {
         return Err("Jupyter is not set up yet".into());
     }
-    let meta = load_meta(&app).ok_or("Jupyter setup is incomplete (no server meta)")?;
-    let workspace = workspace_dir(&app)?;
+    let meta = load_meta(app).ok_or("Jupyter setup is incomplete (no server meta)")?;
+    let workspace = workspace_dir(app)?;
 
-    kill_orphan_jupyter(&app);
+    kill_orphan_jupyter(app);
 
     let cmd = app
         .shell()
@@ -236,12 +249,33 @@ pub fn start_jupyter(app: AppHandle, state: State<'_, JupyterState>) -> Result<J
     let (mut rx, child) = cmd.spawn().map_err(|e| format!("failed to start jupyter: {e}"))?;
     tauri::async_runtime::spawn(async move { while rx.recv().await.is_some() {} });
     // Record the PID so a future run can kill this process if it is orphaned.
-    if let Ok(path) = pid_path(&app) {
+    if let Ok(path) = pid_path(app) {
         let _ = std::fs::write(path, child.pid().to_string());
     }
     *state.child.lock().unwrap() = Some(child);
     *state.running.lock().unwrap() = true;
-    Ok(status_of(&app, &state))
+    Ok(status_of(app, state))
+}
+
+/// Follow a workspace switch: a running jupyter-lab keeps the root_dir it was
+/// born with, so it must be restarted rooted in the NEW active workspace —
+/// otherwise the agent's jupyter MCP keeps writing notebooks into the old
+/// folder, invisible to the Notebooks page and previews. Port and token are
+/// fixed in server meta, so the MCP config entry stays valid across the
+/// restart. Runs in the background: a session switch must not wait on it.
+pub fn reroot_jupyter(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<JupyterState>();
+        let _guard = state.lifecycle.lock().unwrap();
+        if !*state.running.lock().unwrap() {
+            return;
+        }
+        kill_jupyter(&state);
+        if let Err(e) = spawn_lab(&app, &state) {
+            eprintln!("jupyter re-root failed: {e}");
+        }
+    });
 }
 
 pub fn kill_jupyter(state: &JupyterState) {

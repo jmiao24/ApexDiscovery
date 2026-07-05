@@ -1,8 +1,13 @@
+import { useRef } from "react";
 import { X } from "lucide-react";
 import type { PdfInspector as PdfInspectorT } from "@ai4s/shared";
+import { useScrollMemory } from "@/lib/scrollMemory";
 
 export function PdfInspector({ data, onClose }: { data: PdfInspectorT; onClose: () => void }) {
   const { doc } = data;
+  // Reading position, restored when this document is reopened.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const onScroll = useScrollMemory(scrollRef, `pdf:${data.title}`);
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-border px-4 py-3">
@@ -13,7 +18,7 @@ export function PdfInspector({ data, onClose }: { data: PdfInspectorT; onClose: 
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto bg-surface-2 p-6">
+      <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto bg-surface-2 p-6">
         {/* Styled HTML facsimile of the compiled PDF (real pdf.js deferred). */}
         <article className="mx-auto max-w-[620px] rounded-sm bg-white px-10 py-10 font-serif text-[13px] leading-relaxed text-[#1a1a1a] shadow-card">
           <h1 className="text-center text-[19px] font-semibold leading-snug">{doc.title}</h1>

@@ -1,6 +1,11 @@
 // Read/open workspace files for artifact previews (desktop only). In a plain
 // browser these return null / no-op so the app still runs in `pnpm dev`.
+// Paths are root-relative; `root` picks the tree ("workspace" = the active
+// session folder, default; "base" = the folder all session workspaces live under).
+import type { FileRoot } from "@ai4s/shared";
 import { isTauri } from "./tauri";
+
+export type { FileRoot };
 
 export interface ArtifactFile {
   path: string;
@@ -11,20 +16,20 @@ export interface ArtifactFile {
   size: number;
 }
 
-/** Read a workspace-relative file. Returns null outside the desktop app or on error paths. */
-export async function readArtifact(path: string): Promise<ArtifactFile | null> {
+/** Read a root-relative file. Returns null outside the desktop app or on error paths. */
+export async function readArtifact(path: string, root?: FileRoot): Promise<ArtifactFile | null> {
   if (!isTauri) return null;
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<ArtifactFile>("read_artifact", { path });
+  return invoke<ArtifactFile>("read_artifact", { path, root });
 }
 
 /** Local-server URL a workspace file is previewable at (desktop only). The tiny
  *  Rust file server gives the webview a real http://127.0.0.1 URL with correct
  *  MIME, so native viewers (PDF, images, HTML) render it directly. */
-export async function previewUrl(path: string): Promise<string | null> {
+export async function previewUrl(path: string, root?: FileRoot): Promise<string | null> {
   if (!isTauri) return null;
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("preview_url", { path });
+  return invoke<string>("preview_url", { path, root });
 }
 
 /** Resolve a file mentioned in an agent message to a real workspace-relative
@@ -37,11 +42,11 @@ export async function resolveArtifactPath(path: string): Promise<string | null> 
   return invoke<string | null>("resolve_artifact", { path });
 }
 
-/** Open a workspace file in the OS default application (desktop only). */
-export async function openArtifactExternally(path: string): Promise<void> {
+/** Open a root-relative file in the OS default application (desktop only). */
+export async function openArtifactExternally(path: string, root?: FileRoot): Promise<void> {
   if (!isTauri) return;
   const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("open_path", { path });
+  await invoke("open_path", { path, root });
 }
 
 export interface NotebookEntry {
@@ -50,11 +55,12 @@ export interface NotebookEntry {
   modified: number;
 }
 
-/** All .ipynb files in the workspace, newest first (desktop only). */
-export async function listNotebooks(): Promise<NotebookEntry[]> {
+/** All .ipynb files under the root, newest first (desktop only). `root: "base"`
+ *  spans every session folder. */
+export async function listNotebooks(root?: FileRoot): Promise<NotebookEntry[]> {
   if (!isTauri) return [];
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<NotebookEntry[]>("list_notebooks");
+  return invoke<NotebookEntry[]>("list_notebooks", { root });
 }
 
 export interface DirEntry {
@@ -66,18 +72,22 @@ export interface DirEntry {
   modified: number;
 }
 
-/** List one workspace directory (non-recursive; "" = root). Desktop only. */
-export async function listDir(rel: string): Promise<DirEntry[]> {
+/** List one directory under the root (non-recursive; "" = the root). Desktop only. */
+export async function listDir(rel: string, root?: FileRoot): Promise<DirEntry[]> {
   if (!isTauri) return [];
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<DirEntry[]>("list_dir", { rel });
+  return invoke<DirEntry[]>("list_dir", { rel, root });
 }
 
-/** Write text to a workspace-relative path (desktop only; throws in browser). */
-export async function writeWorkspaceFile(path: string, content: string): Promise<void> {
+/** Write text to a root-relative path (desktop only; throws in browser). */
+export async function writeWorkspaceFile(
+  path: string,
+  content: string,
+  root?: FileRoot,
+): Promise<void> {
   if (!isTauri) throw new Error("not running in the desktop app");
   const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("write_workspace_file", { path, content });
+  await invoke("write_workspace_file", { path, content, root });
 }
 
 /** Build a `data:` URL from a read artifact for <img>/<iframe>/pdf.js. */

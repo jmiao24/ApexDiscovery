@@ -46,6 +46,13 @@ pub fn mime_for(ext: &str) -> (&'static str, bool) {
         "cube" => ("chemical/x-cube", true),
         // Genome annotation tracks — plain text, rendered by the native track viewer.
         "bed" | "bedgraph" | "bdg" | "gff" | "gff3" | "gtf" | "vcf" => ("text/plain", true),
+        // 3D mesh / CAD — read as bytes (base64) so the three.js loaders get an
+        // ArrayBuffer; ASCII STL/OBJ/PLY and JSON glTF all decode fine from it.
+        "stl" => ("model/stl", false),
+        "obj" => ("model/obj", false),
+        "ply" => ("model/ply", false),
+        "gltf" => ("model/gltf+json", false),
+        "glb" => ("model/gltf-binary", false),
         "txt" => ("text/plain", true),
         "docx" => ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", false),
         "xlsx" => ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", false),
@@ -69,8 +76,16 @@ pub fn resolve_under(root: &Path, rel: &str) -> Result<PathBuf, String> {
     Ok(full)
 }
 
-fn resolve_in_workspace(app: &AppHandle, rel: &str) -> Result<PathBuf, String> {
-    resolve_under(&workspace_dir(app)?, rel)
+/// The folder tree a file command operates in: the ACTIVE session workspace
+/// (default) or the base folder every session workspace is created under.
+/// Pages declare their scope explicitly — no fallback guessing between the
+/// two, so an identical relative path can never resolve ambiguously.
+pub fn scope_root(app: &AppHandle, root: Option<&str>) -> Result<PathBuf, String> {
+    match root.unwrap_or("workspace") {
+        "workspace" => workspace_dir(app),
+        "base" => crate::runtime::base_workspace_dir(app),
+        other => Err(format!("unknown root scope: {other}")),
+    }
 }
 
 // Bounds for the basename search so a huge workspace can't stall a resolve call.
@@ -141,8 +156,8 @@ pub fn resolve_artifact(app: AppHandle, path: String) -> Result<Option<String>, 
 
 /// Read a workspace file for preview. Text types come back as UTF-8, binary as base64.
 #[tauri::command]
-pub fn read_artifact(app: AppHandle, path: String) -> Result<ArtifactFile, String> {
-    let full = resolve_in_workspace(&app, &path)?;
+pub fn read_artifact(app: AppHandle, path: String, root: Option<String>) -> Result<ArtifactFile, String> {
+    let full = resolve_under(&scope_root(&app, root.as_deref())?, &path)?;
     let ext = full
         .extension()
         .and_then(|s| s.to_str())
@@ -183,8 +198,8 @@ pub fn os_open(full: &Path) -> Result<(), String> {
 
 /// Open a workspace file in the OS default application.
 #[tauri::command]
-pub fn open_path(app: AppHandle, path: String) -> Result<(), String> {
-    let full = resolve_in_workspace(&app, &path)?;
+pub fn open_path(app: AppHandle, path: String, root: Option<String>) -> Result<(), String> {
+    let full = resolve_under(&scope_root(&app, root.as_deref())?, &path)?;
     os_open(&full)
 }
 
@@ -195,11 +210,11 @@ pub struct NotebookEntry {
     modified: u64,
 }
 
-/// All .ipynb files in the workspace (same bounds/skips as the artifact search),
-/// newest first.
+/// All .ipynb files under the chosen root (same bounds/skips as the artifact
+/// search), newest first. `root: "base"` spans every session folder.
 #[tauri::command]
-pub fn list_notebooks(app: AppHandle) -> Result<Vec<NotebookEntry>, String> {
-    let root = workspace_dir(&app)?;
+pub fn list_notebooks(app: AppHandle, root: Option<String>) -> Result<Vec<NotebookEntry>, String> {
+    let root = scope_root(&app, root.as_deref())?;
     let root = root.canonicalize().map_err(|e| e.to_string())?;
     let mut found = Vec::new();
     let mut stack = vec![(root.clone(), 0usize)];
@@ -258,12 +273,12 @@ pub struct DirEntry {
     modified: u64,
 }
 
-/// List one directory in the workspace (non-recursive) for the file explorer.
-/// `rel` is a workspace-relative dir path ("" = workspace root). Hidden entries
-/// and heavy build dirs are skipped; directories sort first, then by name.
+/// List one directory under the chosen root (non-recursive) for the file
+/// explorer. `rel` is a root-relative dir path ("" = the root itself). Hidden
+/// entries and heavy build dirs are skipped; directories sort first, then by name.
 #[tauri::command]
-pub fn list_dir(app: AppHandle, rel: String) -> Result<Vec<DirEntry>, String> {
-    dir_entries(&workspace_dir(&app)?, &rel)
+pub fn list_dir(app: AppHandle, rel: String, root: Option<String>) -> Result<Vec<DirEntry>, String> {
+    dir_entries(&scope_root(&app, root.as_deref())?, &rel)
 }
 
 fn dir_entries(root: &Path, rel: &str) -> Result<Vec<DirEntry>, String> {
@@ -311,10 +326,15 @@ fn dir_entries(root: &Path, rel: &str) -> Result<Vec<DirEntry>, String> {
     Ok(out)
 }
 
-/// Write text to a workspace-relative path (used to save notebooks). Rejects
+/// Write text to a root-relative path (used to save notebooks). Rejects
 /// absolute paths and any `..` component; missing parent dirs are created.
 #[tauri::command]
-pub fn write_workspace_file(app: AppHandle, path: String, content: String) -> Result<(), String> {
+pub fn write_workspace_file(
+    app: AppHandle,
+    path: String,
+    content: String,
+    root: Option<String>,
+) -> Result<(), String> {
     let rel = Path::new(&path);
     if rel.is_absolute()
         || rel
@@ -323,7 +343,7 @@ pub fn write_workspace_file(app: AppHandle, path: String, content: String) -> Re
     {
         return Err("path must be a plain workspace-relative path".into());
     }
-    let full = workspace_dir(&app)?.join(rel);
+    let full = scope_root(&app, root.as_deref())?.join(rel);
     if let Some(parent) = full.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }

@@ -1,14 +1,16 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Loader2, NotebookPen, PlugZap } from "lucide-react";
+import { FolderOpen, Loader2, NotebookPen, PlugZap } from "lucide-react";
 import { DRAFT_KEY, rootSessionOf, useRuntimeStore } from "@/lib/runtime";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
+import { useScrollMemory } from "@/lib/scrollMemory";
 import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
 import { Composer } from "@/components/thread/Composer";
 import { WorkspaceChip } from "@/components/thread/WorkspaceChip";
 import { WorkflowStarters } from "@/components/thread/WorkflowStarters";
 import { InteractionPrompt } from "@/components/thread/InteractionPrompt";
 import { InspectorShell } from "@/components/inspector/InspectorShell";
+import { SessionFilesPane } from "./FilesPage";
 import { cn } from "@/lib/cn";
 
 /** Live agent session backed by the OpenCode runtime. `/live` (no id) is a blank draft;
@@ -29,7 +31,7 @@ export function LiveSessionPage() {
     questions,
     permissions,
     sessionParents,
-    activeArtifact,
+    panes,
     commands,
     connect,
     openSession,
@@ -39,6 +41,7 @@ export function LiveSessionPage() {
     runCommand,
     openArtifact,
     closeArtifact,
+    setShowFiles,
     answerQuestion,
     rejectQuestion,
     replyPermission,
@@ -108,6 +111,17 @@ export function LiveSessionPage() {
   );
   const uniqueNotebooks = [...new Map(sessionNotebooks.map((b) => [b.path, b])).values()];
 
+  // The right pane belongs to the session: each one remembers its own open
+  // artifact or Files browser (mutually exclusive, enforced by the store) and
+  // gets it back when the user returns.
+  const pane = panes[currentId ?? DRAFT_KEY];
+  const activeArtifact = pane?.artifact ?? null;
+  const showFiles = !activeArtifact && !!pane?.showFiles;
+
+  // Conversation scroll position, per session — restored once history is in.
+  const chatRef = useRef<HTMLDivElement>(null);
+  const onChatScroll = useScrollMemory(chatRef, `chat:${currentId ?? DRAFT_KEY}`, !historyLoading);
+
   // When the agent starts working a notebook (Jupyter MCP), open it beside the
   // chat automatically — once per notebook, so a manual close stays closed.
   const autoOpened = useRef(new Set<string>());
@@ -149,6 +163,18 @@ export function LiveSessionPage() {
               <span className="max-w-[180px] truncate">{nb.filename}</span>
             </button>
           ))}
+          <button
+            onClick={() => setShowFiles(!showFiles)}
+            className={cn(
+              "flex items-center gap-1 rounded-input px-2 py-1 text-xs ring-1 ring-border hover:bg-surface-2",
+              showFiles ? "bg-surface-2 text-text" : "bg-surface text-muted",
+            )}
+            title="Browse this session's folder beside the chat"
+            aria-pressed={showFiles}
+          >
+            <FolderOpen size={12} />
+            Files
+          </button>
           {!connected && (
             <button
               onClick={connect}
@@ -161,7 +187,7 @@ export function LiveSessionPage() {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div ref={chatRef} onScroll={onChatScroll} className="flex-1 overflow-y-auto">
           <div className="mx-auto flex max-w-[760px] flex-col gap-4 px-8 py-6">
             {/* Deliberate workspace switches don't render anything at all (they're
                 masked as connected); a genuine boot/reconnect shows only the
@@ -238,6 +264,11 @@ export function LiveSessionPage() {
             onClose={closeArtifact}
             onEvaluate={onEvaluate}
           />
+        </div>
+      )}
+      {!activeArtifact && showFiles && (
+        <div className="hidden w-[46%] max-w-[720px] shrink-0 border-l border-border bg-surface lg:block">
+          <SessionFilesPane onClose={() => setShowFiles(false)} />
         </div>
       )}
     </div>

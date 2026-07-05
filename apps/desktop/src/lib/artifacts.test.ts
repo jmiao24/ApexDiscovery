@@ -129,6 +129,12 @@ describe("previewKind", () => {
     expect(previewKind("pptx")).toBe("pptx");
   });
 
+  it("renders 3D mesh/CAD files with the mesh viewer", () => {
+    for (const ext of ["stl", "obj", "ply", "gltf", "glb"]) {
+      expect(previewKind(ext)).toBe("mesh");
+    }
+  });
+
   it("renders chemical structure files as molecules", () => {
     for (const ext of [
       "mol", "mol2", "sdf", "smi", "smiles", "cif", "mcif", "mmcif", "pdb", "pqr", "xyz", "cube",

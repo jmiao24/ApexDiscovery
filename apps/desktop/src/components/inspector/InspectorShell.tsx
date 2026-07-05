@@ -25,7 +25,7 @@ export function InspectorShell({
       {inspector.variant === "pdf" && <PdfInspector data={inspector} onClose={onClose} />}
       {inspector.variant === "file" && <FilePreviewInspector data={inspector} onClose={onClose} />}
       {inspector.variant === "notebook-file" && (
-        <NotebookEditor path={inspector.path} onClose={onClose} />
+        <NotebookEditor path={inspector.path} root={inspector.root} onClose={onClose} />
       )}
     </div>
   );

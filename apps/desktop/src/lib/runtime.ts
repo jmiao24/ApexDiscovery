@@ -25,6 +25,7 @@ import {
   type ToolStatus,
 } from "./tauri";
 import { kernelReset } from "./kernel";
+import { moveScrollMemory } from "./scrollMemory";
 import { deriveArtifact } from "./artifacts";
 import { provenanceInputFromEvent, recordProvenance } from "./provenance";
 import { splitReview } from "./review";
@@ -52,6 +53,13 @@ export interface Thread {
   loaded: boolean;
 }
 
+/** What a session's right pane shows: an artifact inspector, the Files
+ *  browser, or nothing. The two are mutually exclusive — one pane. */
+export interface PaneState {
+  artifact: ArtifactBlock | null;
+  showFiles: boolean;
+}
+
 interface RuntimeState {
   status: RuntimeStatus;
   serverUrl: string;
@@ -74,10 +82,13 @@ interface RuntimeState {
   /** Subagent session → the session whose task tool spawned it, learned from
    *  task tool events (live) and the session list (recovery after reload). */
   sessionParents: Record<string, string>;
-  /** Artifact opened in the live inspector pane, if any. */
-  activeArtifact: ArtifactBlock | null;
+  /** Right-pane state per session (DRAFT_KEY for a draft) — each session keeps
+   *  its own open artifact / Files browser and gets it back when reopened.
+   *  In-memory only: an app restart returns every session to a closed pane. */
+  panes: Record<string, PaneState>;
   openArtifact: (a: ArtifactBlock) => void;
   closeArtifact: () => void;
+  setShowFiles: (show: boolean) => void;
   answerQuestion: (requestId: string, answers: string[][]) => Promise<void>;
   rejectQuestion: (requestId: string) => Promise<void>;
   replyPermission: (requestId: string, reply: PermissionReply) => Promise<void>;
@@ -223,11 +234,17 @@ async function performTurn(
       }
       id = await withRetry(() => client!.createSession());
       set((s) => {
-        // Graft the draft conversation onto the real session id.
+        // Graft the draft conversation (and its pane) onto the real session id.
         const threads = { ...s.threads, [id!]: s.threads[DRAFT_KEY] ?? emptyThread() };
         delete threads[DRAFT_KEY];
-        return { currentId: id, threads };
+        const panes = { ...s.panes };
+        if (panes[DRAFT_KEY]) {
+          panes[id!] = panes[DRAFT_KEY];
+          delete panes[DRAFT_KEY];
+        }
+        return { currentId: id, threads, panes };
       });
+      moveScrollMemory(`chat:${DRAFT_KEY}`, `chat:${id}`);
       void get().refreshSessions();
     }
     const sid = id;
@@ -321,7 +338,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   questions: [],
   permissions: [],
   sessionParents: {},
-  activeArtifact: null,
+  panes: {},
   workspace: null,
   workspacePinned: false,
   switching: false,
@@ -329,8 +346,24 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   runningSessions: {},
   shellTurns: {},
 
-  openArtifact: (activeArtifact) => set({ activeArtifact }),
-  closeArtifact: () => set({ activeArtifact: null }),
+  // All three write the CURRENT session's pane (DRAFT_KEY on a draft), keeping
+  // the artifact inspector and the Files browser mutually exclusive.
+  openArtifact: (artifact) =>
+    set((s) => ({
+      panes: { ...s.panes, [s.currentId ?? DRAFT_KEY]: { artifact, showFiles: false } },
+    })),
+  closeArtifact: () =>
+    set((s) => {
+      const key = s.currentId ?? DRAFT_KEY;
+      const showFiles = s.panes[key]?.showFiles ?? false;
+      return { panes: { ...s.panes, [key]: { artifact: null, showFiles } } };
+    }),
+  setShowFiles: (show) =>
+    set((s) => {
+      const key = s.currentId ?? DRAFT_KEY;
+      const artifact = show ? null : (s.panes[key]?.artifact ?? null);
+      return { panes: { ...s.panes, [key]: { artifact, showFiles: show } } };
+    }),
 
   answerQuestion: async (requestId, answers) => {
     const q = get().questions.find((x) => x.requestId === requestId);
@@ -602,7 +635,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     set((s) => {
       const threads = { ...s.threads };
       delete threads[DRAFT_KEY]; // leftovers from an aborted first message
-      return { currentId: null, workspacePinned: false, threads };
+      const panes = { ...s.panes };
+      delete panes[DRAFT_KEY]; // a fresh draft starts with a closed pane
+      return { currentId: null, workspacePinned: false, threads, panes };
     }),
 
   switchWorkspace: async (target) => {
@@ -615,7 +650,13 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       // the sidecar itself keeps running). An explicit switch pins the folder,
       // so the next new session lands exactly there.
       await kernelReset().catch(() => {});
-      set({ currentId: null, activeArtifact: null, workspacePinned: true });
+      set((s) => {
+        // Back to a draft in the new folder — the draft pane must not carry
+        // files from the previous folder. Session panes keep their memory.
+        const panes = { ...s.panes };
+        delete panes[DRAFT_KEY];
+        return { currentId: null, panes, workspacePinned: true };
+      });
       await get().connectRetry();
       await Promise.all([get().refreshSessions(), get().loadCatalog()]);
     } catch (err) {
@@ -719,10 +760,13 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       delete threads[id];
       const runningSessions = { ...s.runningSessions };
       delete runningSessions[id];
+      const panes = { ...s.panes };
+      delete panes[id];
       return {
         sessions: s.sessions.filter((x) => x.id !== id),
         threads,
         runningSessions,
+        panes,
         currentId: s.currentId === id ? null : s.currentId,
       };
     });

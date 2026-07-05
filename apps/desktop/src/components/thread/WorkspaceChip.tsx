@@ -3,7 +3,8 @@ import { Folder, FolderOpen } from "lucide-react";
 import { isTauri, pickFolder } from "@/lib/tauri";
 import { datedWorkspaceName, useRuntimeStore } from "@/lib/runtime";
 
-function baseName(path: string | null): string {
+/** Last path segment of the workspace folder, or "Workspace" when unknown. */
+export function baseName(path: string | null): string {
   if (!path) return "Workspace";
   return path.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || "Workspace";
 }

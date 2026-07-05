@@ -1,4 +1,5 @@
 import {
+  Box,
   FileBarChart,
   FileCode2,
   FileText,
@@ -16,6 +17,7 @@ const ICON: Record<ArtifactKind, React.ReactNode> = {
   report: <FileText size={15} />,
   table: <FileBarChart size={15} />,
   notebook: <NotebookPen size={15} />,
+  model: <Box size={15} />,
   data: <Paperclip size={15} />,
 };
 

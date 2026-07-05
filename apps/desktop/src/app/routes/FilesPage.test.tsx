@@ -5,7 +5,9 @@ import type { DirEntry } from "@/lib/artifactFile";
 import { FilesPage } from "./FilesPage";
 
 const listDir = vi.fn();
-vi.mock("@/lib/artifactFile", () => ({ listDir: (rel: string) => listDir(rel) }));
+vi.mock("@/lib/artifactFile", () => ({
+  listDir: (rel: string, root?: string) => listDir(rel, root),
+}));
 vi.mock("@/components/inspector/FilePreviewInspector", () => ({
   FilePreviewInspector: ({ data }: { data: { filename: string } }) => (
     <div data-testid="preview">preview:{data.filename}</div>
@@ -47,7 +49,8 @@ describe("FilesPage", () => {
     render(<FilesPage />);
     await userEvent.click(await screen.findByText("data"));
     expect(await screen.findByText("genes.bed")).toBeInTheDocument();
-    expect(listDir).toHaveBeenCalledWith("data");
+    // The page is GLOBAL: every listing resolves in the base folder tree.
+    expect(listDir).toHaveBeenCalledWith("data", "base");
 
     await userEvent.click(screen.getByRole("button", { name: "Workspace" }));
     await waitFor(() => expect(screen.getByText("figure.png")).toBeInTheDocument());

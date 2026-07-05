@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 import type { ArtifactInspector as ArtifactInspectorT, ArtifactTab } from "@ai4s/shared";
+import { useScrollMemory } from "@/lib/scrollMemory";
 import { cn } from "@/lib/cn";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { resolveArtifactContent } from "@/lib/artifacts";
@@ -26,6 +27,10 @@ export function ArtifactInspector({
 
   const step = (delta: number) =>
     setVersionIdx((i) => Math.min(data.versions.length - 1, Math.max(0, i + delta)));
+
+  // Viewing position per artifact tab, restored when reopened.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const onScroll = useScrollMemory(scrollRef, `artifact:${data.title}:${tab}`);
 
   return (
     <div className="flex h-full flex-col">
@@ -81,7 +86,7 @@ export function ArtifactInspector({
         ))}
       </nav>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto p-4">
         {tab === "Code" && (
           <div className="space-y-3">
             <button

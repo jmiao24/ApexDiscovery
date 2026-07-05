@@ -107,6 +107,7 @@ vi.mock("@ai4s/sdk", () => {
   return { OpenCodeClient, DEFAULT_OPENCODE_URL: "http://127.0.0.1:4096" };
 });
 
+import type { ArtifactBlock } from "@ai4s/shared";
 import { DRAFT_KEY, rootSessionOf, useRuntimeStore } from "./runtime";
 
 beforeEach(async () => {
@@ -125,6 +126,7 @@ beforeEach(async () => {
     runningSessions: {},
     permissions: [],
     sessionParents: {},
+    panes: {},
   });
   await useRuntimeStore.getState().connect();
   expect(useRuntimeStore.getState().status).toBe("ready");
@@ -392,3 +394,85 @@ describe("subagent permission asks and long sync turns", () => {
     expect(useRuntimeStore.getState().permissions).toHaveLength(0);
   });
 });
+
+// The right pane belongs to a session: each one keeps its own open artifact /
+// Files browser and gets it back when reopened — never another session's.
+describe("per-session right pane", () => {
+  const artifact = (path: string): ArtifactBlock => ({
+    kind: "artifact",
+    path,
+    filename: path.split("/").pop()!,
+    artifact: "report",
+    tool: "write",
+  });
+
+  it("remembers each session's pane and restores it on switch-back", () => {
+    useRuntimeStore.setState({ currentId: "ses_1" });
+    useRuntimeStore.getState().openArtifact(artifact("report.pdf"));
+    // Session 2 has nothing open; session 1's pdf must not leak into it.
+    useRuntimeStore.setState({ currentId: "ses_2" });
+    expect(useRuntimeStore.getState().panes["ses_2"]).toBeUndefined();
+    useRuntimeStore.getState().openArtifact(artifact("analysis.ipynb"));
+    // Back to session 1: the pdf is there again, untouched.
+    useRuntimeStore.setState({ currentId: "ses_1" });
+    expect(useRuntimeStore.getState().panes["ses_1"]?.artifact?.path).toBe("report.pdf");
+    expect(useRuntimeStore.getState().panes["ses_2"]?.artifact?.path).toBe("analysis.ipynb");
+  });
+
+  it("a closed pane stays closed after switching away and back", () => {
+    useRuntimeStore.setState({ currentId: "ses_1" });
+    useRuntimeStore.getState().openArtifact(artifact("report.pdf"));
+    useRuntimeStore.getState().closeArtifact();
+    useRuntimeStore.setState({ currentId: "ses_2" });
+    useRuntimeStore.setState({ currentId: "ses_1" });
+    expect(useRuntimeStore.getState().panes["ses_1"]?.artifact).toBe(null);
+  });
+
+  it("the artifact inspector and the Files browser are mutually exclusive", () => {
+    useRuntimeStore.setState({ currentId: "ses_1" });
+    useRuntimeStore.getState().openArtifact(artifact("report.pdf"));
+    useRuntimeStore.getState().setShowFiles(true);
+    expect(useRuntimeStore.getState().panes["ses_1"]).toEqual({ artifact: null, showFiles: true });
+    useRuntimeStore.getState().openArtifact(artifact("report.pdf"));
+    expect(useRuntimeStore.getState().panes["ses_1"]?.showFiles).toBe(false);
+  });
+
+  it("grafts the draft's pane onto the session created by the first message", async () => {
+    useRuntimeStore.getState().openArtifact(artifact("notes.md"));
+    expect(useRuntimeStore.getState().panes[DRAFT_KEY]?.artifact?.path).toBe("notes.md");
+    await useRuntimeStore.getState().sendPrompt("hi");
+    const s = useRuntimeStore.getState();
+    expect(s.panes[DRAFT_KEY]).toBeUndefined();
+    expect(s.panes["ses_new"]?.artifact?.path).toBe("notes.md");
+  });
+
+  it("startDraft resets the draft pane; session panes keep their memory", () => {
+    useRuntimeStore.setState({ currentId: "ses_1" });
+    useRuntimeStore.getState().openArtifact(artifact("report.pdf"));
+    useRuntimeStore.setState({ currentId: null });
+    useRuntimeStore.getState().openArtifact(artifact("stale.md"));
+    useRuntimeStore.getState().startDraft();
+    const s = useRuntimeStore.getState();
+    expect(s.panes[DRAFT_KEY]).toBeUndefined();
+    expect(s.panes["ses_1"]?.artifact?.path).toBe("report.pdf");
+  });
+
+  it("switchWorkspace drops the draft pane (old folder's files) but not session panes", async () => {
+    useRuntimeStore.setState({ currentId: "ses_1" });
+    useRuntimeStore.getState().openArtifact(artifact("report.pdf"));
+    useRuntimeStore.setState({ currentId: null });
+    useRuntimeStore.getState().openArtifact(artifact("old-folder.md"));
+    await useRuntimeStore.getState().switchWorkspace({ path: "/ws/other" });
+    const s = useRuntimeStore.getState();
+    expect(s.panes[DRAFT_KEY]).toBeUndefined();
+    expect(s.panes["ses_1"]?.artifact?.path).toBe("report.pdf");
+  });
+
+  it("deleteSession forgets the session's pane", async () => {
+    useRuntimeStore.setState({ currentId: "ses_1" });
+    useRuntimeStore.getState().openArtifact(artifact("report.pdf"));
+    await useRuntimeStore.getState().deleteSession("ses_1");
+    expect(useRuntimeStore.getState().panes["ses_1"]).toBeUndefined();
+  });
+});
+
