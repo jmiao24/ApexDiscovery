@@ -66,12 +66,29 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function DocxView({ bytes }: { bytes: ArrayBuffer }) {
   const { hostRef, page } = useShadowPage();
+  const wrapRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!page) return;
     let cancelled = false;
+    let observer: ResizeObserver | undefined;
+
+    // A docx page has a fixed physical width (e.g. Letter = 816px); a portrait
+    // or landscape page is usually wider than the inspector pane, so it would
+    // overflow with both edges cut off. Scale the whole page down to fit the
+    // pane width (never up) via `zoom`, which shrinks the layout box too — so
+    // there's no leftover scroll area. Re-fit when the pane resizes.
+    const fit = () => {
+      const wrapper = page.querySelector<HTMLElement>(".docx-wrapper");
+      const section = wrapper?.querySelector<HTMLElement>("section");
+      const avail = wrapRef.current?.clientWidth;
+      if (!wrapper || !section || !avail) return;
+      const pageWidth = section.offsetWidth + 40; // section + wrapper padding
+      wrapper.style.zoom = String(Math.min(1, avail / pageWidth));
+    };
+
     (async () => {
       try {
         const { renderAsync } = await import("docx-preview");
@@ -79,6 +96,12 @@ export function DocxView({ bytes }: { bytes: ArrayBuffer }) {
         // Styles go to the same shadow container, so the library's own page
         // chrome (white sheet on gray) applies untouched by app CSS.
         await renderAsync(bytes, page, page, { inWrapper: true });
+        if (cancelled) return;
+        fit();
+        if (wrapRef.current) {
+          observer = new ResizeObserver(fit);
+          observer.observe(wrapRef.current);
+        }
       } catch (e) {
         if (!cancelled) setError(`Could not render this document: ${message(e)}`);
       } finally {
@@ -87,22 +110,30 @@ export function DocxView({ bytes }: { bytes: ArrayBuffer }) {
     })();
     return () => {
       cancelled = true;
+      observer?.disconnect();
       page.replaceChildren();
     };
   }, [bytes, page]);
 
   return (
-    <div className="h-full overflow-auto">
+    <div ref={wrapRef} className="h-full overflow-auto">
       <RenderState error={error} loading={loading} />
       <div ref={hostRef} />
     </div>
   );
 }
 
+// Cells carry their own inline styles (fill/color/size/border) from the
+// workbook; this is just the neutral scaffold — a faint default gridline (Excel
+// shows one) that any real cell border overrides, plus fixed table layout so
+// the <col> widths are honored.
 const SHEET_CSS = `
-  .page { padding: 12px; background: #fff; }
-  table { border-collapse: collapse; font-size: 12.5px; }
-  td { border: 1px solid #d4d4d4; padding: 3px 8px; min-width: 42px; white-space: nowrap; }
+  /* width:max-content so the page grows to the table's full width — otherwise a
+     block-level .page stays viewport-wide and its white background stops mid-way,
+     making cells without a fill turn a different color when scrolled right. */
+  .page { padding: 12px; background: #fff; width: max-content; min-width: 100%; }
+  table { border-collapse: collapse; table-layout: fixed; font-size: 12.5px; color: #1a1814; }
+  td { border: 1px solid #ece7e0; padding: 3px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 `;
 
 export function XlsxView({ bytes }: { bytes: ArrayBuffer }) {
@@ -115,10 +146,11 @@ export function XlsxView({ bytes }: { bytes: ArrayBuffer }) {
     let cancelled = false;
     (async () => {
       try {
-        // Dynamic import keeps SheetJS in a lazy chunk, out of the main bundle.
+        // Dynamic import keeps ExcelJS in a lazy chunk, out of the main bundle.
         const { workbookSheets } = await import("@/lib/xlsx");
+        const parsed = await workbookSheets(bytes);
         if (cancelled) return;
-        setSheets(workbookSheets(bytes));
+        setSheets(parsed);
         setActive(0);
       } catch (e) {
         if (!cancelled) setError(`Could not read this workbook: ${message(e)}`);
@@ -158,7 +190,7 @@ export function XlsxView({ bytes }: { bytes: ArrayBuffer }) {
         <div ref={hostRef} />
       </div>
       <div className="border-t border-border px-4 py-1.5 text-xs text-muted">
-        {sheet?.truncated ? "Truncated preview · " : ""}Cell values only — embedded charts are not rendered.
+        {sheet?.truncated ? "Truncated preview · " : ""}Embedded charts are not rendered.
       </div>
     </div>
   );
