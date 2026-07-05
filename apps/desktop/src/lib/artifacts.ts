@@ -96,6 +96,7 @@ export type PreviewKind =
   | "pdf"
   | "image"
   | "table"
+  | "markdown"
   | "text"
   | "docx"
   | "xlsx"
@@ -113,6 +114,7 @@ export function previewKind(ext: string): PreviewKind {
   if (e === "pdf") return "pdf";
   if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(e)) return "image";
   if (e === "csv" || e === "tsv") return "table";
+  if (e === "md" || e === "markdown") return "markdown";
   if (e === "docx" || e === "xlsx" || e === "pptx") return e;
   if (["mol", "mol2", "sdf", "smi", "smiles", "cif", "mcif", "mmcif", "pdb", "pqr", "xyz", "cube"].includes(e))
     return "molecule";

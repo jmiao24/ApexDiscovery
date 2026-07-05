@@ -118,6 +118,11 @@ describe("previewKind", () => {
     expect(previewKind("py")).toBe("text");
   });
 
+  it("renders markdown files as a formatted document, not plain code", () => {
+    expect(previewKind("md")).toBe("markdown");
+    expect(previewKind("markdown")).toBe("markdown");
+  });
+
   it("gives Office documents their own inline preview kinds", () => {
     expect(previewKind("docx")).toBe("docx");
     expect(previewKind("xlsx")).toBe("xlsx");

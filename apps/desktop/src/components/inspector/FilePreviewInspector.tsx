@@ -5,6 +5,7 @@ import { extOf, previewKind, type PreviewKind } from "@/lib/artifacts";
 import { base64ToBytes, openArtifactExternally, previewUrl, readArtifact } from "@/lib/artifactFile";
 import { parseTableFile } from "@/lib/csv";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
+import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { ProvenancePanel } from "./ProvenancePanel";
 import { TablePreview } from "./TablePreview";
 import { DocxView, PptxView, XlsxView } from "./OfficePreview";
@@ -30,7 +31,8 @@ export function FilePreviewInspector({
   const kind = previewKind(ext);
   const needsUrl = kind === "pdf" || kind === "image" || kind === "html";
   const needsText =
-    kind === "table" || kind === "text" || kind === "html" || kind === "molecule" || kind === "genome";
+    kind === "table" || kind === "text" || kind === "html" || kind === "markdown" ||
+    kind === "molecule" || kind === "genome";
   const needsBytes = kind === "docx" || kind === "xlsx" || kind === "pptx";
 
   const [url, setUrl] = useState<string | null>(null);
@@ -60,7 +62,8 @@ export function FilePreviewInspector({
           const f = await readArtifact(data.path);
           if (cancelled) return;
           if (f && f.encoding === "utf8") setText(f.data);
-          else if (!f && kind !== "html") setError("Preview is available in the desktop app.");
+          else if (!f && kind !== "html" && kind !== "markdown")
+            setError("Preview is available in the desktop app.");
         }
         if (needsBytes) {
           const f = await readArtifact(data.path);
@@ -79,7 +82,8 @@ export function FilePreviewInspector({
     };
   }, [data.path, data.content, kind, needsUrl, needsText, needsBytes]);
 
-  const canToggle = kind === "html" || kind === "molecule" || kind === "genome";
+  const canToggle =
+    kind === "html" || kind === "markdown" || kind === "molecule" || kind === "genome";
 
   return (
     <div className="flex h-full flex-col">
@@ -194,6 +198,28 @@ function Body({
     }
     return text !== null ? (
       <GenomeView filename={filename} text={text} />
+    ) : (
+      <Note text="Preview is available in the desktop app." />
+    );
+  }
+  if (kind === "markdown") {
+    if (showCode) {
+      return text !== null ? (
+        <div className="p-3">
+          <CodeViewer code={text} language="markdown" />
+        </div>
+      ) : (
+        <Note text="Source is available in the desktop app." />
+      );
+    }
+    // A document reads as a page: white paper, black text, whatever the app
+    // theme — the same document-neutral canvas the Office previews use.
+    return text !== null ? (
+      <div className="min-h-full px-6 py-8">
+        <div className="mx-auto max-w-[760px] rounded-sm bg-white px-12 py-11 shadow-[0_1px_4px_rgba(0,0,0,.25)] max-sm:px-6 max-sm:py-7">
+          <MarkdownViewer variant="document">{text}</MarkdownViewer>
+        </div>
+      </div>
     ) : (
       <Note text="Preview is available in the desktop app." />
     );

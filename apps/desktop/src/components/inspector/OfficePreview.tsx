@@ -166,6 +166,9 @@ export function XlsxView({ bytes }: { bytes: ArrayBuffer }) {
 
 const SLIDES_CSS = `
   .page { padding: 16px; }
+  /* pptx-preview hardcodes a BLACK background on its wrapper — every gap
+     between/around slides showed as black. !important beats the inline style. */
+  .page > div { margin: 0 auto; background: transparent !important; }
   .page > div > div { margin: 0 auto 16px; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
 `;
 
