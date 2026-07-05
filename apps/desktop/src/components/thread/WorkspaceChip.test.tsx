@@ -78,10 +78,9 @@ describe("WorkspaceChip", () => {
     expect(useRuntimeStore.getState().workspacePinned).toBe(false);
   });
 
-  it("renders a quiet folder indicator (no button) for an open session", () => {
+  it("disappears for an open session (the Files toggle names the folder instead)", () => {
     useRuntimeStore.setState({ currentId: "ses_1", workspace: "/ws/2026-07-04-0900" });
-    render(<WorkspaceChip />);
-    expect(screen.getByText("2026-07-04-0900")).toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    const { container } = render(<WorkspaceChip />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

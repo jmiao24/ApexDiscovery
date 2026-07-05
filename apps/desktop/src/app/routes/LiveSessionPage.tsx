@@ -6,7 +6,7 @@ import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
 import { Composer } from "@/components/thread/Composer";
-import { WorkspaceChip } from "@/components/thread/WorkspaceChip";
+import { baseName, WorkspaceChip } from "@/components/thread/WorkspaceChip";
 import { WorkflowStarters } from "@/components/thread/WorkflowStarters";
 import { InteractionPrompt } from "@/components/thread/InteractionPrompt";
 import { InspectorShell } from "@/components/inspector/InspectorShell";
@@ -31,6 +31,7 @@ export function LiveSessionPage() {
     questions,
     permissions,
     sessionParents,
+    workspace,
     panes,
     commands,
     connect,
@@ -169,11 +170,15 @@ export function LiveSessionPage() {
               "flex items-center gap-1 rounded-input px-2 py-1 text-xs ring-1 ring-border hover:bg-surface-2",
               showFiles ? "bg-surface-2 text-text" : "bg-surface text-muted",
             )}
-            title="Browse this session's folder beside the chat"
+            title={`Browse this session's folder beside the chat${workspace ? ` — ${workspace}` : ""}`}
             aria-pressed={showFiles}
           >
             <FolderOpen size={12} />
-            Files
+            {/* An open session's folder is a fact — the toggle names it, replacing
+                a separate folder chip (one element for "this session's files"). */}
+            <span className="max-w-[160px] truncate">
+              {sessionId && workspace ? baseName(workspace) : "Files"}
+            </span>
           </button>
           {!connected && (
             <button
@@ -300,7 +305,7 @@ function ThreadSkeleton() {
 function ConnBadge({ status }: { status: string }) {
   const tone = status === "ready" ? "text-ok" : status === "error" ? "text-error" : "text-muted";
   return (
-    <span className={cn("flex items-center gap-1.5 text-xs", tone)}>
+    <span className={cn("flex items-center gap-1.5 text-xs", tone)} title={`OpenCode · ${status}`}>
       <span
         className={cn(
           "h-1.5 w-1.5 rounded-full",
@@ -308,7 +313,9 @@ function ConnBadge({ status }: { status: string }) {
           status === "connecting" && "animate-pulse",
         )}
       />
-      OpenCode · {status}
+      {/* Ready is the norm — a green dot says it all (hover for detail). Text
+          appears only for states that need attention. */}
+      {status !== "ready" && <>OpenCode · {status}</>}
     </span>
   );
 }

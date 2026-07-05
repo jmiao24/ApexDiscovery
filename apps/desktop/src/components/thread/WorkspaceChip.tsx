@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Folder, FolderOpen } from "lucide-react";
+import { FolderOpen } from "lucide-react";
 import { isTauri, pickFolder } from "@/lib/tauri";
 import { datedWorkspaceName, useRuntimeStore } from "@/lib/runtime";
 
@@ -10,11 +10,11 @@ export function baseName(path: string | null): string {
 }
 
 /**
- * Where the session's files live, shown in the session header next to the
- * title. A fresh draft starts in a new dated folder by default — the chip is
- * just a folder icon that opens the native picker for anyone who wants a
- * specific folder instead (the pick pins it). Once the session exists its
- * folder is a fact, so the chip becomes a quiet indicator.
+ * Folder picker for a fresh draft, shown in the session header next to the
+ * title. A draft starts in a new dated folder by default — the chip opens the
+ * native picker for anyone who wants a specific folder instead (the pick pins
+ * it). Once the session exists its folder is a fact, not a choice — the
+ * header's Files toggle names it, so the chip disappears.
  */
 export function WorkspaceChip() {
   const workspace = useRuntimeStore((s) => s.workspace);
@@ -24,17 +24,7 @@ export function WorkspaceChip() {
   const sending = useRuntimeStore((s) => s.sending);
   const [busy, setBusy] = useState(false);
 
-  if (!isTauri) return null;
-
-  // An open session's folder is not a choice anymore — just say where it is.
-  if (currentId) {
-    return (
-      <span className="flex items-center gap-1 text-xs text-muted" title={workspace ?? undefined}>
-        <Folder size={12} className="shrink-0" />
-        <span className="max-w-[180px] truncate">{baseName(workspace)}</span>
-      </span>
-    );
-  }
+  if (!isTauri || currentId) return null;
 
   const choose = async () => {
     const dir = await pickFolder();
