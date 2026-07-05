@@ -5,7 +5,7 @@
 // to the workspace root; loopback-bound so nothing off-machine can reach it.
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, State};
 
@@ -115,17 +115,52 @@ fn handle(mut stream: TcpStream, root: PathBuf) {
     }
 }
 
-/// Serve `root` on a fresh loopback port. Returns the port; runs for the app's lifetime.
-pub fn serve_root(root: PathBuf) -> std::io::Result<u16> {
+/// Serve files on a fresh loopback port, resolving each request against the
+/// root `root_of` returns AT THAT MOMENT — the active workspace moves when the
+/// user switches sessions, so a root captured at start-up would go stale.
+/// Returns the port; runs for the app's lifetime.
+pub fn serve<F>(root_of: F) -> std::io::Result<u16>
+where
+    F: Fn() -> Option<PathBuf> + Send + Sync + 'static,
+{
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
+    let root_of = std::sync::Arc::new(root_of);
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
-            let root = root.clone();
-            std::thread::spawn(move || handle(stream, root));
+            let root_of = root_of.clone();
+            std::thread::spawn(move || match root_of() {
+                Some(root) => handle(stream, root),
+                None => {
+                    let mut stream = stream;
+                    write_response(&mut stream, "404 Not Found", "text/plain", b"not found", false);
+                }
+            });
         }
     });
     Ok(port)
+}
+
+/// A workspace-relative form of `path` for the preview URL. Write-tool
+/// artifact paths are absolute — they must live under `root` (the sandbox)
+/// and are returned relative to it; relative paths pass through.
+pub fn relativize(root: &Path, path: &str) -> Result<String, String> {
+    let p = Path::new(path);
+    if !p.is_absolute() {
+        return Ok(path.trim_start_matches('/').to_string());
+    }
+    let root = root
+        .canonicalize()
+        .map_err(|e| format!("root unavailable: {e}"))?;
+    let full = p.canonicalize().map_err(|_| "file not found".to_string())?;
+    let rel = full
+        .strip_prefix(&root)
+        .map_err(|_| "path is outside the workspace".to_string())?;
+    let parts: Vec<String> = rel
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    Ok(parts.join("/"))
 }
 
 /// URL a workspace file is previewable at (starts the server on first use).
@@ -139,12 +174,14 @@ pub fn preview_url(
     let port = match *guard {
         Some(p) => p,
         None => {
-            let p = serve_root(workspace_dir(&app)?).map_err(|e| e.to_string())?;
+            let handle = app.clone();
+            let p = serve(move || workspace_dir(&handle).ok()).map_err(|e| e.to_string())?;
             *guard = Some(p);
             p
         }
     };
-    let encoded: Vec<String> = path.split('/').map(encode_segment).collect();
+    let rel = relativize(&workspace_dir(&app)?, &path)?;
+    let encoded: Vec<String> = rel.split('/').map(encode_segment).collect();
     Ok(format!("http://127.0.0.1:{port}/{}", encoded.join("/")))
 }
 
@@ -166,13 +203,66 @@ mod tests {
     }
 
     #[test]
+    fn relativize_maps_absolute_workspace_paths_and_rejects_escapes() {
+        let root = std::env::temp_dir().join(format!("ai4s-relativize-test-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        std::fs::write(root.join("sub/index.html"), b"<h1>hi</h1>").unwrap();
+
+        // Write-tool artifact paths are absolute — they must come back workspace-relative.
+        let abs = root.join("sub/index.html");
+        assert_eq!(
+            relativize(&root, &abs.to_string_lossy()).as_deref(),
+            Ok("sub/index.html")
+        );
+        // Relative paths pass through untouched.
+        assert_eq!(relativize(&root, "sub/index.html").as_deref(), Ok("sub/index.html"));
+        // Absolute paths outside the workspace are rejected (sandbox).
+        assert!(relativize(&root, "/etc/hosts").is_err());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn serves_from_the_current_root_of_each_request() {
+        // The active workspace moves when the user switches sessions — the
+        // server must resolve against the root as it is NOW, not at start-up.
+        use std::sync::{Arc, Mutex};
+        let a = std::env::temp_dir().join(format!("ai4s-preview-root-a-{}", std::process::id()));
+        let b = std::env::temp_dir().join(format!("ai4s-preview-root-b-{}", std::process::id()));
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::write(a.join("f.html"), b"in-a").unwrap();
+        std::fs::write(b.join("f.html"), b"in-b").unwrap();
+
+        let current = Arc::new(Mutex::new(a.clone()));
+        let for_server = current.clone();
+        let port = serve(move || Some(for_server.lock().unwrap().clone())).unwrap();
+
+        let (h, body) = get(port, "/f.html");
+        assert!(h.starts_with("HTTP/1.1 200"), "{h}");
+        assert_eq!(body, b"in-a");
+
+        *current.lock().unwrap() = b.clone();
+        let (h, body) = get(port, "/f.html");
+        assert!(h.starts_with("HTTP/1.1 200"), "{h}");
+        assert_eq!(body, b"in-b");
+
+        let _ = std::fs::remove_dir_all(a);
+        let _ = std::fs::remove_dir_all(b);
+    }
+
+    #[test]
     fn serves_files_with_mime_and_blocks_traversal() {
         let root = std::env::temp_dir().join(format!("ai4s-preview-test-{}", std::process::id()));
         std::fs::create_dir_all(root.join("sub")).unwrap();
         std::fs::write(root.join("sub/a.pdf"), b"%PDF-1.4 fake").unwrap();
         std::fs::write(root.join("b.html"), b"<h1>hi</h1>").unwrap();
 
-        let port = serve_root(root.clone()).unwrap();
+        let port = serve({
+            let root = root.clone();
+            move || Some(root.clone())
+        })
+        .unwrap();
 
         let (h, body) = get(port, "/sub/a.pdf");
         assert!(h.starts_with("HTTP/1.1 200"), "{h}");
