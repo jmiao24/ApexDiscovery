@@ -26,4 +26,17 @@ describe("FilePreviewInspector — markdown", () => {
     await userEvent.click(screen.getByRole("button", { name: /Code/ }));
     expect(screen.getByText(/# Findings/)).toBeInTheDocument();
   });
+
+  it("shows the newly opened file, not the previous one (no stale bleed)", async () => {
+    // The same inspector instance is reused across files; opening a second
+    // file with its own inline content must replace the first, not keep it.
+    const a: FilePreviewInspectorT = { ...md, path: "a.md", filename: "a.md", content: "# Alpha" };
+    const b: FilePreviewInspectorT = { ...md, path: "b.md", filename: "b.md", content: "# Beta" };
+    const { rerender } = render(<FilePreviewInspector data={a} onClose={() => {}} />);
+    expect(await screen.findByRole("heading", { name: "Alpha" })).toBeInTheDocument();
+
+    rerender(<FilePreviewInspector data={b} onClose={() => {}} />);
+    expect(await screen.findByRole("heading", { name: "Beta" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Alpha" })).not.toBeInTheDocument();
+  });
 });

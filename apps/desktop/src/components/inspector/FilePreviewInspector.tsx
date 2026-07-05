@@ -47,6 +47,13 @@ export function FilePreviewInspector({
     let cancelled = false;
     setError(null);
     setLoading(true);
+    // Reset per-file state up front: the same inspector instance is reused when
+    // the user opens a different file, and the async loads below only fill in
+    // what the NEW file needs — without this, the previous file's text/url/bytes
+    // would linger and bleed into the new preview.
+    setText(data.content ?? null);
+    setUrl(null);
+    setBytes(null);
     (async () => {
       try {
         if (needsUrl) {
