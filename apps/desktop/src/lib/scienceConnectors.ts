@@ -75,6 +75,36 @@ export const SCIENCE_CONNECTORS: ScienceConnector[] = [
     apiKeyUrl: "https://fred.stlouisfed.org/docs/api/api_key.html",
     source: "github.com/tosin2013/fred-mcp",
   },
+  {
+    id: "spaceweather",
+    label: "Space weather",
+    discipline: "physics",
+    description:
+      "Solar wind, solar flares, Kp/Dst geomagnetic indices, radiation storms, and aurora forecasts (NOAA SWPC · NASA DONKI · USGS)",
+    pkg: "spaceweather-mcp",
+    bin: "spaceweather-mcp",
+    source: "github.com/hoon1983/spaceweather-mcp",
+  },
+  {
+    id: "open-meteo",
+    label: "Weather & climate (Open-Meteo)",
+    discipline: "earth/climate",
+    description:
+      "Current & historical weather, air quality, and timezones from Open-Meteo — free, no key",
+    pkg: "mcp-weather-server",
+    module: "mcp_weather_server",
+    source: "github.com/isdaniel/mcp_weather_server",
+  },
+  {
+    id: "usgs-water",
+    label: "USGS water data",
+    discipline: "earth/climate",
+    description:
+      "USGS Water Services — streamflow, flood stages, peak events, and monitoring sites across the US",
+    pkg: "usgs-mcp",
+    bin: "usgs-mcp",
+    source: "github.com/mansurjisan/ocean-mcp",
+  },
 ];
 
 /** Resolve a console script that sits next to the managed python interpreter

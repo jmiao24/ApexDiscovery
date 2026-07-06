@@ -10,13 +10,25 @@ Settings → **MCP servers** lists curated open-source connectors. Click **Enabl
 and the app provisions the server into an isolated environment (bundled `uv`,
 managed Python — your system is untouched) and registers it. Today:
 
-- **Literature search** — arXiv, PubMed, Crossref, Semantic Scholar, bioRxiv/medRxiv
-  ([paper-search-mcp](https://github.com/openags/paper-search-mcp)).
-- **Biomedical databases** — PubMed, ClinicalTrials.gov, genomic variants
+- **Literature search** (all fields) — arXiv, PubMed, Crossref, Semantic Scholar,
+  bioRxiv/medRxiv ([paper-search-mcp](https://github.com/openags/paper-search-mcp)).
+- **Biomedical databases** (biology) — PubMed, ClinicalTrials.gov, genomic variants
   ([biomcp](https://github.com/genomoncology/biomcp)).
+- **Materials Project** (materials) — properties, structures, phase diagrams
+  ([mcp-materials-project](https://github.com/luffysolution-svg/mcp-materials-project); free MP API key).
+- **FRED economic data** (economics) — Federal Reserve time series
+  ([fred-mcp](https://github.com/tosin2013/fred-mcp); free FRED API key).
+- **Space weather** (physics) — solar wind, flares, Kp/Dst indices, radiation
+  storms, aurora, from NOAA SWPC / NASA DONKI / USGS
+  ([spaceweather-mcp](https://github.com/hoon1983/spaceweather-mcp); no key).
+- **Weather & climate** (earth) — current & historical weather, air quality,
+  timezones from Open-Meteo
+  ([mcp-weather-server](https://github.com/isdaniel/mcp_weather_server); no key).
+- **USGS water data** (earth) — streamflow, flood stages, peak events, sites
+  ([usgs-mcp](https://github.com/mansurjisan/ocean-mcp); no key).
 
-Results carry real identifiers (DOI / PMID / arXiv id), so the
-`traceability-review` skill can audit them afterward.
+Literature and database results carry real identifiers (DOI / PMID / arXiv id),
+so the `traceability-review` skill can audit them afterward.
 
 ## Bring your own MCP server
 

@@ -65,4 +65,31 @@ describe("connectorConfig", () => {
     expect(disciplines.has("materials")).toBe(true);
     expect(disciplines.has("economics")).toBe(true);
   });
+
+  it("covers physics and earth/climate — the two previously-empty disciplines", () => {
+    const disciplines = new Set(SCIENCE_CONNECTORS.map((c) => c.discipline));
+    expect(disciplines.has("physics")).toBe(true);
+    expect(disciplines.has("earth/climate")).toBe(true);
+  });
+
+  it("launches the space-weather connector as a console script (physics)", () => {
+    const cfg = connectorConfig(byId("spaceweather"), "/env/bin/python");
+    expect(cfg.type === "local" && cfg.command).toEqual(["/env/bin/spaceweather-mcp"]);
+  });
+
+  it("launches Open-Meteo weather as a `-m module` connector (earth, no key)", () => {
+    const c = byId("open-meteo");
+    expect(c.apiKeyEnv).toBeUndefined(); // Open-Meteo is free, no key
+    const cfg = connectorConfig(c, "/env/bin/python");
+    expect(cfg.type === "local" && cfg.command).toEqual([
+      "/env/bin/python",
+      "-m",
+      "mcp_weather_server",
+    ]);
+  });
+
+  it("launches USGS water data as a console script (earth, no key)", () => {
+    const cfg = connectorConfig(byId("usgs-water"), "/env/bin/python");
+    expect(cfg.type === "local" && cfg.command).toEqual(["/env/bin/usgs-mcp"]);
+  });
 });

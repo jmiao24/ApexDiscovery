@@ -370,8 +370,10 @@ competitors.
   demo; a new field's connector needs no core change.
 - **Status.** 🟡 Skills + MCP management shipped and pluggable; non-bio showcase
   shipped (`examples/climate-trends/`, real NASA GISTEMP v4, bundled, one-click).
-  Gap: depth for physics, chemistry/materials, and social science is still
-  unbuilt — the focus of the expanded P1-2 / P1-3 / P1-6 below.
+  Non-bio depth now spans all five targeted disciplines via connectors
+  (P1-2), domain viewers (P1-3), and correctness gates (P0-5: physics/earth/
+  biology/chemistry). Gap: deeper per-field coverage (astronomy catalogs, a
+  social-science correctness gate) continues under P1-2 / P1-3 / P1-6.
 
 ### P1-2 · Domain connectors (databases + literature) — 🟡 Partial
 
@@ -389,25 +391,34 @@ competitors.
   |---|---|---|
   | Literature (all) | arXiv, PubMed, Crossref, Semantic Scholar; OpenAlex | ✅ shipped (paper-search-mcp) |
   | Biology | PubMed, trials, variants (biomcp); PDB/UniProt/ChEMBL/ClinVar | 🟡 partial |
-  | Physics/astro | NASA ADS, SIMBAD, VizieR, MAST/IRSA, Gaia, SDSS/DESI, GWOSC/LIGO | ⬜ planned |
+  | Physics/astro | Space weather (`spaceweather-mcp` — NOAA SWPC/NASA DONKI/USGS) ✅ shipped; NASA ADS, SIMBAD, VizieR, MAST/IRSA, Gaia, SDSS/DESI, GWOSC/LIGO next | 🟡 partial |
   | Chemistry/materials | Materials Project (`mcp-materials-project`) ✅ shipped; PubChem, ChEMBL, ICSD, COD, NIST next | 🟡 partial |
-  | Earth/climate | NASA Earthdata (earthaccess auth), Copernicus/Sentinel, CDS/ERA5, NOAA, USGS, GEE catalog, ESGF/CMIP6 | ⬜ planned |
+  | Earth/climate | Open-Meteo weather/climate (`mcp-weather-server`) ✅ + USGS water (`usgs-mcp`) ✅ shipped; NASA Earthdata, Copernicus/Sentinel, CDS/ERA5, NOAA CDO, GEE, ESGF/CMIP6 next | 🟡 partial |
   | Social science | FRED (`fred-mcp`) ✅ shipped; IPUMS API, ICPSR, OSF, GSS, World Bank next | 🟡 partial |
 
 - **Acceptance.** From chat, query literature (PubMed/arXiv/Crossref) auditable by
   the reviewer, plus **at least one non-bio domain database per targeted
   discipline**; the BYO-MCP path is documented and works.
-- **Status.** 🟡 Literature + bio + **two non-bio** connectors ship with one-click
-  Enable (isolated env via bundled uv) + `docs/CONNECT_YOUR_TOOLS.md`: **Materials
-  Project** (`mcp-materials-project` — the prioritized materials DB) and **FRED**
-  (`fred-mcp` — economic time series for social science). The catalog now carries
-  a discipline chip, a per-connector free-API-key field (passed via the MCP
-  `environment`, never into provenance/logs), and console-script launch
-  (resolved next to the managed interpreter, cross-platform). Verified on this
-  host: `fred-mcp` installs, its console script lands exactly at the computed
-  launch path, and it starts once its key is supplied via the environment. We
-  integrate existing open-source servers, not reimplement them. Gap: physics/astro
-  and earth/climate connectors, and more chem/social DBs (see the table).
+- **Status.** 🟡 Literature + bio + **five non-bio** connectors ship with
+  one-click Enable (isolated env via bundled uv) + `docs/CONNECT_YOUR_TOOLS.md`,
+  now spanning **all five targeted disciplines** — the acceptance's "≥1 non-bio
+  domain database per targeted discipline" is met: **Materials Project**
+  (`mcp-materials-project`, materials), **FRED** (`fred-mcp`, economics),
+  **Space weather** (`spaceweather-mcp` — NOAA SWPC/NASA DONKI/USGS, physics),
+  **Open-Meteo weather/climate** (`mcp-weather-server`, earth), and **USGS water**
+  (`usgs-mcp`, earth). The catalog carries a discipline chip, a per-connector
+  free-API-key field (passed via the MCP `environment`, never into
+  provenance/logs), and console-script *or* `-m module` launch (resolved next to
+  the managed interpreter, cross-platform). **Every connector is verified by a
+  real MCP `initialize`/`tools/list` stdio handshake in the bundled-uv env
+  before shipping** (spaceweather → 15 tools, open-meteo → 8, usgs → 10; the
+  three no-key ones need no credentials at all) — the discipline that caught two
+  false friends earlier (`astro-mcp` is Airflow, not astronomy; earlier
+  usgs/open-meteo doubts were an inadequate check, now disproven by the real
+  handshake). We integrate existing open-source servers, not reimplement them.
+  Gap: the classic astronomy catalogs (NASA ADS, SIMBAD, Gaia, MAST) have no
+  pip-installable stdio MCP yet — GitHub-only, would need vendoring; and more
+  chem/social DBs (see the table).
 
 ### P1-3 · Scientific renderers (native viewers) — 🟡 Partial
 
@@ -645,7 +656,7 @@ competitors.
 | P0-6 | Large files: reference, don't load | P0 | 🟡 Partial — memory-pointer probe ships (table/parquet/hdf5/fits/netcdf/log); genomics/GRIB/ROOT pending |
 | **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — ALL critical items addressed (approval modes, sidecar/preview auth, kernel deadlock, Windows injection, owner-only key files); keychain-at-rest deferred to signed releases (P2-3); moderate/cleanup backlog remains** |
 | P1-1 | Multi-discipline from day one | P1 | 🟡 Partial — pluggable + climate example; non-bio depth pending |
-| P1-2 | Domain + literature connectors | P1 | 🟡 Partial — literature/bio + non-bio (Materials Project, FRED) shipped; physics/earth planned |
+| P1-2 | Domain + literature connectors | P1 | 🟡 Partial — literature/bio + non-bio across ALL 5 disciplines (materials, economics, physics space-weather, earth Open-Meteo + USGS) shipped, each MCP-handshake verified; astronomy catalogs (no PyPI MCP) + more chem/social DBs pending |
 | P1-3 | Scientific renderers | P1 | 🟡 Partial — base + 3D structure + genome + FITS + DOS + band + phase + qualitative-coding + anomaly map (all 4 disciplines; materials trio complete); ternary/coastlines next |
 | P1-4 | Windows + macOS installers | P1 | 🟡 Partial — macOS done; Windows CI ready (signing/verify host-bound) |
 | P1-5 | Interaction & visualization craft | P1 | 🟡 Partial — chart system + palette + command palette + native table→chart surface shipped |
