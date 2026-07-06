@@ -35,6 +35,7 @@ venv/
 *.log
 .cache/
 .eslintcache
+.superpowers/
 
 # Local runtime & secrets (never commit)
 .ai4s-workbench/
@@ -54,3 +55,10 @@ apps/desktop/src-tauri/binaries/
 
 # Third-party skill packs (fetched by scripts/dev/fetch-skills.sh)
 runtime/skills/external/
+
+# Local demo recordings (too large for git)
+videos/
+
+# Local video-production tooling (fetched hyperframes skill packs)
+.agents/
+skills-lock.json
