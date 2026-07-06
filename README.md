@@ -34,6 +34,7 @@ into one auditable, reproducible workflow.
 - [🧭 How it works](#-how-it-works)
 - [🧪 What's inside](#-whats-inside)
 - [🔌 Skills & connectors](#-skills--connectors)
+- [📦 Download & install](#-download--install)
 - [🚀 Getting started](#-getting-started)
 - [💬 Using it](#-using-it)
 - [🔒 Safety & privacy](#-safety--privacy)
@@ -149,6 +150,33 @@ providers stay pluggable.
 
 **Bring your own** — any MCP server (local command or remote URL) or skill; see
 [`docs/CONNECT_YOUR_TOOLS.md`](./docs/CONNECT_YOUR_TOOLS.md).
+
+## 📦 Download & install
+
+Grab the latest installer from the
+[**Releases** page](https://github.com/ai4s-research/open-science/releases/latest):
+macOS `.dmg` (Apple Silicon / Intel), Windows `.exe` / `.msi`, Linux `.deb` / `.rpm`.
+
+> The builds are **not code-signed yet**, so macOS and Windows warn on first launch.
+> This is a one-time step per install.
+
+**macOS** — Gatekeeper reports a downloaded unsigned app as
+*"Open Science" is damaged and can't be opened* (and right-click → Open does **not**
+bypass it). To fix:
+
+1. Open the `.dmg` and drag **Open Science** into **Applications**.
+2. Open **Terminal** (Spotlight → type "Terminal") and run:
+
+   ```bash
+   xattr -cr "/Applications/Open Science.app"
+   ```
+
+   This removes the quarantine flag macOS puts on files downloaded from the
+   internet — nothing else is changed.
+3. Launch **Open Science** from Applications as usual.
+
+**Windows** — if SmartScreen shows "Windows protected your PC", click
+**More info → Run anyway**.
 
 ## 🚀 Getting started
 

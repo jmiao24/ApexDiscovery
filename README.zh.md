@@ -33,6 +33,7 @@
 - [🧭 工作原理](#-工作原理)
 - [🧪 核心能力](#-核心能力)
 - [🔌 技能与连接器](#-技能与连接器)
+- [📦 下载安装](#-下载安装)
 - [🚀 快速开始](#-快速开始)
 - [💬 如何使用](#-如何使用)
 - [🔒 安全与隐私](#-安全与隐私)
@@ -142,6 +143,30 @@
 
 **自接工具** —— 任意 MCP 服务器（本地命令或远程 URL）或技能；参见
 [`docs/CONNECT_YOUR_TOOLS.md`](./docs/CONNECT_YOUR_TOOLS.md)。
+
+## 📦 下载安装
+
+从 [**Releases** 页面](https://github.com/ai4s-research/open-science/releases/latest)
+下载最新安装包：macOS `.dmg`（Apple Silicon / Intel）、Windows `.exe` / `.msi`、
+Linux `.deb` / `.rpm`。
+
+> 当前构建**尚未代码签名**，macOS 和 Windows 首次打开会有安全提示。每次安装只需处理一次。
+
+**macOS** —— 从网上下载的未签名应用会被 Gatekeeper 拦截，提示
+*“Open Science”已损坏，无法打开*（右键 → 打开也**无法**绕过）。解决步骤：
+
+1. 打开 `.dmg`，把 **Open Science** 拖进「应用程序」文件夹；
+2. 打开 **终端**（聚焦搜索输入「终端」即可找到），执行：
+
+   ```bash
+   xattr -cr "/Applications/Open Science.app"
+   ```
+
+   这条命令只是移除 macOS 给网络下载文件打上的隔离标记，不改动任何其它内容；
+3. 从「应用程序」正常双击启动 **Open Science**。
+
+**Windows** —— 如果 SmartScreen 提示「Windows 已保护你的电脑」，点击
+**更多信息 → 仍要运行**。
 
 ## 🚀 快速开始
 
