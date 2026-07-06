@@ -35,12 +35,20 @@ export async function kernelExecute(
   return invoke<ExecResult>("kernel_execute", { code, language, notebook, root });
 }
 
-/** Restart the local kernel(s) — e.g. after switching workspace folder so the
- *  next run spawns in the new directory. No-op outside the desktop app. */
-export async function kernelReset(): Promise<void> {
+/**
+ * Restart local kernel(s). With `notebook`, exactly that notebook's kernel is
+ * killed (the Stop button on a hung cell — always returns promptly, even while
+ * a cell is blocked mid-run); with no arguments, everything — e.g. after
+ * switching workspace folder. No-op outside the desktop app.
+ */
+export async function kernelReset(
+  language?: KernelLanguage,
+  notebook?: string,
+  root?: FileRoot,
+): Promise<void> {
   if (!isTauri) return;
   const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("kernel_reset", {});
+  await invoke("kernel_reset", { language, notebook, root });
 }
 
 /** Render a kernel result as the text shown under a notebook cell. */

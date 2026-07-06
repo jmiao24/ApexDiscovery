@@ -19,8 +19,8 @@ use tauri::{AppHandle, Manager, State};
 const PY_BRIDGE_SRC: &str = include_str!("../../../../runtime/kernel/kernel_bridge.py");
 const R_BRIDGE_SRC: &str = include_str!("../../../../runtime/kernel/kernel_bridge.R");
 
-struct Kernel {
-    child: Child,
+/// The cell-execution side of a kernel: written/read one request at a time.
+struct KernelIo {
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
     seq: u64,
@@ -28,11 +28,33 @@ struct Kernel {
     code_file: Option<PathBuf>,
 }
 
+/// A running kernel. Two INDEPENDENT locks by design: `io` is held for the
+/// whole cell (including an unbounded blocking read — a `while True: pass`
+/// cell holds it forever), while `child` is only ever taken to kill/reap, so
+/// a reset can always terminate a hung kernel without waiting on `io`.
+struct Kernel {
+    child: Mutex<Child>,
+    io: Mutex<KernelIo>,
+}
+
+impl Kernel {
+    fn from_child(mut child: Child, code_file: Option<PathBuf>) -> Result<Self, String> {
+        let stdin = child.stdin.take().ok_or("no kernel stdin")?;
+        let stdout = BufReader::new(child.stdout.take().ok_or("no kernel stdout")?);
+        Ok(Kernel {
+            child: Mutex::new(child),
+            io: Mutex::new(KernelIo { stdin, stdout, seq: 0, code_file }),
+        })
+    }
+}
+
 /// Persistent kernels keyed by `kernel_key` — one per notebook (Jupyter
 /// semantics: each notebook gets its own kernel, cwd = the notebook's folder,
-/// no state bleed between notebooks).
+/// no state bleed between notebooks). The map lock is held only to look up /
+/// insert / remove entries — NEVER across cell I/O (the old design did, and a
+/// hung cell wedged every kernel command including reset; see P0-7).
 #[derive(Default)]
-pub struct KernelState(Mutex<HashMap<String, Kernel>>);
+pub struct KernelState(Mutex<HashMap<String, std::sync::Arc<Kernel>>>);
 
 /// Map key for a kernel: `<lang>:<absolute notebook path>`, or `<lang>:@workspace`
 /// for legacy notebook-less execution in the active workspace.
@@ -210,16 +232,14 @@ fn spawn_kernel(app: &AppHandle, lang: &str, cwd: &std::path::Path, key: &str) -
     // PATH and `python3` resolves to a bare system Python (no matplotlib).
     #[cfg(unix)]
     cmd.env("PATH", crate::runtime::enriched_path());
-    let mut child = cmd
+    let child = cmd
         .spawn()
         .map_err(|e| format!("failed to start {lang} kernel: {e}"))?;
-    let stdin = child.stdin.take().ok_or("no kernel stdin")?;
-    let stdout = BufReader::new(child.stdout.take().ok_or("no kernel stdout")?);
-    Ok(Kernel { child, stdin, stdout, seq: 0, code_file })
+    Kernel::from_child(child, code_file)
 }
 
 /// Send one request to a running kernel and read its single JSON response line.
-fn exec_on(k: &mut Kernel, code: &str) -> Result<ExecResult, String> {
+fn exec_on(k: &mut KernelIo, code: &str) -> Result<ExecResult, String> {
     k.seq += 1;
     match &k.code_file {
         // R: stage the code in the kernel's file, then poke it with the id.
@@ -253,10 +273,90 @@ fn exec_on(k: &mut Kernel, code: &str) -> Result<ExecResult, String> {
     })
 }
 
+/// Kill a kernel's process and reap it — killed children must be `wait()`ed
+/// or they linger as zombies. Takes only the `child` lock, which no cell ever
+/// holds, so this always proceeds even while a cell is blocked mid-read.
+fn reap(kernel: &Kernel) {
+    let mut child = kernel.child.lock().unwrap();
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Get-or-spawn the kernel for `key` and run one cell on it. The map lock is
+/// dropped before any cell I/O; each kernel's own `io` lock serializes its
+/// cells, so one notebook's hung cell never blocks another notebook or reset.
+fn exec_in<F>(state: &KernelState, key: &str, code: &str, spawn: F) -> Result<ExecResult, String>
+where
+    F: FnOnce() -> Result<Kernel, String>,
+{
+    let kernel = {
+        let mut map = state.0.lock().unwrap();
+        match map.get(key) {
+            Some(k) => std::sync::Arc::clone(k),
+            None => {
+                let k = std::sync::Arc::new(spawn()?);
+                map.insert(key.to_string(), std::sync::Arc::clone(&k));
+                k
+            }
+        }
+    };
+    let mut io = kernel.io.lock().unwrap();
+    match exec_on(&mut io, code) {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            // The child died — a crash, or a reset killed it mid-cell. Reap it,
+            // then drop THIS kernel from the map so the next run respawns —
+            // unless a reset already removed (or replaced) the entry.
+            reap(&kernel);
+            let mut map = state.0.lock().unwrap();
+            if map.get(key).is_some_and(|cur| std::sync::Arc::ptr_eq(cur, &kernel)) {
+                map.remove(key);
+            }
+            Err(e)
+        }
+    }
+}
+
+/// Remove every kernel whose key matches `pred` and kill its process. The map
+/// lock is released before killing so a hung cell's error path (which also
+/// wants the map) can never contend with the kills.
+fn remove_kernels(state: &KernelState, pred: impl Fn(&str) -> bool) {
+    let victims: Vec<std::sync::Arc<Kernel>> = {
+        let mut map = state.0.lock().unwrap();
+        let keys: Vec<String> = map.keys().filter(|k| pred(k)).cloned().collect();
+        keys.iter().filter_map(|k| map.remove(k)).collect()
+    };
+    for kernel in &victims {
+        reap(kernel);
+    }
+}
+
+/// Resolve a cell's kernel: its working directory and map key. `notebook` is a
+/// `root`-relative .ipynb path; without it the kernel runs in the active
+/// workspace (legacy behavior).
+fn resolve_kernel(
+    app: &AppHandle,
+    lang: &str,
+    notebook: Option<&str>,
+    root: Option<&str>,
+) -> Result<(PathBuf, String), String> {
+    match notebook.filter(|s| !s.trim().is_empty()) {
+        Some(nb) => {
+            let scope = crate::artifact_file::scope_root(app, root)?;
+            let abs = crate::artifact_file::resolve_under(&scope, nb)?;
+            let dir = abs
+                .parent()
+                .ok_or("notebook has no parent directory")?
+                .to_path_buf();
+            Ok((dir, kernel_key(lang, Some(&abs))))
+        }
+        None => Ok((crate::runtime::workspace_dir(app)?, kernel_key(lang, None))),
+    }
+}
+
 /// Execute one cell in the persistent local kernel for this notebook (Jupyter
 /// semantics: one kernel per notebook, working directory = the notebook's
-/// folder), starting it on first use. `notebook` is a `root`-relative .ipynb
-/// path; without it the kernel runs in the active workspace (legacy behavior).
+/// folder), starting it on first use.
 #[tauri::command]
 pub fn kernel_execute(
     app: AppHandle,
@@ -267,61 +367,40 @@ pub fn kernel_execute(
     root: Option<String>,
 ) -> Result<ExecResult, String> {
     let lang = normalize_lang(language.as_deref().unwrap_or("python"))?;
-    let (cwd, key) = match notebook.as_deref().filter(|s| !s.trim().is_empty()) {
-        Some(nb) => {
-            let scope = crate::artifact_file::scope_root(&app, root.as_deref())?;
-            let abs = crate::artifact_file::resolve_under(&scope, nb)?;
-            let dir = abs
-                .parent()
-                .ok_or("notebook has no parent directory")?
-                .to_path_buf();
-            (dir, kernel_key(lang, Some(&abs)))
-        }
-        None => (crate::runtime::workspace_dir(&app)?, kernel_key(lang, None)),
-    };
-    let mut guard = state.0.lock().unwrap();
-    if !guard.contains_key(&key) {
-        let k = spawn_kernel(&app, lang, &cwd, &key)?;
-        guard.insert(key.clone(), k);
-    }
-    let k = guard.get_mut(&key).unwrap();
-    match exec_on(k, &code) {
-        Ok(r) => Ok(r),
-        Err(e) => {
-            // The child likely died; drop it so the next call respawns cleanly.
-            guard.remove(&key);
-            Err(e)
-        }
-    }
+    let (cwd, key) = resolve_kernel(&app, lang, notebook.as_deref(), root.as_deref())?;
+    exec_in(&state, &key, &code, || spawn_kernel(&app, lang, &cwd, &key))
 }
 
-/// Restart kernels (clears their state). Omit `language` to reset everything;
-/// with `language`, every kernel of that language is killed.
+/// Restart kernels (clears their state). With `notebook`, exactly that
+/// notebook's kernel is killed (the Stop button on a hung cell); with only
+/// `language`, every kernel of that language; with neither, everything.
+/// Always returns promptly, even while a cell is blocked mid-run.
 #[tauri::command]
-pub fn kernel_reset(state: State<'_, KernelState>, language: Option<String>) {
-    let mut guard = state.0.lock().unwrap();
+pub fn kernel_reset(
+    app: AppHandle,
+    state: State<'_, KernelState>,
+    language: Option<String>,
+    notebook: Option<String>,
+    root: Option<String>,
+) -> Result<(), String> {
+    if notebook.as_deref().is_some_and(|s| !s.trim().is_empty()) {
+        let lang = normalize_lang(language.as_deref().unwrap_or("python"))?;
+        let (_, key) = resolve_kernel(&app, lang, notebook.as_deref(), root.as_deref())?;
+        remove_kernels(&state, |k| k == key);
+        return Ok(());
+    }
     match language.as_deref().and_then(|l| normalize_lang(l).ok()) {
         Some(lang) => {
             let prefix = format!("{lang}:");
-            let keys: Vec<String> = guard.keys().filter(|k| k.starts_with(&prefix)).cloned().collect();
-            for key in keys {
-                if let Some(mut k) = guard.remove(&key) {
-                    let _ = k.child.kill();
-                }
-            }
+            remove_kernels(&state, |k| k.starts_with(&prefix));
         }
-        None => {
-            for (_, mut k) in guard.drain() {
-                let _ = k.child.kill();
-            }
-        }
+        None => remove_kernels(&state, |_| true),
     }
+    Ok(())
 }
 
 pub fn kill_kernel(state: &KernelState) {
-    for (_, mut k) in state.0.lock().unwrap().drain() {
-        let _ = k.child.kill();
-    }
+    remove_kernels(state, |_| true);
 }
 
 #[cfg(test)]
@@ -356,6 +435,67 @@ mod tests {
         assert_eq!(normalize_lang("Python3").unwrap(), "python");
         assert_eq!(normalize_lang("R").unwrap(), "r");
         assert!(normalize_lang("julia").is_err());
+    }
+
+    // THE P0-7 deadlock case: a `while True: pass` cell used to wedge every
+    // kernel command — kernel_execute held the global map mutex across an
+    // unbounded blocking read, so even kernel_reset waited forever and only an
+    // app restart recovered. With per-kernel locks, reset must (a) return
+    // promptly, (b) unblock the hung cell with an error, (c) leave the map
+    // empty so the next run respawns fresh.
+    #[test]
+    fn reset_interrupts_a_hung_cell_without_wedging() {
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+        let Some(python) = python_bin() else {
+            eprintln!("skipping: no python found");
+            return;
+        };
+        let script = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../runtime/kernel/kernel_bridge.py");
+        let state = Arc::new(KernelState::default());
+        let key = "python:@hung-test";
+
+        let exec_state = state.clone();
+        let hung = std::thread::spawn(move || {
+            exec_in(&exec_state, key, "while True: pass", || {
+                let child = Command::new(python)
+                    .arg(script)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+                Kernel::from_child(child, None)
+            })
+        });
+
+        // Wait until the kernel is registered (the cell is running), then give
+        // it a beat to enter the blocking read.
+        let start = Instant::now();
+        while state.0.lock().unwrap().is_empty() {
+            assert!(start.elapsed() < Duration::from_secs(10), "kernel never registered");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        std::thread::sleep(Duration::from_millis(300));
+
+        // Reset must not wedge behind the hung cell.
+        let reset_state = state.clone();
+        let reset = std::thread::spawn(move || remove_kernels(&reset_state, |_| true));
+        let start = Instant::now();
+        while !reset.is_finished() {
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "kernel_reset wedged behind a hung cell (the P0-7 deadlock)"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        reset.join().unwrap();
+
+        // The hung execute errors out instead of blocking forever…
+        let res = hung.join().unwrap();
+        assert!(res.is_err(), "hung cell must surface an error after reset");
+        // …and nothing is left behind: next run respawns a fresh kernel.
+        assert!(state.0.lock().unwrap().is_empty());
     }
 
     // Drives the real in-tree Python bridge with the same JSON protocol

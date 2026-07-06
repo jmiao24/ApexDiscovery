@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowLeft, History, Loader2, NotebookPen, Play, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, History, Loader2, NotebookPen, Play, Plus, RefreshCw, Square, Trash2, X } from "lucide-react";
 import type { NotebookCell } from "@ai4s/shared";
 import { readArtifact, writeWorkspaceFile } from "@/lib/artifactFile";
 import { ProvenancePanel } from "@/components/inspector/ProvenancePanel";
@@ -8,6 +8,7 @@ import {
   formatExecResult,
   isCodeLanguage,
   kernelExecute,
+  kernelReset,
   type KernelLanguage,
 } from "@/lib/kernel";
 import { toast } from "@/lib/toast";
@@ -111,6 +112,10 @@ export function NotebookEditor({
     setSaved(false);
   };
 
+  // True while a user-requested Stop is in flight, so the resulting kernel
+  // error renders as "Interrupted", not as a crash.
+  const interruptRef = useRef(false);
+
   const run = async (cell: NotebookCell) => {
     if (running !== null) return;
     setRunning(cell.index);
@@ -122,9 +127,25 @@ export function NotebookEditor({
         output: res ? formatExecResult(res) : "(local kernel available only in the desktop app)",
       });
     } catch (e) {
-      update(cell.index, { output: `kernel error: ${e instanceof Error ? e.message : String(e)}` });
+      update(cell.index, {
+        output: interruptRef.current
+          ? "Interrupted — the kernel was restarted; variables were reset."
+          : `kernel error: ${e instanceof Error ? e.message : String(e)}`,
+      });
     } finally {
+      interruptRef.current = false;
       setRunning(null);
+    }
+  };
+
+  // Stop a hung cell: kill THIS notebook's kernel — the blocked execute then
+  // errors out and `run` reports the interruption. Reset is best-effort.
+  const stop = async () => {
+    interruptRef.current = true;
+    try {
+      await kernelReset(language, path, root);
+    } catch {
+      /* the execute's own error path reports the state */
     }
   };
 
@@ -213,21 +234,30 @@ export function NotebookEditor({
               <div className="mb-1 flex items-center gap-2 text-xs text-muted">
                 <span className="font-mono">[{cell.index}]</span>
                 <span>{cell.language}</span>
-                {isCodeLanguage(cell.language) && (
-                  <button
-                    className="hidden items-center gap-1 rounded px-1.5 py-0.5 text-xs hover:bg-surface-2 hover:text-text group-hover:flex"
-                    aria-label={`Run cell ${cell.index}`}
-                    onClick={() => void run(cell)}
-                    disabled={running !== null}
-                  >
-                    {running === cell.index ? (
-                      <Loader2 size={11} className="animate-spin" />
-                    ) : (
+                {isCodeLanguage(cell.language) &&
+                  (running === cell.index ? (
+                    // Always visible while running (not hover-gated): a hung
+                    // cell must offer a way out without restarting the app.
+                    <button
+                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-error hover:bg-surface-2"
+                      aria-label={`Stop cell ${cell.index}`}
+                      title="Stop — restarts this notebook's kernel (variables reset)"
+                      onClick={() => void stop()}
+                    >
+                      <Square size={10} fill="currentColor" />
+                      Stop
+                    </button>
+                  ) : (
+                    <button
+                      className="hidden items-center gap-1 rounded px-1.5 py-0.5 text-xs hover:bg-surface-2 hover:text-text group-hover:flex"
+                      aria-label={`Run cell ${cell.index}`}
+                      onClick={() => void run(cell)}
+                      disabled={running !== null}
+                    >
                       <Play size={11} />
-                    )}
-                    Run
-                  </button>
-                )}
+                      Run
+                    </button>
+                  ))}
                 <button
                   className="hidden rounded px-1 py-0.5 hover:bg-surface-2 hover:text-error group-hover:block"
                   aria-label={`Delete cell ${cell.index}`}

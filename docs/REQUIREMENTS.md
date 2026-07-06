@@ -286,11 +286,19 @@ competitors.
     `cmd` re-parse `&`/`^`/`|`, so an agent-emitted link like
     `https://x.com/?a=1&calc` executes `calc`; also breaks any legit URL
     containing `&`. Use ShellExecuteW / `tauri-plugin-opener`.
-  - [ ] **Kernel deadlock** (`kernel.rs:282-295`): `kernel_execute` holds the
-    global kernel-map mutex across an unbounded blocking `read_line`; a
-    `while True: pass` cell wedges every kernel command **including
-    `kernel_reset`** — only an app restart recovers. Per-kernel locks + read
-    timeout/interrupt.
+  - [x] **Kernel deadlock.** ~~`kernel_execute` holds the global kernel-map
+    mutex across an unbounded blocking `read_line`; a `while True: pass` cell
+    wedges every kernel command including `kernel_reset` — only an app restart
+    recovers.~~ **Fixed (2026-07-06):** per-kernel locks — the map mutex is
+    held only for lookup/insert/remove, each kernel carries an `io` lock (per
+    cell) and an independent `child` lock (kill/reap), so reset always
+    proceeds; killed kernels are `wait()`ed (no zombies — also closes that
+    Moderate item for kernels). `kernel_reset` can now target exactly one
+    notebook's kernel, and the notebook UI shows an always-visible **Stop**
+    on the running cell that restarts that kernel and marks the cell
+    "Interrupted". Verified by a test that hangs a REAL Python kernel on
+    `while True: pass`: reset returns promptly, the blocked cell errors out,
+    the next run respawns.
 
   **Moderate — robustness:**
   - [ ] Sidecar restart logic is copy-pasted 3× in `runtime.rs` with no
@@ -299,8 +307,9 @@ competitors.
     mutex.
   - [ ] No liveness supervision: a crashed sidecar/Jupyter stays "running"
     (`runtime.rs:286`, `jupyter.rs:250` ignore the `Terminated` event); OpenCode
-    orphans on force-quit (Jupyter has pid-file cleanup, the sidecar doesn't);
-    killed kernels are never `wait()`ed → zombies (`kernel.rs:309-322`).
+    orphans on force-quit (Jupyter has pid-file cleanup, the sidecar doesn't).
+    ~~Killed kernels are never `wait()`ed → zombies~~ — fixed 2026-07-06 with
+    the kernel-deadlock rework (every kill reaps).
   - [ ] Blocking work on async workers: dialog calls park tokio workers
     (`runtime.rs:393`, `artifact_file.rs:397,485`); `record_provenance` holds
     its mutex across `pip freeze` and re-parses the whole JSONL per write
@@ -621,7 +630,7 @@ competitors.
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | 🟡 Partial — 3 checks + PDF-manuscript extractor shipped; weak-model robustness pending |
 | **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | 🟡 **Partial — 3 gates ship (physics/earth/biology), deterministic + pluggable; library round-trip + more fields pending** |
 | P0-6 | Large files: reference, don't load | P0 | 🟡 Partial — memory-pointer probe ships (table/parquet/hdf5/fits/netcdf/log); genomics/GRIB/ROOT pending |
-| **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — approval modes + sidecar/preview auth shipped (per-run password + tokened preview URLs, no CORS wildcard); still open: plaintext keys, Windows cmd injection, kernel deadlock + backlog** |
+| **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — approval modes + sidecar/preview auth + kernel-deadlock fix (per-kernel locks, Stop button) shipped; still open: plaintext keys, Windows cmd injection + backlog** |
 | P1-1 | Multi-discipline from day one | P1 | 🟡 Partial — pluggable + climate example; non-bio depth pending |
 | P1-2 | Domain + literature connectors | P1 | 🟡 Partial — literature/bio + non-bio (Materials Project, FRED) shipped; physics/earth planned |
 | P1-3 | Scientific renderers | P1 | 🟡 Partial — base + 3D structure + genome + FITS + DOS + band + phase + qualitative-coding + anomaly map (all 4 disciplines; materials trio complete); ternary/coastlines next |
