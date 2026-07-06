@@ -2,7 +2,6 @@
 // AI4S Workbench does not bundle Python/R/Jupyter; OpenCode's shell tool uses whatever
 // is installed. This surfaces that to the UI honestly.
 use serde::Serialize;
-use std::process::Command;
 
 #[derive(Serialize)]
 pub struct ToolStatus {
@@ -23,14 +22,17 @@ fn probe(name: &str, bin: &str, version_arg: &str) -> ToolStatus {
 }
 
 fn probe_with_path(name: &str, bin: &str, version_arg: &str, path: Option<&str>) -> ToolStatus {
-    let mut cmd = Command::new(bin);
+    let mut cmd = crate::runtime::quiet_command(bin);
     cmd.arg(version_arg);
     if let Some(p) = path {
         cmd.env("PATH", p);
     }
     let out = cmd.output();
     match out {
-        Ok(o) if o.status.success() || !o.stdout.is_empty() || !o.stderr.is_empty() => {
+        // `--version` must succeed — the Windows Store python alias runs,
+        // prints an install hint, and exits non-zero; output alone is not
+        // evidence the tool is installed.
+        Ok(o) if o.status.success() => {
             let text = if !o.stdout.is_empty() { o.stdout } else { o.stderr };
             let version = String::from_utf8_lossy(&text)
                 .lines()
@@ -69,10 +71,30 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    // The Windows Store `python.exe` alias prints an install hint and exits
+    // non-zero — output alone must not count as "found".
+    #[cfg(unix)]
+    #[test]
+    fn probe_rejects_a_tool_that_fails_version() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("os-tools-fake-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let tool = dir.join("faketool");
+        std::fs::write(&tool, "#!/bin/sh\necho 'not really installed' >&2\nexit 9\n").unwrap();
+        std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let status = probe_with_path("FakeTool", "faketool", "--version", dir.to_str());
+        assert!(!status.found, "a tool that exits non-zero on --version must not be found");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
-/// Report availability of the tools relevant to a research workflow.
-#[tauri::command]
+/// Report availability of the tools relevant to a research workflow. `async`:
+/// six serial process probes take seconds on Windows and ran on the UI thread
+/// at startup — a big part of the "app is sluggish right after opening" bug.
+#[tauri::command(async)]
 pub fn detect_tools() -> Vec<ToolStatus> {
     let python = {
         let p3 = probe("Python", "python3", "--version");

@@ -173,8 +173,9 @@ pub fn resolve_artifact(app: AppHandle, path: String) -> Result<Option<String>, 
     Ok(locate_under(&workspace_dir(&app)?, &path))
 }
 
-/// Read a workspace file for preview. Text types come back as UTF-8, binary as base64.
-#[tauri::command]
+/// Read a workspace file for preview. Text types come back as UTF-8, binary as
+/// base64. `async`: previews read multi-MB files — never on the UI thread.
+#[tauri::command(async)]
 pub fn read_artifact(app: AppHandle, path: String, root: Option<String>) -> Result<ArtifactFile, String> {
     let full = resolve_under(&scope_root(&app, root.as_deref())?, &path)?;
     let ext = full
@@ -243,7 +244,7 @@ pub struct NotebookEntry {
 
 /// All .ipynb files under the chosen root (same bounds/skips as the artifact
 /// search), newest first. `root: "base"` spans every session folder.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_notebooks(app: AppHandle, root: Option<String>) -> Result<Vec<NotebookEntry>, String> {
     let root = scope_root(&app, root.as_deref())?;
     let root = root.canonicalize().map_err(|e| e.to_string())?;
@@ -307,7 +308,7 @@ pub struct DirEntry {
 /// List one directory under the chosen root (non-recursive) for the file
 /// explorer. `rel` is a root-relative dir path ("" = the root itself). Hidden
 /// entries and heavy build dirs are skipped; directories sort first, then by name.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_dir(app: AppHandle, rel: String, root: Option<String>) -> Result<Vec<DirEntry>, String> {
     dir_entries(&scope_root(&app, root.as_deref())?, &rel)
 }

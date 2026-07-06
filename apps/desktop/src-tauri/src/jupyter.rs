@@ -66,7 +66,7 @@ fn kill_orphan_jupyter(app: &AppHandle) {
     if let Ok(path) = pid_path(app) {
         if let Ok(pid) = std::fs::read_to_string(&path).map(|s| s.trim().to_string()) {
             if !pid.is_empty() && pid.chars().all(|c| c.is_ascii_digit()) {
-                let _ = std::process::Command::new("taskkill")
+                let _ = crate::runtime::quiet_command("taskkill")
                     .args([
                         "/FI",
                         &format!("PID eq {pid}"),
@@ -197,8 +197,9 @@ pub async fn setup_jupyter(app: AppHandle) -> Result<(), String> {
 }
 
 /// Start the managed headless jupyter-lab (idempotent). Root dir = workspace,
-/// so the agent and the app's Notebooks page see the same files.
-#[tauri::command]
+/// so the agent and the app's Notebooks page see the same files. `async`: the
+/// orphan cleanup alone (taskkill + settle delay) would freeze the UI thread.
+#[tauri::command(async)]
 pub fn start_jupyter(app: AppHandle, state: State<'_, JupyterState>) -> Result<JupyterStatus, String> {
     let _guard = state.lifecycle.lock().unwrap();
     if *state.running.lock().unwrap() {

@@ -27,7 +27,7 @@ fn copy_missing(src: &Path, dst: &Path) -> std::io::Result<()> {
 
 /// Copy a bundled example project into the workspace (idempotent, never
 /// overwrites) and return its workspace-relative directory name.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn install_example(app: AppHandle, name: String) -> Result<String, String> {
     if !EXAMPLES.contains(&name.as_str()) {
         return Err(format!("unknown example: {name}"));

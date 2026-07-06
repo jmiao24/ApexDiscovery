@@ -33,7 +33,8 @@ fn probe_script(app: &AppHandle) -> Option<PathBuf> {
 
 /// Introspect a workspace file with the large-file probe and return the JSON
 /// pointer string. `path` is resolved (and sandboxed) under the given scope.
-#[tauri::command]
+/// `async`: the probe is a whole python run over a large file.
+#[tauri::command(async)]
 pub fn probe_large_file(
     app: AppHandle,
     path: String,
@@ -47,7 +48,7 @@ pub fn probe_large_file(
         .ok_or("no Python found — install Python 3 to introspect large files")?;
     let script = probe_script(&app).ok_or("large-file probe not found")?;
 
-    let mut cmd = std::process::Command::new(&python);
+    let mut cmd = crate::runtime::quiet_command(&python);
     cmd.arg(&script).arg(&full);
     // Same enriched PATH as the kernel/agent so a conda/homebrew python resolves.
     #[cfg(unix)]
@@ -62,7 +63,6 @@ pub fn probe_large_file(
 #[cfg(test)]
 mod tests {
     use super::first_existing;
-    use std::path::PathBuf;
 
     #[test]
     fn first_existing_picks_the_first_present_file() {

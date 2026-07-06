@@ -83,7 +83,7 @@ fn pip_freeze() -> Option<String> {
     CACHE
         .get_or_init(|| {
             let bin = crate::kernel::python_bin()?;
-            let out = std::process::Command::new(bin)
+            let out = crate::runtime::quiet_command(bin)
                 .args(["-m", "pip", "freeze"])
                 .output()
                 .ok()?;
@@ -129,7 +129,7 @@ fn python_version() -> Option<String> {
     CACHE
         .get_or_init(|| {
             let bin = crate::kernel::python_bin()?;
-            let out = std::process::Command::new(bin).arg("--version").output().ok()?;
+            let out = crate::runtime::quiet_command(bin).arg("--version").output().ok()?;
             let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
             let text = if text.is_empty() {
                 String::from_utf8_lossy(&out.stderr).trim().to_string() // Python 2 printed -V to stderr
@@ -265,7 +265,10 @@ pub fn versions_for(root: &Path, path: &str) -> Result<Vec<ProvenanceRecord>, St
     Ok(v)
 }
 
-#[tauri::command]
+/// `async`: fired on every agent write; the first call shells out to
+/// `pip freeze` (seconds) and every call re-reads the whole store — none of
+/// which may run on the UI thread.
+#[tauri::command(async)]
 pub fn record_provenance(
     app: AppHandle,
     state: tauri::State<ProvenanceState>,
@@ -282,7 +285,8 @@ pub fn record_provenance(
     append_record(&root, &path, &tool, session_id, model, content, log, Some(env))
 }
 
-#[tauri::command]
+/// `async`: reads the whole (unbounded) store off the UI thread.
+#[tauri::command(async)]
 pub fn list_provenance(app: AppHandle, path: String) -> Result<Vec<ProvenanceRecord>, String> {
     versions_for(&workspace_dir(&app)?, &path)
 }

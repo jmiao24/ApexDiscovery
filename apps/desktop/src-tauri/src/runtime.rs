@@ -134,7 +134,7 @@ fn user_auth_source() -> Option<PathBuf> {
 /// Copy the user's OpenCode CLI login into the app-private data dir, EXPLICITLY
 /// (from the Settings page) — never silently. Returns false when there is no
 /// CLI login to import. Restarts the sidecar so it picks the credentials up.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_opencode_login(app: AppHandle, state: State<'_, RuntimeState>) -> Result<bool, String> {
     let Some(src) = user_auth_source() else {
         return Ok(false);
@@ -239,6 +239,23 @@ pub(crate) fn enriched_path() -> String {
         parts.push(base);
     }
     parts.join(":")
+}
+
+/// A `std::process::Command` that never pops a console window on Windows.
+/// A GUI app spawning a console-subsystem child (python.exe, taskkill, git…)
+/// otherwise flashes a black window per spawn — every direct spawn in this
+/// crate must go through here. (Sidecars via tauri_plugin_shell already set
+/// the flag internally.)
+pub(crate) fn quiet_command(bin: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    #[allow(unused_mut)]
+    let mut cmd = std::process::Command::new(bin);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
 }
 
 /// Make a secret-holding path owner-only: 700 for directories, 600 for files
@@ -372,8 +389,10 @@ fn restart_sidecar(app: &AppHandle, state: &RuntimeState) -> Result<String, Stri
     Ok(url)
 }
 
-/// Start the bundled OpenCode (idempotent). Returns its base URL.
-#[tauri::command]
+/// Start the bundled OpenCode (idempotent). Returns its base URL. `async`:
+/// skill-pack deployment + process spawn at startup must not block the UI
+/// thread while the first window paints.
+#[tauri::command(async)]
 pub fn start_runtime(app: AppHandle, state: State<'_, RuntimeState>) -> Result<String, String> {
     if let Some(url) = state.url.lock().unwrap().clone() {
         return Ok(url);
@@ -433,7 +452,7 @@ pub fn open_workspace_base(app: AppHandle) -> Result<(), String> {
 /// stream with `?directory=` and creates sessions with it (a bare `/event`
 /// stream would not see other folders' instances, so the scoped stream is
 /// required). `path` must be absolute.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_workspace(
     app: AppHandle,
     _state: State<'_, RuntimeState>,
@@ -460,7 +479,7 @@ pub fn set_workspace(
 
 /// Create a new dated folder `<base>/<name>` and switch to it. `name` is a
 /// single path segment (the frontend supplies a timestamp); rejects separators.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn new_dated_workspace(
     app: AppHandle,
     state: State<'_, RuntimeState>,
@@ -613,7 +632,7 @@ mod tests {
 /// Remove an entry from a map section of the app-private global OpenCode
 /// config ("provider" or "mcp") and restart the sidecar (PATCH /global/config
 /// cannot delete keys).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn remove_config_entry(
     app: AppHandle,
     state: State<'_, RuntimeState>,
@@ -670,7 +689,7 @@ pub fn get_approval_mode(app: AppHandle) -> Result<String, String> {
 
 /// Switch the approval mode and restart the sidecar so the permission rules
 /// take effect. Returns the (stable-port) base URL when it was running.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_approval_mode(
     app: AppHandle,
     state: State<'_, RuntimeState>,
@@ -695,7 +714,7 @@ pub fn set_approval_mode(
 
 /// Write the provider key/model into the app-private OpenCode config and restart
 /// the sidecar so it picks them up. Returns the same base URL (stable port).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn configure_opencode(
     app: AppHandle,
     state: State<'_, RuntimeState>,

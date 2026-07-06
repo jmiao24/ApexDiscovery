@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
@@ -180,13 +180,15 @@ fn rscript_candidates() -> Vec<String> {
 
 /// Probe an interpreter with the SAME PATH the kernel will run it under, so
 /// detection and execution resolve to the same binary (e.g. bare `python3` →
-/// the user's anaconda, not a system Python).
+/// the user's anaconda, not a system Python). `--version` must SUCCEED — the
+/// Windows Store `python.exe` alias runs but exits non-zero, and picking it
+/// would make every cell fail and respawn.
 fn interpreter_ok(bin: &str) -> bool {
-    let mut c = Command::new(bin);
+    let mut c = crate::runtime::quiet_command(bin);
     c.arg("--version");
     #[cfg(unix)]
     c.env("PATH", crate::runtime::enriched_path());
-    c.output().is_ok()
+    c.output().map(|o| o.status.success()).unwrap_or(false)
 }
 
 pub(crate) fn python_bin() -> Option<String> {
@@ -204,7 +206,7 @@ fn spawn_kernel(app: &AppHandle, lang: &str, cwd: &std::path::Path, key: &str) -
             let python = python_bin().ok_or(
                 "no Python found — install Python 3 to run Python notebooks",
             )?;
-            let mut c = Command::new(python);
+            let mut c = crate::runtime::quiet_command(python);
             c.arg(script);
             (c, None)
         }
@@ -216,7 +218,7 @@ fn spawn_kernel(app: &AppHandle, lang: &str, cwd: &std::path::Path, key: &str) -
             // One code file per kernel — concurrent R notebooks must not share it.
             let code_file = kernel_dir(app)?.join(format!("r_cell_{}.R", key_hash(key)));
             std::fs::write(&code_file, "").map_err(|e| e.to_string())?;
-            let mut c = Command::new(rscript);
+            let mut c = crate::runtime::quiet_command(rscript);
             c.arg(script).arg(&code_file);
             (c, Some(code_file))
         }
@@ -356,26 +358,34 @@ fn resolve_kernel(
 
 /// Execute one cell in the persistent local kernel for this notebook (Jupyter
 /// semantics: one kernel per notebook, working directory = the notebook's
-/// folder), starting it on first use.
+/// folder), starting it on first use. Runs on the BLOCKING pool: the cell read
+/// is unbounded (a long computation blocks until done or reset), and a sync
+/// command would hold the webview's UI thread — the whole app froze for the
+/// duration of every cell (the Windows "app hangs while a notebook runs" bug).
 #[tauri::command]
-pub fn kernel_execute(
+pub async fn kernel_execute(
     app: AppHandle,
-    state: State<'_, KernelState>,
     code: String,
     language: Option<String>,
     notebook: Option<String>,
     root: Option<String>,
 ) -> Result<ExecResult, String> {
-    let lang = normalize_lang(language.as_deref().unwrap_or("python"))?;
-    let (cwd, key) = resolve_kernel(&app, lang, notebook.as_deref(), root.as_deref())?;
-    exec_in(&state, &key, &code, || spawn_kernel(&app, lang, &cwd, &key))
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<KernelState>();
+        let lang = normalize_lang(language.as_deref().unwrap_or("python"))?;
+        let (cwd, key) = resolve_kernel(&app, lang, notebook.as_deref(), root.as_deref())?;
+        exec_in(&state, &key, &code, || spawn_kernel(&app, lang, &cwd, &key))
+    })
+    .await
+    .map_err(|e| format!("kernel task failed: {e}"))?
 }
 
 /// Restart kernels (clears their state). With `notebook`, exactly that
 /// notebook's kernel is killed (the Stop button on a hung cell); with only
 /// `language`, every kernel of that language; with neither, everything.
-/// Always returns promptly, even while a cell is blocked mid-run.
-#[tauri::command]
+/// Always returns promptly, even while a cell is blocked mid-run. `async` so
+/// the kill/reap never runs on the UI thread.
+#[tauri::command(async)]
 pub fn kernel_reset(
     app: AppHandle,
     state: State<'_, KernelState>,
@@ -406,6 +416,7 @@ pub fn kill_kernel(state: &KernelState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     fn read(stdout: &mut BufReader<ChildStdout>) -> serde_json::Value {
         let mut line = String::new();
@@ -427,6 +438,26 @@ mod tests {
             key_hash(&kernel_key("r", Some(a))),
             key_hash(&kernel_key("r", Some(b)))
         );
+    }
+
+    // Windows ships a fake `python.exe` App Execution Alias that prints an
+    // install hint and exits non-zero. An interpreter that runs but fails
+    // `--version` must NOT be picked — selecting it makes every cell respawn
+    // (and, before CREATE_NO_WINDOW, flash a console window) forever.
+    #[cfg(unix)]
+    #[test]
+    fn interpreter_ok_rejects_a_binary_that_fails_version() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("os-fake-python-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fake = dir.join("fake-python");
+        std::fs::write(&fake, "#!/bin/sh\necho 'Python was not found' >&2\nexit 9\n").unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(
+            !interpreter_ok(fake.to_str().unwrap()),
+            "an interpreter that exits non-zero on --version must be rejected"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
