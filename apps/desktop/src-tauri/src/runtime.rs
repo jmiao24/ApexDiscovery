@@ -244,6 +244,25 @@ pub(crate) fn enriched_path() -> String {
     parts.join(":")
 }
 
+/// Make a secret-holding path owner-only: 700 for directories, 600 for files
+/// (unix). The runtime root carries provider/connector API keys in
+/// `opencode.jsonc`/`auth.json`, and the sidecar rewrites those files with a
+/// default umask while running — locking the DIRECTORY is what holds, since a
+/// 700 dir is unreachable for other users whatever the file modes inside. On
+/// Windows, %APPDATA% is per-user ACL'd already; nothing to do.
+pub(crate) fn tighten_private(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata(path) {
+            let mode = if meta.is_dir() { 0o700 } else { 0o600 };
+            let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode));
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
+
 /// `bytes` bytes of OS randomness as lowercase hex. Panics only if the OS
 /// CSPRNG is unavailable — a machine state where serving anything is unsafe.
 pub(crate) fn random_hex(bytes: usize) -> String {
@@ -302,6 +321,12 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
         }
         std::fs::write(&cfg_file, seeded).map_err(|e| e.to_string())?;
     }
+    // Secrets live under the runtime root (provider/connector keys in
+    // opencode.jsonc, OpenCode's auth.json) — owner-only on every start, so
+    // existing installs are repaired and whatever the sidecar later rewrites
+    // inside stays unreachable to other users regardless of its umask.
+    tighten_private(&root);
+    tighten_private(&cfg_file);
     let home = std::env::var("HOME").unwrap_or_default();
     let port_str = port.to_string();
 
@@ -465,6 +490,29 @@ mod tests {
     use super::{random_hex, remove_key_from_config, sync_skill_pack};
     use std::fs;
 
+    #[cfg(unix)]
+    #[test]
+    fn tighten_private_makes_dir_and_secrets_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("os-private-{}", std::process::id()));
+        let sub = dir.join("opencode");
+        fs::create_dir_all(&sub).unwrap();
+        let cfg = sub.join("opencode.jsonc");
+        fs::write(&cfg, b"{\"apiKey\":\"secret\"}").unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::set_permissions(&cfg, fs::Permissions::from_mode(0o644)).unwrap();
+
+        // The runtime root holds provider/connector keys (opencode.jsonc,
+        // auth.json) — it must be unreadable to other users even when the
+        // sidecar later rewrites files inside with a default umask.
+        super::tighten_private(&dir);
+        assert_eq!(fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o700);
+        super::tighten_private(&cfg);
+        assert_eq!(fs::metadata(&cfg).unwrap().permissions().mode() & 0o777, 0o600);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn random_hex_is_csprng_shaped() {
         // 16 bytes → 32 hex chars, fresh per call — the shape the sidecar
@@ -571,6 +619,7 @@ pub fn remove_config_entry(
     let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let out = remove_key_from_config(&text, &section, &key)?;
     std::fs::write(&path, out).map_err(|e| e.to_string())?;
+    tighten_private(&path);
 
     if state.url.lock().unwrap().is_some() {
         kill_child(&state);
@@ -623,6 +672,7 @@ pub fn set_approval_mode(
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     std::fs::write(&path, updated).map_err(|e| e.to_string())?;
+    tighten_private(&path);
 
     // Same restart flow as configure_opencode: reload rules on a stable port.
     let was_running = state.url.lock().unwrap().is_some();
@@ -657,6 +707,7 @@ pub fn configure_opencode(
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     std::fs::write(&path, merged).map_err(|e| e.to_string())?;
+    tighten_private(&path);
 
     // Restart so the running server reloads the new provider config.
     let was_running = state.url.lock().unwrap().is_some();

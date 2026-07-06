@@ -275,10 +275,13 @@ competitors.
   - [ ] **API keys are plaintext on disk** — provider keys, connector keys
     (MP/FRED), and the Jupyter token all land in `opencode.json` (not only the
     mode-600 `auth.json` P2-3 describes). The keychain revert (P2-3) was a
-    deliberate call for signed-release reasons; revisit, and meanwhile at
-    minimum keep secrets out of world-readable config and out of the
-    unauthenticated `/global/config` surface. (Verified clean: no keys in
-    provenance/logs/localStorage/git.)
+    deliberate call for signed-release reasons; revisit for signed releases.
+    **Both interim minimums are now met (2026-07-06):** the `/global/config`
+    surface requires auth (see the CORS/auth fix above), and the config is no
+    longer world-readable — the app-private runtime root is chmod 700 and
+    `opencode.jsonc` 600 on every start and after every Rust-side write
+    (verified: the sidecar's own PATCH rewrite preserves the 600 mode).
+    (Verified clean: no keys in provenance/logs/localStorage/git.)
 
   **Critical — Rust defects:**
   - [x] **Windows command injection** in `open_url`/`os_open`. ~~`cmd /C
@@ -634,7 +637,7 @@ competitors.
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | 🟡 Partial — 3 checks + PDF-manuscript extractor shipped; weak-model robustness pending |
 | **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | 🟡 **Partial — 3 gates ship (physics/earth/biology), deterministic + pluggable; library round-trip + more fields pending** |
 | P0-6 | Large files: reference, don't load | P0 | 🟡 Partial — memory-pointer probe ships (table/parquet/hdf5/fits/netcdf/log); genomics/GRIB/ROOT pending |
-| **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — approval modes + sidecar/preview auth + kernel-deadlock fix + Windows-injection fix shipped (both critical Rust defects closed); still open: plaintext keys at rest + moderate/cleanup backlog** |
+| **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — ALL critical items addressed (approval modes, sidecar/preview auth, kernel deadlock, Windows injection, owner-only key files); keychain-at-rest deferred to signed releases (P2-3); moderate/cleanup backlog remains** |
 | P1-1 | Multi-discipline from day one | P1 | 🟡 Partial — pluggable + climate example; non-bio depth pending |
 | P1-2 | Domain + literature connectors | P1 | 🟡 Partial — literature/bio + non-bio (Materials Project, FRED) shipped; physics/earth planned |
 | P1-3 | Scientific renderers | P1 | 🟡 Partial — base + 3D structure + genome + FITS + DOS + band + phase + qualitative-coding + anomaly map (all 4 disciplines; materials trio complete); ternary/coastlines next |
