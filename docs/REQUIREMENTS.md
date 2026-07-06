@@ -321,10 +321,11 @@ competitors.
     (`runtime.rs:393`, `artifact_file.rs:397,485`); `record_provenance` holds
     its mutex across `pip freeze` and re-parses the whole JSONL per write
     (`provenance.rs:225,268-283`).
-  - [ ] ~~Windows Jupyter token is guessable (`pid + nanos`)~~ — fixed
-    2026-07-06 (shared CSPRNG `random_hex`). Still open: `detect_tools`
-    (`tools.rs:15`) probes without `enriched_path()`, so Finder-launched apps
-    misreport Python/R/uv as missing.
+  - [x] ~~Windows Jupyter token is guessable (`pid + nanos`)~~ — fixed
+    2026-07-06 (shared CSPRNG `random_hex`). ~~`detect_tools` probes without
+    `enriched_path()`, so Finder-launched apps misreport Python/R/uv as
+    missing~~ — fixed 2026-07-06 (probes search the same enriched PATH the
+    kernel and agent use; tested).
 
   **Cleanup — structure (not urgent):**
   - [ ] Split `lib/runtime.ts` (1,014 lines, ~6 concerns): extract the pure
