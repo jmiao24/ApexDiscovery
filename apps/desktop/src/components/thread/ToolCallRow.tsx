@@ -20,7 +20,7 @@ const STATUS: Record<
 // (waiting for approval, warnings, failures) get a prominent card.
 const PROMINENT = new Set<ToolCallStatus>(["waiting-approval", "warning", "failed"]);
 
-export function ToolCallRow({ block }: { block: ToolCallBlock }) {
+export function ToolCallRow({ block, activity }: { block: ToolCallBlock; activity?: string }) {
   const s = STATUS[block.status];
   const prominent = PROMINENT.has(block.status);
   return (
@@ -46,6 +46,18 @@ export function ToolCallRow({ block }: { block: ToolCallBlock }) {
         </span>
         {block.meta && <span className="shrink-0 text-xs text-muted">{block.meta}</span>}
       </div>
+      {/* Live pulse of the subagent this task spawned — what it is doing right
+          now, one quiet line. Vanishes when the task settles. */}
+      {activity && block.status === "running" && (
+        <div className="flex items-center gap-2 px-2 pb-0.5 text-xs" data-subagent-activity>
+          <span
+            aria-hidden
+            className="mb-1.5 ml-[6px] h-2 w-2 shrink-0 rounded-bl border-b border-l border-border"
+          />
+          <span aria-hidden className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent" />
+          <span className="min-w-0 flex-1 truncate font-mono text-muted">{activity}</span>
+        </div>
+      )}
       {/* Output of a user-typed "!" shell command — the result they asked for.
           (Agent tool steps never carry outputSummary; they stay one quiet line.) */}
       {block.outputSummary && (

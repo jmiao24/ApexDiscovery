@@ -26,6 +26,12 @@ const mocks = vi.hoisted(() => ({
   /** Next runCommand call streams an event, then throws — the WKWebView
    *  ~60 s fetch kill on a long sync turn ("Load failed"). */
   dropCommandPost: false,
+  /** Approval mode the Rust config currently holds. */
+  approvalMode: "approve" as string,
+  setApprovalMode: vi.fn(async (mode: string) => {
+    mocks.approvalMode = mode;
+    return "http://127.0.0.1:1";
+  }),
 }));
 
 vi.mock("./tauri", () => ({
@@ -36,6 +42,8 @@ vi.mock("./tauri", () => ({
   workspacePath: async () => "/ws/base",
   setWorkspace: mocks.setWorkspace,
   newDatedWorkspace: mocks.newDatedWorkspace,
+  getApprovalMode: async () => mocks.approvalMode,
+  setApprovalMode: mocks.setApprovalMode,
 }));
 vi.mock("./kernel", () => ({ kernelReset: mocks.kernelReset }));
 vi.mock("@ai4s/sdk", () => {
@@ -129,6 +137,7 @@ beforeEach(async () => {
   mocks.failCommand = false;
   mocks.dropCommandPost = false;
   mocks.messages = [];
+  mocks.approvalMode = "approve";
   useRuntimeStore.setState({
     currentId: null,
     workspacePinned: false,
@@ -567,3 +576,31 @@ describe("per-session right pane", () => {
   });
 });
 
+
+describe("approval mode", () => {
+  it("loads the configured mode when connecting", async () => {
+    expect(useRuntimeStore.getState().approvalMode).toBe("approve");
+    mocks.approvalMode = "full";
+    await useRuntimeStore.getState().connect();
+    expect(useRuntimeStore.getState().approvalMode).toBe("full");
+  });
+
+  it("setApprovalMode persists the choice and reconnects to the restarted sidecar", async () => {
+    await useRuntimeStore.getState().setApprovalMode("full");
+    expect(mocks.setApprovalMode).toHaveBeenCalledWith("full");
+    const s = useRuntimeStore.getState();
+    expect(s.approvalMode).toBe("full");
+    expect(s.status).toBe("ready"); // reconnected after the restart
+  });
+
+  it("setApprovalMode is a deliberate restart: `switching` masks the reconnect (no UI flash)", async () => {
+    const p = useRuntimeStore.getState().setApprovalMode("full");
+    // Synchronously flagged, like switchWorkspace — the page must not render
+    // the restart as a disconnection.
+    expect(useRuntimeStore.getState().switching).toBe(true);
+    await p;
+    const s = useRuntimeStore.getState();
+    expect(s.switching).toBe(false);
+    expect(s.status).toBe("ready");
+  });
+});

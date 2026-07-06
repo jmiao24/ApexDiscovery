@@ -16,12 +16,15 @@ import {
 import type { ArtifactBlock, RuntimeStatus, ThreadBlock } from "@ai4s/shared";
 import {
   detectTools as probeTools,
+  getApprovalMode,
   isTauri,
   logDebug,
   newDatedWorkspace,
+  setApprovalMode as persistApprovalMode,
   setWorkspace,
   startRuntime,
   workspacePath,
+  type ApprovalMode,
   type ToolStatus,
 } from "./tauri";
 import { kernelReset } from "./kernel";
@@ -73,6 +76,11 @@ interface RuntimeState {
   commands: CommandInfo[];
   /** Configured default model ("provider/model"), or null when unset. */
   defaultModel: string | null;
+  /** The composer's approval switch: "approve" (dangerous commands prompt)
+   *  or "full" (everything in-workspace runs). Loaded from OpenCode config. */
+  approvalMode: ApprovalMode;
+  /** Persist a new approval mode (restarts the sidecar) and reconnect. */
+  setApprovalMode: (mode: ApprovalMode) => Promise<void>;
   tools: ToolStatus[];
   hiddenExamples: string[];
   error: string | null;
@@ -352,6 +360,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   agents: [],
   commands: [],
   defaultModel: null,
+  approvalMode: "approve",
   tools: [],
   hiddenExamples: initialHidden(),
   error: null,
@@ -458,11 +467,24 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     }
   },
 
+  setApprovalMode: async (mode) => {
+    // A deliberate restart, like switchWorkspace: `switching` keeps the UI
+    // rendering as connected — no status flip, no page flash.
+    set({ switching: true });
+    try {
+      await persistApprovalMode(mode); // writes the config; restarts the sidecar
+      set({ approvalMode: mode });
+      await get().connectRetry();
+    } finally {
+      set({ switching: false });
+    }
+  },
+
   connect: async () => {
     get().disconnect();
     // Scope skill discovery to the sidecar's workspace (null in browser dev).
     const directory = await workspacePath();
-    set({ workspace: directory });
+    set({ workspace: directory, approvalMode: await getApprovalMode() });
     const c = new OpenCodeClient({ baseUrl: get().serverUrl, directory: directory ?? undefined });
     client = c;
     c.onStatus((status) => {
@@ -980,10 +1002,17 @@ export function foldEvent(
       // then the tool name; never render a blank row.
       const command = typeof event.input?.command === "string" ? event.input.command : "";
       const filePath = typeof event.input?.filePath === "string" ? event.input.filePath : "";
+      // A task tool names its subagent session once — later updates may omit
+      // it, so carry the link over from the previous version of the block.
+      const prev = key in index ? blocks[index[key]] : undefined;
+      const childSessionId =
+        event.childSessionId ??
+        (prev?.kind === "tool-call" ? prev.childSessionId : undefined);
       const block: ThreadBlock = {
         kind: "tool-call",
         title: tidyToolTitle(event.title?.trim() || command || filePath || event.tool || "tool"),
         status: event.status,
+        ...(childSessionId ? { childSessionId } : {}),
         // A user-typed "!" command ran for its output — show it inline.
         // Agent bash steps stay quiet single-line log entries.
         ...(opts?.shellTurn && event.tool === "bash" && event.output?.trim()
@@ -1013,6 +1042,20 @@ export function foldEvent(
     default:
       return state;
   }
+}
+
+/**
+ * One-line live activity of a subagent, derived from its folded thread:
+ * the latest tool step's title, "Writing…" while it streams text, and
+ * "Working…" before anything is known (e.g. right after an app reload).
+ */
+export function subagentActivity(blocks?: ThreadBlock[]): string {
+  for (let i = (blocks?.length ?? 0) - 1; i >= 0; i--) {
+    const b = blocks![i];
+    if (b.kind === "tool-call") return b.title;
+    if (b.kind === "agent") return "Writing…";
+  }
+  return "Working…";
 }
 
 function mapToolStatus(status?: string): ToolCallStatus {

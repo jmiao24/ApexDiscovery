@@ -11,6 +11,8 @@ export interface BlockHandlers {
   onArtifactOpen?: (a: ArtifactBlock) => void;
   /** Forward a figure annotation to the agent (live session). */
   onFigureComment?: (annotation: FigureAnnotation, figureTitle: string) => void;
+  /** Live one-line activity of the subagent a task tool spawned (live session). */
+  subagentActivity?: (childSessionId: string) => string | undefined;
 }
 
 export function renderBlock(block: ThreadBlock, i: number, handlers?: BlockHandlers) {
@@ -22,7 +24,15 @@ export function renderBlock(block: ThreadBlock, i: number, handlers?: BlockHandl
     case "step-summary":
       return <StepSummaryRow key={i} block={block} />;
     case "tool-call":
-      return <ToolCallRow key={i} block={block} />;
+      return (
+        <ToolCallRow
+          key={i}
+          block={block}
+          activity={
+            block.childSessionId ? handlers?.subagentActivity?.(block.childSessionId) : undefined
+          }
+        />
+      );
     case "reviewer":
       return <ReviewerCard key={i} block={block} />;
     case "table":

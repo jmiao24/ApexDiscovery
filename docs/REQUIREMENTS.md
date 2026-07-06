@@ -218,7 +218,7 @@ competitors.
   genomics formats (BAM/CRAM/FASTQ via pysam), GRIB, and ROOT; and wiring the
   probe into an automatic pre-read step in the UI.
 
-### P0-7 · Safety-defaults compliance + audit debt — 🔴 Open · NEW (2026-07-05 audit)
+### P0-7 · Safety-defaults compliance + audit debt — 🟡 Partial · NEW (2026-07-05 audit)
 
 - **Evidence.** A four-track architecture audit (layering/boundaries, Rust
   backend, frontend structure, safety defaults) on 2026-07-05. Overall verdict:
@@ -237,23 +237,30 @@ competitors.
   install prompts for approval on a shell command; a URL containing `&` opens
   correctly on Windows; a `while True: pass` cell can be reset without
   restarting the app).
-- **Status.** 🔴 Open. Severity-ranked backlog:
+- **Status.** 🟡 Partial — approval modes shipped 2026-07-05; the rest is open.
+  Severity-ranked backlog:
 
   **Critical — safety defaults (AGENTS.md non-negotiable):**
-  - [ ] **Approval mode is not configured anywhere.** The bundled OpenCode
-    1.17.13 binary's embedded default is `{"*":"allow"}` (only
-    `doom_loop`/`external_directory` default to `ask`), so bash / file edits /
-    dependency installs run **unprompted**. Fix: write a `permission` block
-    (`bash`/`edit`/`webfetch`: `"ask"`) into the app-private `opencode.json`
-    before sidecar start (`opencode_config.rs` `merge_config`).
+  - [x] **Approval mode is not configured anywhere.** ~~The bundled OpenCode
+    1.17.13 binary's embedded default is `{"*":"allow"}`, so bash / file edits /
+    dependency installs run unprompted.~~ **Fixed (2026-07-05):** a Codex-style
+    two-mode switch in the composer — **Approve for me** (default; deletion /
+    installs / remote / privilege commands and webfetch prompt first, via ask
+    rules seeded into the app-private config before sidecar start) and **Full
+    access** (`"permission": {}` = OpenCode builtin defaults, an explicit user
+    choice that survives restarts). Verified against the running bundled
+    binary: rules land in the build agent's resolved ruleset after the builtin
+    `*: allow` (last-match-wins), and a 22-case simulation using OpenCode's
+    verbatim wildcard/evaluate algorithm behaves as designed.
   - [ ] **Sidecar runs with `--cors "*"` and no server auth**
     (`runtime.rs:270`): any local webpage can scan loopback ports, drive agent
     turns, and `GET /global/config` to read stored API keys. Remove the flag or
     add auth. Same for the preview server's `Access-Control-Allow-Origin: *` +
     no token + no Host check (`preview_server.rs:64`) — add a per-URL token.
-  - [ ] **Workspace confinement doesn't bind bash**: file tools prompt via
+  - [x] **Workspace confinement doesn't bind bash**: file tools prompt via
     `external_directory`, but bash (default `allow`, real `$HOME`) escapes
-    freely. Covered by the permission fix above.
+    freely. Covered by the permission fix above (in "Approve for me" mode;
+    "Full access" is an explicit user opt-out).
   - [ ] **API keys are plaintext on disk** — provider keys, connector keys
     (MP/FRED), and the Jupyter token all land in `opencode.json` (not only the
     mode-600 `auth.json` P2-3 describes). The keychain revert (P2-3) was a
@@ -603,7 +610,7 @@ competitors.
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | 🟡 Partial — 3 checks + PDF-manuscript extractor shipped; weak-model robustness pending |
 | **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | 🟡 **Partial — 3 gates ship (physics/earth/biology), deterministic + pluggable; library round-trip + more fields pending** |
 | P0-6 | Large files: reference, don't load | P0 | 🟡 Partial — memory-pointer probe ships (table/parquet/hdf5/fits/netcdf/log); genomics/GRIB/ROOT pending |
-| **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🔴 **Open — 2026-07-05 audit: permission mode never configured (bash defaults to allow), `--cors *` unauthenticated sidecar, Windows cmd injection, kernel deadlock; + moderate/cleanup backlog** |
+| **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — approval modes shipped (Approve for me default / Full access, composer switch); still open: `--cors *` unauthenticated sidecar, plaintext keys, Windows cmd injection, kernel deadlock + backlog** |
 | P1-1 | Multi-discipline from day one | P1 | 🟡 Partial — pluggable + climate example; non-bio depth pending |
 | P1-2 | Domain + literature connectors | P1 | 🟡 Partial — literature/bio + non-bio (Materials Project, FRED) shipped; physics/earth planned |
 | P1-3 | Scientific renderers | P1 | 🟡 Partial — base + 3D structure + genome + FITS + DOS + band + phase + qualitative-coding + anomaly map (all 4 disciplines; materials trio complete); ternary/coastlines next |

@@ -101,6 +101,17 @@ fn opencode_config_file(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(xdg_config_home(app)?.join("opencode").join("opencode.json"))
 }
 
+/// The config file to edit in place: the server may have rewritten the config
+/// as opencode.jsonc — prefer whichever exists, fall back to opencode.json.
+fn effective_config_file(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = xdg_config_home(app)?.join("opencode");
+    Ok(["opencode.jsonc", "opencode.json"]
+        .iter()
+        .map(|n| dir.join(n))
+        .find(|p| p.exists())
+        .unwrap_or_else(|| dir.join("opencode.json")))
+}
+
 /// The user's existing OpenCode auth file (their login / free credits), if any.
 /// Read-only: we copy it into our sandbox so the bundled runtime can use the same
 /// login, but we never modify the user's file or sessions.
@@ -255,6 +266,17 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
     }
     // Ship the bundled scientific skills into the app-private OpenCode profile.
     deploy_bundled_skills(app);
+    // Safety default (AGENTS.md non-negotiable): on first run, seed the
+    // "approve" permission mode so dangerous shell commands prompt for
+    // approval. A mode the user chose (approve or full) is never overridden.
+    let cfg_file = effective_config_file(app)?;
+    let existing = std::fs::read_to_string(&cfg_file).unwrap_or_default();
+    if let Some(seeded) = crate::opencode_config::seed_default_permission(&existing) {
+        if let Some(dir) = cfg_file.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&cfg_file, seeded).map_err(|e| e.to_string())?;
+    }
     let home = std::env::var("HOME").unwrap_or_default();
     let port_str = port.to_string();
 
@@ -539,6 +561,48 @@ fn remove_key_from_config(text: &str, section: &str, key: &str) -> Result<String
         return Err(format!("\"{key}\" is not in the config's {section} section"));
     }
     serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())
+}
+
+/// The current approval mode ("approve" | "full"). Spawn seeding guarantees a
+/// mode exists once the runtime has started; before that, report the default.
+#[tauri::command]
+pub fn get_approval_mode(app: AppHandle) -> Result<String, String> {
+    let path = effective_config_file(&app)?;
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+    Ok(crate::opencode_config::permission_mode_of(&existing)
+        .unwrap_or(crate::opencode_config::MODE_APPROVE)
+        .to_string())
+}
+
+/// Switch the approval mode and restart the sidecar so the permission rules
+/// take effect. Returns the (stable-port) base URL when it was running.
+#[tauri::command]
+pub fn set_approval_mode(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+    mode: String,
+) -> Result<String, String> {
+    let path = effective_config_file(&app)?;
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+    let updated = crate::opencode_config::set_permission_mode(&existing, &mode)?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, updated).map_err(|e| e.to_string())?;
+
+    // Same restart flow as configure_opencode: reload rules on a stable port.
+    let was_running = state.url.lock().unwrap().is_some();
+    if was_running {
+        kill_child(&state);
+        let port = { *state.port.lock().unwrap().get_or_insert_with(free_port) };
+        let child = spawn_sidecar(&app, port)?;
+        *state.child.lock().unwrap() = Some(child);
+        let url = format!("http://127.0.0.1:{port}");
+        *state.url.lock().unwrap() = Some(url.clone());
+        Ok(url)
+    } else {
+        Ok(path.to_string_lossy().to_string())
+    }
 }
 
 /// Write the provider key/model into the app-private OpenCode config and restart

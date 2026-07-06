@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
-import { ArrowUp, Paperclip, Square, Terminal, X } from "lucide-react";
-import { addFilesToWorkspace, addTextToWorkspace, isTauri } from "@/lib/tauri";
+import { ArrowUp, Check, ChevronDown, Hand, Paperclip, Square, Terminal, X, Zap } from "lucide-react";
+import { addFilesToWorkspace, addTextToWorkspace, isTauri, type ApprovalMode } from "@/lib/tauri";
 import { useUiStore } from "@/lib/store";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
@@ -41,6 +41,27 @@ export interface ComposerCommand {
   source?: string;
 }
 
+/** The two approval modes the composer can switch between (Codex-style). */
+const APPROVAL_OPTIONS: {
+  mode: ApprovalMode;
+  label: string;
+  description: string;
+  icon: typeof Hand;
+}[] = [
+  {
+    mode: "approve",
+    label: "Approve for me",
+    description: "Asks before deleting, installing, or going remote",
+    icon: Hand,
+  },
+  {
+    mode: "full",
+    label: "Full access",
+    description: "Runs every command without asking",
+    icon: Zap,
+  },
+];
+
 /**
  * The "Ask anything" composer. Static mock sessions pass no `onSend`; the live
  * OpenCode session passes one to submit prompts to the runtime. Attached
@@ -62,6 +83,8 @@ export function Composer({
   working,
   onStop,
   placeholder = "Ask anything",
+  approvalMode,
+  onApprovalModeChange,
 }: {
   onSend?: (text: string) => void;
   onRunShell?: (command: string) => void;
@@ -72,6 +95,10 @@ export function Composer({
   working?: boolean;
   onStop?: () => void;
   placeholder?: string;
+  /** The approval switch shows only when the surface provides both (the live
+   *  session does; static mock sessions don't). */
+  approvalMode?: ApprovalMode;
+  onApprovalModeChange?: (mode: ApprovalMode) => void;
 }) {
   const [value, setValue] = useState("");
   const [files, setFiles] = useState<string[]>([]);
@@ -84,6 +111,20 @@ export function Composer({
   const [command, setCommand] = useState<string | null>(null);
   /** ↑/↓ history navigation; `draft` is what was typed before recalling. */
   const [hist, setHist] = useState<{ index: number; draft: string } | null>(null);
+  /** The approval-mode menu is open. */
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const approvalRef = useRef<HTMLDivElement>(null);
+
+  // Dismiss the approval menu on any outside press. (Button blur can't do
+  // this: WKWebView never focuses a clicked button, so blur never fires.)
+  useEffect(() => {
+    if (!approvalOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!approvalRef.current?.contains(e.target as Node)) setApprovalOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [approvalOpen]);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const composerDraft = useUiStore((s) => s.composerDraft);
   const setComposerDraft = useUiStore((s) => s.setComposerDraft);
@@ -372,7 +413,28 @@ export function Composer({
           ))}
         </div>
       )}
-      <div className="flex items-end gap-1.5">
+      <textarea
+        ref={taRef}
+        rows={1}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        onPaste={onPaste}
+        placeholder={
+          command
+            ? "Arguments (optional) — Enter to run"
+            : shellMode
+              ? "Run a shell command in the workspace folder"
+              : placeholder
+        }
+        className={cn(
+          "max-h-[160px] w-full resize-none bg-transparent px-1.5 py-0.5 text-sm leading-6 text-text outline-none placeholder:text-muted",
+          (shellMode || command) && "font-mono",
+        )}
+        aria-label="Ask anything"
+      />
+      {/* Codex-style action row: mode controls bottom-left, send bottom-right. */}
+      <div className="flex items-center gap-1.5 pt-1">
         {command ? (
           <span
             className="flex h-7 shrink-0 items-center gap-1 rounded-input bg-accent/15 pl-2 pr-1 font-mono text-xs text-accent"
@@ -408,26 +470,55 @@ export function Composer({
             </button>
           )
         )}
-        <textarea
-          ref={taRef}
-          rows={1}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          placeholder={
-            command
-              ? "Arguments (optional) — Enter to run"
-              : shellMode
-                ? "Run a shell command in the workspace folder"
-                : placeholder
-          }
-          className={cn(
-            "max-h-[160px] w-full resize-none self-center bg-transparent px-1.5 py-0.5 text-sm leading-6 text-text outline-none placeholder:text-muted",
-            (shellMode || command) && "font-mono",
-          )}
-          aria-label="Ask anything"
-        />
+        {approvalMode && onApprovalModeChange && (
+          <div className="relative shrink-0" ref={approvalRef}>
+            {approvalOpen && (
+              <div
+                role="menu"
+                aria-label="Approval modes"
+                className="absolute bottom-full left-0 z-20 mb-2 w-80 rounded-card border border-border bg-surface p-1 shadow-card"
+              >
+                <div className="px-2 pb-1 pt-1.5 text-xs text-muted">
+                  How should agent actions be approved?
+                </div>
+                {APPROVAL_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.mode}
+                    role="menuitemradio"
+                    aria-checked={opt.mode === approvalMode}
+                    className="flex w-full items-start gap-2 rounded-input px-2 py-1.5 text-left hover:bg-surface-2"
+                    // mousedown, not click — a click would blur the textarea first.
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setApprovalOpen(false);
+                      if (opt.mode !== approvalMode) onApprovalModeChange(opt.mode);
+                    }}
+                  >
+                    <opt.icon size={13} className="mt-0.5 shrink-0 text-muted" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs text-text">{opt.label}</span>
+                      <span className="block text-xs text-muted">{opt.description}</span>
+                    </span>
+                    {opt.mode === approvalMode && (
+                      <Check size={13} className="mt-0.5 shrink-0 text-accent" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              aria-label="Approval mode"
+              title="How agent actions get approved"
+              className="flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs text-muted hover:bg-surface-2 hover:text-text"
+              onClick={() => setApprovalOpen((o) => !o)}
+            >
+              {approvalMode === "full" ? <Zap size={12} /> : <Hand size={12} />}
+              <span>{APPROVAL_OPTIONS.find((o) => o.mode === approvalMode)?.label}</span>
+              <ChevronDown size={11} />
+            </button>
+          </div>
+        )}
+        <span className="flex-1" />
         {working && onStop ? (
           // Same spot, same shape, one action: the send button becomes Stop
           // while the agent works — always live, even though the input is not.

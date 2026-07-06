@@ -30,6 +30,26 @@ describe("ToolCallRow", () => {
     expect(screen.getByText("142 lines of output")).toBeInTheDocument();
   });
 
+  it("shows the subagent's live activity under a running task row", () => {
+    render(
+      <ToolCallRow
+        block={{ kind: "tool-call", title: "Visual QA for slides", status: "running" }}
+        activity="python3 analyze slide-03.jpg"
+      />,
+    );
+    expect(screen.getByText("python3 analyze slide-03.jpg")).toBeInTheDocument();
+  });
+
+  it("hides the activity line once the task has settled", () => {
+    render(
+      <ToolCallRow
+        block={{ kind: "tool-call", title: "Visual QA for slides", status: "success" }}
+        activity="python3 analyze slide-03.jpg"
+      />,
+    );
+    expect(screen.queryByText("python3 analyze slide-03.jpg")).not.toBeInTheDocument();
+  });
+
   it("shows the inline output of a user-run shell command", () => {
     render(
       <ToolCallRow

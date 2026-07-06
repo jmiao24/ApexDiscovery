@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FolderOpen, Loader2, NotebookPen, PlugZap } from "lucide-react";
-import { DRAFT_KEY, rootSessionOf, useRuntimeStore } from "@/lib/runtime";
+import { DRAFT_KEY, rootSessionOf, subagentActivity, useRuntimeStore } from "@/lib/runtime";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
@@ -48,6 +48,8 @@ export function LiveSessionPage() {
     replyPermission,
     interrupt,
     reconcileRunning,
+    approvalMode,
+    setApprovalMode,
   } = useRuntimeStore();
 
   // A deliberate workspace move restarts the sidecar — expected and brief, so
@@ -75,6 +77,9 @@ export function LiveSessionPage() {
     onArtifactOpen: openArtifact,
     onFigureComment: (a, title) =>
       void sendPrompt(`On the figure ${title}, at (${a.x.toFixed(0)}%, ${a.y.toFixed(0)}%): ${a.note}`),
+    // Subagent events fold into their own thread; a running task row reads
+    // its child's latest step from there.
+    subagentActivity: (childId) => subagentActivity(threads[childId]?.blocks),
   };
   const onEvaluate = (expr: string) => void sendPrompt(`Evaluate in the notebook kernel:\n\`\`\`python\n${expr}\n\`\`\``);
 
@@ -298,6 +303,8 @@ export function LiveSessionPage() {
               placeholder={
                 working ? "Waiting for the reply…" : connected ? "Ask anything" : "Connect to chat"
               }
+              approvalMode={approvalMode}
+              onApprovalModeChange={(mode) => void setApprovalMode(mode)}
             />
           </div>
         </div>

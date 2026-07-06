@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OpenCodeEvent, HistoryMessage } from "@ai4s/sdk";
-import { datedWorkspaceName, foldEvent, historyToThread, tidyToolTitle, type FoldState } from "./runtime";
+import { datedWorkspaceName, foldEvent, historyToThread, subagentActivity, tidyToolTitle, type FoldState } from "./runtime";
 
 const empty: FoldState = { blocks: [], index: {} };
 const S = "ses_1";
@@ -112,6 +112,60 @@ describe("foldEvent", () => {
       { type: "session.idle", sessionId: S },
     ]);
     expect(s.blocks.map((b) => b.kind)).toEqual(["agent", "tool-call", "agent", "status-line"]);
+  });
+});
+
+describe("subagent activity", () => {
+  it("records the child session id on a task tool block", () => {
+    const s = foldAll([
+      {
+        type: "tool.updated",
+        sessionId: S,
+        callId: "c1",
+        tool: "task",
+        status: "running",
+        title: "Visual QA for slides",
+        childSessionId: "ses_child",
+      },
+    ]);
+    expect(s.blocks[0]).toMatchObject({ kind: "tool-call", childSessionId: "ses_child" });
+  });
+
+  it("subagentActivity: shows the child's latest tool step", () => {
+    const child = foldAll([
+      { type: "tool.updated", sessionId: "ses_child", callId: "k1", tool: "bash", status: "success", title: "pdftoppm -jpeg slides.pdf" },
+      { type: "tool.updated", sessionId: "ses_child", callId: "k2", tool: "bash", status: "running", title: "python3 analyze slide-03.jpg" },
+    ]);
+    expect(subagentActivity(child.blocks)).toBe("python3 analyze slide-03.jpg");
+  });
+
+  it("subagentActivity: 'Writing…' while the child is streaming text", () => {
+    const child = foldAll([
+      { type: "tool.updated", sessionId: "ses_child", callId: "k1", tool: "bash", status: "success", title: "ls" },
+      { type: "text.updated", sessionId: "ses_child", partId: "p1", text: "Compiling the final report" },
+    ]);
+    expect(subagentActivity(child.blocks)).toBe("Writing…");
+  });
+
+  it("subagentActivity: 'Working…' when nothing is known yet", () => {
+    expect(subagentActivity(undefined)).toBe("Working…");
+    expect(subagentActivity([])).toBe("Working…");
+  });
+
+  it("keeps the child link when a later update omits it", () => {
+    const s = foldAll([
+      {
+        type: "tool.updated",
+        sessionId: S,
+        callId: "c1",
+        tool: "task",
+        status: "running",
+        title: "Visual QA for slides",
+        childSessionId: "ses_child",
+      },
+      { type: "tool.updated", sessionId: S, callId: "c1", tool: "task", status: "running", title: "Visual QA for slides" },
+    ]);
+    expect(s.blocks[0]).toMatchObject({ kind: "tool-call", childSessionId: "ses_child" });
   });
 });
 

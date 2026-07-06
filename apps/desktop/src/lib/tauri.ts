@@ -54,6 +54,26 @@ export async function importOpenCodeLogin(): Promise<boolean> {
   return invoke<boolean>("import_opencode_login");
 }
 
+/** How agent actions get approved — the composer's Codex-style switch.
+ *  "approve": dangerous shell commands (delete / install / remote / privilege)
+ *  and web fetches prompt first. "full": everything in-workspace just runs. */
+export type ApprovalMode = "approve" | "full";
+
+/** The approval mode OpenCode's config currently holds ("approve" until changed). */
+export async function getApprovalMode(): Promise<ApprovalMode> {
+  if (!isTauri) return "approve";
+  const { invoke } = await import("@tauri-apps/api/core");
+  const mode = await invoke<string>("get_approval_mode");
+  return mode === "full" ? "full" : "approve";
+}
+
+/** Switch the approval mode; the sidecar restarts — the caller must reconnect. */
+export async function setApprovalMode(mode: ApprovalMode): Promise<void> {
+  if (!isTauri) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("set_approval_mode", { mode });
+}
+
 /** Remove a provider/mcp entry from the global OpenCode config (restarts the sidecar). */
 export async function removeConfigEntry(section: "provider" | "mcp", key: string): Promise<void> {
   if (!isTauri) throw new Error("not running in the desktop app");

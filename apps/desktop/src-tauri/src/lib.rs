@@ -56,6 +56,8 @@ pub fn run() {
             jupyter::setup_jupyter,
             jupyter::start_jupyter,
             runtime::configure_opencode,
+            runtime::get_approval_mode,
+            runtime::set_approval_mode,
             kernel::kernel_execute,
             kernel::kernel_reset,
             artifact_file::read_artifact,

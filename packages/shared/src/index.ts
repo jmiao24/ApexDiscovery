@@ -73,6 +73,8 @@ export interface ToolCallBlock {
   meta?: string;
   inputSummary?: string;
   outputSummary?: string;
+  /** Subagent session spawned by this task tool — lets the UI show its live activity. */
+  childSessionId?: string;
 }
 
 export type FindingLevel = "warn" | "ok" | "error";
