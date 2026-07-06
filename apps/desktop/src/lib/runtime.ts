@@ -20,6 +20,7 @@ import {
   isTauri,
   logDebug,
   newDatedWorkspace,
+  runtimePassword,
   setApprovalMode as persistApprovalMode,
   setWorkspace,
   startRuntime,
@@ -485,7 +486,14 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     // Scope skill discovery to the sidecar's workspace (null in browser dev).
     const directory = await workspacePath();
     set({ workspace: directory, approvalMode: await getApprovalMode() });
-    const c = new OpenCodeClient({ baseUrl: get().serverUrl, directory: directory ?? undefined });
+    // The bundled sidecar requires per-run Basic auth; browser dev (no Tauri)
+    // gets null and connects to a user-run passwordless server.
+    const password = await runtimePassword();
+    const c = new OpenCodeClient({
+      baseUrl: get().serverUrl,
+      directory: directory ?? undefined,
+      password: password ?? undefined,
+    });
     client = c;
     c.onStatus((status) => {
       void logDebug(`status → ${status}`);

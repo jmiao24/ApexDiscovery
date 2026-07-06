@@ -42,6 +42,7 @@ pub fn run() {
         .manage(ProvenanceState::default())
         .invoke_handler(tauri::generate_handler![
             runtime::start_runtime,
+            runtime::runtime_password,
             runtime::stop_runtime,
             runtime::workspace_path,
             runtime::workspace_base,

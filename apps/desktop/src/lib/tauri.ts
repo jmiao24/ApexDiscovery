@@ -24,6 +24,17 @@ export async function startRuntime(): Promise<string | null> {
 }
 
 /**
+ * Per-run password the sidecar requires on every request (desktop only —
+ * browser dev talks to a user-run, passwordless `opencode serve`). Held in
+ * memory on both sides; never persisted.
+ */
+export async function runtimePassword(): Promise<string | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("runtime_password");
+}
+
+/**
  * Pick local files via the native dialog and copy them into the agent
  * workspace (desktop only). Returns the workspace file names; [] on cancel.
  */

@@ -47,6 +47,9 @@ export class OpenCodeClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly authHeader: string | null;
+  /** Base64 `user:password` for `?auth_token=` — the EventSource cannot set
+   *  headers, and the server accepts the same Basic payload as a query param. */
+  private readonly authToken: string | null;
   /** Workspace folder this client is scoped to. OpenCode serves many folders
    *  from ONE process (per-directory instances): the event stream, session
    *  creation and the directory-scoped lookups all carry `?directory=`, so
@@ -73,9 +76,8 @@ export class OpenCodeClient {
     this.customFetch = !!opts.fetchImpl;
     // Bind to globalThis — an unbound `fetch` reference throws "Illegal invocation" in browsers.
     this.fetchImpl = (opts.fetchImpl ?? globalThis.fetch).bind(globalThis);
-    this.authHeader = opts.password
-      ? "Basic " + btoa(`${opts.username ?? "opencode"}:${opts.password}`)
-      : null;
+    this.authToken = opts.password ? btoa(`${opts.username ?? "opencode"}:${opts.password}`) : null;
+    this.authHeader = this.authToken ? `Basic ${this.authToken}` : null;
     this.directory = opts.directory ?? null;
   }
 
@@ -102,14 +104,14 @@ export class OpenCodeClient {
   connect(): Promise<void> {
     this.setStatus("connecting");
 
-    // Prefer EventSource in a real webview/browser (reliable SSE, incl. macOS WKWebView).
-    // Fall back to streaming fetch for node/tests or when custom auth headers are needed.
-    const canUseEventSource =
-      !this.customFetch && !this.authHeader && typeof EventSource !== "undefined";
+    // Prefer EventSource in a real webview/browser (reliable SSE, incl. macOS
+    // WKWebView) — auth rides along as ?auth_token=, since EventSource cannot
+    // set headers. Fall back to streaming fetch for node/tests.
+    const canUseEventSource = !this.customFetch && typeof EventSource !== "undefined";
     if (canUseEventSource) {
       return new Promise((resolve, reject) => {
         let opened = false;
-        const es = new EventSource(`${this.baseUrl}/event${this.dirQuery()}`);
+        const es = new EventSource(this.eventUrl());
         this.es = es;
         es.onopen = () => {
           opened = true;
@@ -140,7 +142,7 @@ export class OpenCodeClient {
     this.abort = new AbortController();
     return new Promise((resolve, reject) => {
       let opened = false;
-      this.fetchImpl(`${this.baseUrl}/event${this.dirQuery()}`, {
+      this.fetchImpl(this.eventUrl(), {
         headers: { Accept: "text/event-stream", ...this.headers() },
         signal: this.abort!.signal,
       })
@@ -515,6 +517,15 @@ export class OpenCodeClient {
    *  alone resolves the instance; sending a path as workspace 500s the server). */
   private dirQuery(): string {
     return this.directory ? `?directory=${encodeURIComponent(this.directory)}` : "";
+  }
+
+  /** The /event stream URL: directory scope + auth_token (EventSource has no headers). */
+  private eventUrl(): string {
+    const params = new URLSearchParams();
+    if (this.directory) params.set("directory", this.directory);
+    if (this.authToken) params.set("auth_token", this.authToken);
+    const q = params.toString();
+    return `${this.baseUrl}/event${q ? `?${q}` : ""}`;
   }
 
   /** Pending questions in the workspace (recovery on open — an ask can predate connect). */

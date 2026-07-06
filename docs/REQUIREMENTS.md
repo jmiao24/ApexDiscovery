@@ -237,8 +237,8 @@ competitors.
   install prompts for approval on a shell command; a URL containing `&` opens
   correctly on Windows; a `while True: pass` cell can be reset without
   restarting the app).
-- **Status.** 🟡 Partial — approval modes shipped 2026-07-05; the rest is open.
-  Severity-ranked backlog:
+- **Status.** 🟡 Partial — approval modes shipped 2026-07-05; sidecar auth +
+  preview-server token shipped 2026-07-06. Severity-ranked backlog:
 
   **Critical — safety defaults (AGENTS.md non-negotiable):**
   - [x] **Approval mode is not configured anywhere.** ~~The bundled OpenCode
@@ -252,11 +252,22 @@ competitors.
     binary: rules land in the build agent's resolved ruleset after the builtin
     `*: allow` (last-match-wins), and a 22-case simulation using OpenCode's
     verbatim wildcard/evaluate algorithm behaves as designed.
-  - [ ] **Sidecar runs with `--cors "*"` and no server auth**
-    (`runtime.rs:270`): any local webpage can scan loopback ports, drive agent
-    turns, and `GET /global/config` to read stored API keys. Remove the flag or
-    add auth. Same for the preview server's `Access-Control-Allow-Origin: *` +
-    no token + no Host check (`preview_server.rs:64`) — add a per-URL token.
+  - [x] **Sidecar runs with `--cors "*"` and no server auth.** ~~Any local
+    webpage can scan loopback ports, drive agent turns, and `GET /global/config`
+    to read stored API keys.~~ **Fixed (2026-07-06):** the sidecar now requires
+    OpenCode's built-in Basic auth via a per-run CSPRNG password
+    (`OPENCODE_SERVER_PASSWORD`, in-memory only, never on disk); the SDK sends
+    the `Authorization` header on every call and keeps the reliable EventSource
+    SSE path via `?auth_token=`. `--cors "*"` removed (verified in the 1.17.13
+    source: it was an exact-match literal, never a wildcard — the real exposure
+    was the built-in allowlist trusting all localhost origins, which auth now
+    gates). Verified against the running bundled binary: no/wrong password →
+    401 on `/global/config`, `/session`, `/event`; correct password → 200;
+    `?auth_token=` streams SSE. The preview server likewise requires a per-run
+    CSPRNG token as the URL's first path segment (relative subresources in
+    HTML previews inherit it; sandboxed iframes need no cookies) and no longer
+    sends `Access-Control-Allow-Origin: *` (previews render in iframe/img,
+    never cross-origin fetch).
   - [x] **Workspace confinement doesn't bind bash**: file tools prompt via
     `external_directory`, but bash (default `allow`, real `$HOME`) escapes
     freely. Covered by the permission fix above (in "Approve for me" mode;
@@ -294,10 +305,10 @@ competitors.
     (`runtime.rs:393`, `artifact_file.rs:397,485`); `record_provenance` holds
     its mutex across `pip freeze` and re-parses the whole JSONL per write
     (`provenance.rs:225,268-283`).
-  - [ ] Windows Jupyter token is guessable (`pid + nanos`, `jupyter.rs:106-125`)
-    — use a CSPRNG. `detect_tools` (`tools.rs:15`) probes without
-    `enriched_path()`, so Finder-launched apps misreport Python/R/uv as
-    missing.
+  - [ ] ~~Windows Jupyter token is guessable (`pid + nanos`)~~ — fixed
+    2026-07-06 (shared CSPRNG `random_hex`). Still open: `detect_tools`
+    (`tools.rs:15`) probes without `enriched_path()`, so Finder-launched apps
+    misreport Python/R/uv as missing.
 
   **Cleanup — structure (not urgent):**
   - [ ] Split `lib/runtime.ts` (1,014 lines, ~6 concerns): extract the pure
@@ -610,7 +621,7 @@ competitors.
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | 🟡 Partial — 3 checks + PDF-manuscript extractor shipped; weak-model robustness pending |
 | **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | 🟡 **Partial — 3 gates ship (physics/earth/biology), deterministic + pluggable; library round-trip + more fields pending** |
 | P0-6 | Large files: reference, don't load | P0 | 🟡 Partial — memory-pointer probe ships (table/parquet/hdf5/fits/netcdf/log); genomics/GRIB/ROOT pending |
-| **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — approval modes shipped (Approve for me default / Full access, composer switch); still open: `--cors *` unauthenticated sidecar, plaintext keys, Windows cmd injection, kernel deadlock + backlog** |
+| **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — approval modes + sidecar/preview auth shipped (per-run password + tokened preview URLs, no CORS wildcard); still open: plaintext keys, Windows cmd injection, kernel deadlock + backlog** |
 | P1-1 | Multi-discipline from day one | P1 | 🟡 Partial — pluggable + climate example; non-bio depth pending |
 | P1-2 | Domain + literature connectors | P1 | 🟡 Partial — literature/bio + non-bio (Materials Project, FRED) shipped; physics/earth planned |
 | P1-3 | Scientific renderers | P1 | 🟡 Partial — base + 3D structure + genome + FITS + DOS + band + phase + qualitative-coding + anomaly map (all 4 disciplines; materials trio complete); ternary/coastlines next |

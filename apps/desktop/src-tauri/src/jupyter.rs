@@ -103,25 +103,11 @@ fn load_meta(app: &AppHandle) -> Option<ServerMeta> {
     serde_json::from_str(&text).ok()
 }
 
+// CSPRNG on every platform — the old Windows fallback (pid + nanos) was
+// guessable, and this token is the only thing between localhost and the
+// Jupyter server.
 fn random_token() -> String {
-    #[cfg(unix)]
-    {
-        use std::io::Read;
-        if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
-            let mut buf = [0u8; 16];
-            if f.read_exact(&mut buf).is_ok() {
-                return buf.iter().map(|b| format!("{b:02x}")).collect();
-            }
-        }
-    }
-    format!(
-        "{:x}{:x}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0)
-    )
+    crate::runtime::random_hex(16)
 }
 
 #[derive(serde::Serialize)]

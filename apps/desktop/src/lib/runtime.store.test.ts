@@ -32,6 +32,8 @@ const mocks = vi.hoisted(() => ({
     mocks.approvalMode = mode;
     return "http://127.0.0.1:1";
   }),
+  /** Constructor options every OpenCodeClient was created with. */
+  clientOpts: [] as Record<string, unknown>[],
 }));
 
 vi.mock("./tauri", () => ({
@@ -44,11 +46,15 @@ vi.mock("./tauri", () => ({
   newDatedWorkspace: mocks.newDatedWorkspace,
   getApprovalMode: async () => mocks.approvalMode,
   setApprovalMode: mocks.setApprovalMode,
+  runtimePassword: async () => "pw-test",
 }));
 vi.mock("./kernel", () => ({ kernelReset: mocks.kernelReset }));
 vi.mock("@ai4s/sdk", () => {
   class OpenCodeClient {
     private statusCb: (s: string) => void = () => {};
+    constructor(opts: Record<string, unknown>) {
+      mocks.clientOpts.push(opts);
+    }
     onStatus(cb: (s: string) => void) {
       this.statusCb = cb;
     }
@@ -151,6 +157,18 @@ beforeEach(async () => {
   });
   await useRuntimeStore.getState().connect();
   expect(useRuntimeStore.getState().status).toBe("ready");
+});
+
+describe("runtime authentication", () => {
+  it("connect() passes the per-run runtime password to the SDK client", async () => {
+    // The sidecar requires Basic auth (OPENCODE_SERVER_PASSWORD); an
+    // unauthenticated client would 401 on every call.
+    mocks.clientOpts.length = 0;
+    await useRuntimeStore.getState().connect();
+    expect(mocks.clientOpts[mocks.clientOpts.length - 1]).toMatchObject({
+      password: "pw-test",
+    });
+  });
 });
 
 describe("per-session workspace folders", () => {

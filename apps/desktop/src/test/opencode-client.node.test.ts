@@ -111,4 +111,53 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
     await expect(client.connect()).rejects.toBeTruthy();
     expect(client.getStatus()).toBe("error");
   });
+
+  it("sends Basic auth on API calls when a password is set", async () => {
+    // The sidecar now REQUIRES auth (OPENCODE_SERVER_PASSWORD) — every fetch
+    // must carry the Authorization header or the server answers 401.
+    const seen: (string | undefined)[] = [];
+    const capturing: typeof fetch = (input, init) => {
+      seen.push((init?.headers as Record<string, string> | undefined)?.["Authorization"]);
+      return fetch(input, init);
+    };
+    const client = new OpenCodeClient({
+      baseUrl: `http://127.0.0.1:${server.port}`,
+      password: "pw-secret",
+      fetchImpl: capturing,
+    });
+    await client.createSession();
+    expect(seen[0]).toBe("Basic " + Buffer.from("opencode:pw-secret").toString("base64"));
+  });
+
+  it("keeps the EventSource stream when a password is set, authenticating via auth_token", async () => {
+    // EventSource cannot set headers, but it is the reliable SSE path in the
+    // WKWebView — the server accepts the same Basic payload as ?auth_token=.
+    const urls: string[] = [];
+    class FakeEventSource {
+      onopen: (() => void) | null = null;
+      onmessage: unknown = null;
+      onerror: unknown = null;
+      constructor(url: string) {
+        urls.push(url);
+        setTimeout(() => this.onopen?.(), 0);
+      }
+      close() {}
+    }
+    (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
+    try {
+      const client = new OpenCodeClient({
+        baseUrl: `http://127.0.0.1:${server.port}`,
+        password: "pw-secret",
+        directory: "/ws/dir",
+      });
+      await client.connect();
+      expect(client.getStatus()).toBe("ready");
+      const token = Buffer.from("opencode:pw-secret").toString("base64");
+      expect(urls[0]).toContain(`auth_token=${encodeURIComponent(token)}`);
+      expect(urls[0]).toContain(`directory=${encodeURIComponent("/ws/dir")}`);
+      client.close();
+    } finally {
+      delete (globalThis as { EventSource?: unknown }).EventSource;
+    }
+  });
 });

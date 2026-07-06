@@ -244,6 +244,31 @@ pub(crate) fn enriched_path() -> String {
     parts.join(":")
 }
 
+/// `bytes` bytes of OS randomness as lowercase hex. Panics only if the OS
+/// CSPRNG is unavailable — a machine state where serving anything is unsafe.
+pub(crate) fn random_hex(bytes: usize) -> String {
+    let mut buf = vec![0u8; bytes];
+    getrandom::fill(&mut buf).expect("OS random source unavailable");
+    buf.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Per-run password the sidecar requires on every HTTP request (OpenCode's
+/// built-in Basic auth, `OPENCODE_SERVER_PASSWORD`). Generated fresh each app
+/// launch and held only in memory — never written to disk — so a local
+/// webpage that scans loopback ports can neither drive agent turns nor read
+/// `/global/config` (which carries provider API keys). The webview gets it
+/// via the `runtime_password` command; Tauri IPC is app-only.
+pub(crate) fn server_password() -> &'static str {
+    static PASSWORD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    PASSWORD.get_or_init(|| random_hex(16))
+}
+
+/// Expose the per-run sidecar password to the frontend SDK client.
+#[tauri::command]
+pub fn runtime_password() -> String {
+    server_password().to_string()
+}
+
 pub(crate) fn free_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
         .ok()
@@ -284,15 +309,13 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
         .shell()
         .sidecar("opencode")
         .map_err(|e| format!("sidecar not found: {e}"))?
-        .args([
-            "serve",
-            "--hostname",
-            "127.0.0.1",
-            "--port",
-            port_str.as_str(),
-            "--cors",
-            "*",
-        ])
+        .args(["serve", "--hostname", "127.0.0.1", "--port", port_str.as_str()])
+        // Require auth on every request (P0-7): without a password the server
+        // trusts ANY localhost-origin page (verified in the 1.17.13 source —
+        // its CORS allowlist admits http://localhost:*/127.0.0.1:* wholesale,
+        // and `--cors "*"` was only ever an exact-match literal, not a
+        // wildcard). The webview authenticates via the SDK; nothing else may.
+        .env("OPENCODE_SERVER_PASSWORD", server_password())
         // App-private dirs: OpenCode never touches the user's ~/.config/opencode.
         .env("XDG_CONFIG_HOME", cfg.to_string_lossy().to_string())
         .env("XDG_DATA_HOME", data.to_string_lossy().to_string())
@@ -439,8 +462,19 @@ pub fn kill_child(state: &RuntimeState) {
 
 #[cfg(test)]
 mod tests {
-    use super::{remove_key_from_config, sync_skill_pack};
+    use super::{random_hex, remove_key_from_config, sync_skill_pack};
     use std::fs;
+
+    #[test]
+    fn random_hex_is_csprng_shaped() {
+        // 16 bytes → 32 hex chars, fresh per call — the shape the sidecar
+        // password and the preview/Jupyter tokens rely on.
+        let a = random_hex(16);
+        let b = random_hex(16);
+        assert_eq!(a.len(), 32);
+        assert!(a.bytes().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(a, b, "two draws must differ");
+    }
 
     #[test]
     fn removes_only_the_named_config_entry() {

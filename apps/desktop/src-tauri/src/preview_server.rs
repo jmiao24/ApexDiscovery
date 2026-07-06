@@ -13,7 +13,7 @@ use crate::artifact_file::{mime_for, resolve_under};
 use crate::runtime::workspace_dir;
 
 #[derive(Default)]
-pub struct PreviewState(Mutex<Option<u16>>);
+pub struct PreviewState(Mutex<Option<(u16, String)>>);
 
 /// Percent-decode a URL path (%XX and '+' are the only forms we accept).
 fn percent_decode(s: &str) -> String {
@@ -59,9 +59,12 @@ fn encode_segment(seg: &str) -> String {
     out
 }
 
+// No Access-Control-Allow-Origin on purpose: previews render in <iframe>/<img>
+// (never cross-origin fetch), so advertising CORS would only let a foreign
+// page that learned a URL read workspace files.
 fn write_response(stream: &mut TcpStream, status: &str, mime: &str, body: &[u8], head_only: bool) {
     let header = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status}\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
         body.len()
     );
     let _ = stream.write_all(header.as_bytes());
@@ -70,7 +73,7 @@ fn write_response(stream: &mut TcpStream, status: &str, mime: &str, body: &[u8],
     }
 }
 
-fn handle<F: Fn(&str) -> Option<PathBuf>>(mut stream: TcpStream, root_of: &F) {
+fn handle<F: Fn(&str) -> Option<PathBuf>>(mut stream: TcpStream, token: &str, root_of: &F) {
     // Read the full request head (until \r\n\r\n) — it may arrive in several
     // TCP segments. We only serve GET/HEAD; bodies are ignored.
     let mut buf = Vec::with_capacity(1024);
@@ -100,9 +103,21 @@ fn handle<F: Fn(&str) -> Option<PathBuf>>(mut stream: TcpStream, root_of: &F) {
         return;
     }
     let decoded = percent_decode(raw_path.split('?').next().unwrap_or("/").trim_start_matches('/'));
+    // The per-run token is the FIRST path segment (`/<token>/w/…`). A path
+    // prefix — rather than a query param or cookie — so relative subresources
+    // inside a previewed HTML file inherit it, and the sandboxed iframe
+    // (opaque origin, no cookies) still works. Anything without it is refused
+    // before any filesystem work.
+    let after_token = match decoded.split_once('/') {
+        Some((tok, rest)) if tok == token => rest.to_string(),
+        _ => {
+            write_response(&mut stream, "403 Forbidden", "text/plain", b"forbidden", head_only);
+            return;
+        }
+    };
     // URLs are scope-prefixed: /w/<path> serves the active workspace, /b/<path>
     // the base folder — each resolved (and sandboxed) against its own root.
-    let (root, rel) = match decoded.split_once('/') {
+    let (root, rel) = match after_token.split_once('/') {
         Some((scope, rest)) if !rest.is_empty() => match root_of(scope) {
             Some(root) => (root, rest.to_string()),
             None => {
@@ -130,22 +145,24 @@ fn handle<F: Fn(&str) -> Option<PathBuf>>(mut stream: TcpStream, root_of: &F) {
     }
 }
 
-/// Serve files on a fresh loopback port. Each request names its scope in the
-/// URL (`/w/…` or `/b/…`) and `root_of(scope)` resolves the root AT THAT
-/// MOMENT — the active workspace moves when the user switches sessions, so a
-/// root captured at start-up would go stale. Returns the port; runs for the
-/// app's lifetime.
-pub fn serve<F>(root_of: F) -> std::io::Result<u16>
+/// Serve files on a fresh loopback port, gated by `token` (the URL's first
+/// path segment). Each request then names its scope (`/w/…` or `/b/…`) and
+/// `root_of(scope)` resolves the root AT THAT MOMENT — the active workspace
+/// moves when the user switches sessions, so a root captured at start-up
+/// would go stale. Returns the port; runs for the app's lifetime.
+pub fn serve<F>(token: &str, root_of: F) -> std::io::Result<u16>
 where
     F: Fn(&str) -> Option<PathBuf> + Send + Sync + 'static,
 {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
     let root_of = std::sync::Arc::new(root_of);
+    let token = std::sync::Arc::new(token.to_string());
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
             let root_of = root_of.clone();
-            std::thread::spawn(move || handle(stream, root_of.as_ref()));
+            let token = token.clone();
+            std::thread::spawn(move || handle(stream, &token, root_of.as_ref()));
         }
     });
     Ok(port)
@@ -183,18 +200,19 @@ pub fn preview_url(
     root: Option<String>,
 ) -> Result<String, String> {
     let mut guard = state.0.lock().unwrap();
-    let port = match *guard {
-        Some(p) => p,
+    let (port, token) = match guard.clone() {
+        Some(pt) => pt,
         None => {
             let handle = app.clone();
-            let p = serve(move |scope| match scope {
+            let token = crate::runtime::random_hex(16);
+            let p = serve(&token, move |scope| match scope {
                 "w" => workspace_dir(&handle).ok(),
                 "b" => crate::runtime::base_workspace_dir(&handle).ok(),
                 _ => None,
             })
             .map_err(|e| e.to_string())?;
-            *guard = Some(p);
-            p
+            *guard = Some((p, token.clone()));
+            (p, token)
         }
     };
     let scope = match root.as_deref().unwrap_or("workspace") {
@@ -204,7 +222,7 @@ pub fn preview_url(
     };
     let rel = relativize(&crate::artifact_file::scope_root(&app, root.as_deref())?, &path)?;
     let encoded: Vec<String> = rel.split('/').map(encode_segment).collect();
-    Ok(format!("http://127.0.0.1:{port}/{scope}/{}", encoded.join("/")))
+    Ok(format!("http://127.0.0.1:{port}/{token}/{scope}/{}", encoded.join("/")))
 }
 
 #[cfg(test)]
@@ -258,28 +276,62 @@ mod tests {
 
         let current = Arc::new(Mutex::new(a.clone()));
         let for_server = current.clone();
-        let port = serve(move |scope| {
+        let port = serve("tok", move |scope| {
             (scope == "w").then(|| for_server.lock().unwrap().clone())
         })
         .unwrap();
 
-        let (h, body) = get(port, "/w/f.html");
+        let (h, body) = get(port, "/tok/w/f.html");
         assert!(h.starts_with("HTTP/1.1 200"), "{h}");
         assert_eq!(body, b"in-a");
 
         *current.lock().unwrap() = b.clone();
-        let (h, body) = get(port, "/w/f.html");
+        let (h, body) = get(port, "/tok/w/f.html");
         assert!(h.starts_with("HTTP/1.1 200"), "{h}");
         assert_eq!(body, b"in-b");
 
         // An unknown scope (or a bare unscoped path) never serves anything.
-        let (h, _) = get(port, "/x/f.html");
+        let (h, _) = get(port, "/tok/x/f.html");
         assert!(h.starts_with("HTTP/1.1 404"), "{h}");
-        let (h, _) = get(port, "/f.html");
+        let (h, _) = get(port, "/tok/f.html");
         assert!(h.starts_with("HTTP/1.1 404"), "{h}");
 
         let _ = std::fs::remove_dir_all(a);
         let _ = std::fs::remove_dir_all(b);
+    }
+
+    #[test]
+    fn requires_the_per_run_token_and_sends_no_cors_header() {
+        // The token is the URL's first path segment, so a page that guessed the
+        // port still cannot read workspace files — and relative subresources in
+        // a previewed HTML file inherit it automatically. Responses carry no
+        // Access-Control-Allow-Origin: previews render in <iframe>/<img>, never
+        // via cross-origin fetch, so no other origin ever needs to read them.
+        let root = std::env::temp_dir().join(format!("ai4s-preview-token-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("f.html"), b"secret").unwrap();
+
+        let port = serve("sekret", {
+            let root = root.clone();
+            move |scope| (scope == "w").then(|| root.clone())
+        })
+        .unwrap();
+
+        // Correct token serves — without advertising CORS to foreign origins.
+        let (h, body) = get(port, "/sekret/w/f.html");
+        assert!(h.starts_with("HTTP/1.1 200"), "{h}");
+        assert_eq!(body, b"secret");
+        assert!(!h.contains("Access-Control-Allow-Origin"), "{h}");
+
+        // Tokenless (the pre-token URL shape) and wrong-token requests are refused.
+        let (h, _) = get(port, "/w/f.html");
+        assert!(h.starts_with("HTTP/1.1 403"), "{h}");
+        let (h, _) = get(port, "/guess/w/f.html");
+        assert!(h.starts_with("HTTP/1.1 403"), "{h}");
+        let (h, _) = get(port, "/sekret");
+        assert!(h.starts_with("HTTP/1.1 403"), "{h}");
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -289,27 +341,27 @@ mod tests {
         std::fs::write(root.join("sub/a.pdf"), b"%PDF-1.4 fake").unwrap();
         std::fs::write(root.join("b.html"), b"<h1>hi</h1>").unwrap();
 
-        let port = serve({
+        let port = serve("tok", {
             let root = root.clone();
             move |scope| (scope == "w").then(|| root.clone())
         })
         .unwrap();
 
-        let (h, body) = get(port, "/w/sub/a.pdf");
+        let (h, body) = get(port, "/tok/w/sub/a.pdf");
         assert!(h.starts_with("HTTP/1.1 200"), "{h}");
         assert!(h.contains("Content-Type: application/pdf"), "{h}");
         assert_eq!(body, b"%PDF-1.4 fake");
 
-        let (h, _) = get(port, "/w/b.html");
+        let (h, _) = get(port, "/tok/w/b.html");
         assert!(h.contains("Content-Type: text/html"), "{h}");
 
         // Traversal out of the root must 404.
-        let (h, _) = get(port, "/w/../../../etc/hosts");
+        let (h, _) = get(port, "/tok/w/../../../etc/hosts");
         assert!(h.starts_with("HTTP/1.1 404"), "{h}");
-        let (h, _) = get(port, "/w/%2e%2e/%2e%2e/etc/hosts");
+        let (h, _) = get(port, "/tok/w/%2e%2e/%2e%2e/etc/hosts");
         assert!(h.starts_with("HTTP/1.1 404"), "{h}");
 
-        let (h, _) = get(port, "/w/missing.pdf");
+        let (h, _) = get(port, "/tok/w/missing.pdf");
         assert!(h.starts_with("HTTP/1.1 404"), "{h}");
 
         let _ = std::fs::remove_dir_all(root);
