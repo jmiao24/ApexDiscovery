@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FolderOpen, Loader2, NotebookPen, PlugZap, Square } from "lucide-react";
+import { FolderOpen, Loader2, NotebookPen, PlugZap } from "lucide-react";
 import { DRAFT_KEY, rootSessionOf, useRuntimeStore } from "@/lib/runtime";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { useScrollMemory } from "@/lib/scrollMemory";
@@ -270,16 +270,6 @@ export function LiveSessionPage() {
                     {currentTool.title}
                   </span>
                 )}
-                {running && (
-                  <button
-                    onClick={() => void interrupt()}
-                    className="flex shrink-0 items-center gap-1 rounded-input px-2 py-0.5 text-xs ring-1 ring-border hover:bg-surface-2 hover:text-text"
-                    title="Interrupt this turn (Esc)"
-                  >
-                    <Square size={9} fill="currentColor" />
-                    Stop
-                  </button>
-                )}
               </div>
             )}
           </div>
@@ -303,6 +293,8 @@ export function LiveSessionPage() {
               onRunCommand={(n, a) => void onRunCommand(n, a)}
               commands={commands}
               disabled={!connected || working}
+              working={running}
+              onStop={() => void interrupt()}
               placeholder={
                 working ? "Waiting for the reply…" : connected ? "Ask anything" : "Connect to chat"
               }

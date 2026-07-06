@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
-import { ArrowUp, Paperclip, Terminal, X } from "lucide-react";
+import { ArrowUp, Paperclip, Square, Terminal, X } from "lucide-react";
 import { addFilesToWorkspace, addTextToWorkspace, isTauri } from "@/lib/tauri";
 import { useUiStore } from "@/lib/store";
 import { toast } from "@/lib/toast";
@@ -59,6 +59,8 @@ export function Composer({
   onRunCommand,
   commands = [],
   disabled,
+  working,
+  onStop,
   placeholder = "Ask anything",
 }: {
   onSend?: (text: string) => void;
@@ -66,6 +68,9 @@ export function Composer({
   onRunCommand?: (name: string, args: string) => void;
   commands?: ComposerCommand[];
   disabled?: boolean;
+  /** A turn is running: the send button becomes Stop (wired to `onStop`). */
+  working?: boolean;
+  onStop?: () => void;
   placeholder?: string;
 }) {
   const [value, setValue] = useState("");
@@ -423,14 +428,27 @@ export function Composer({
           )}
           aria-label="Ask anything"
         />
-        <button
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-input bg-accent text-accent-fg hover:opacity-90 disabled:opacity-40"
-          aria-label="Send"
-          onClick={submit}
-          disabled={!canSend}
-        >
-          <ArrowUp size={15} />
-        </button>
+        {working && onStop ? (
+          // Same spot, same shape, one action: the send button becomes Stop
+          // while the agent works — always live, even though the input is not.
+          <button
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-input bg-accent text-accent-fg hover:opacity-90"
+            aria-label="Stop"
+            title="Interrupt this turn (Esc)"
+            onClick={onStop}
+          >
+            <Square size={11} fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-input bg-accent text-accent-fg hover:opacity-90 disabled:opacity-40"
+            aria-label="Send"
+            onClick={submit}
+            disabled={!canSend}
+          >
+            <ArrowUp size={15} />
+          </button>
+        )}
       </div>
     </div>
   );

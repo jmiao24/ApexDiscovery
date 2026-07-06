@@ -51,6 +51,20 @@ describe("Composer", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onSend).not.toHaveBeenCalled();
   });
+
+  it("turns the send button into Stop while working, back to Send when done", () => {
+    const onStop = vi.fn();
+    const { rerender } = render(<Composer onSend={vi.fn()} disabled working onStop={onStop} />);
+    // The send arrow is gone; in its place a live Stop button (the composer
+    // itself stays disabled while the agent works).
+    expect(screen.queryByLabelText("Send")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Stop"));
+    expect(onStop).toHaveBeenCalledTimes(1);
+
+    rerender(<Composer onSend={vi.fn()} onStop={onStop} />);
+    expect(screen.queryByLabelText("Stop")).toBeNull();
+    expect(screen.getByLabelText("Send")).toBeInTheDocument();
+  });
 });
 
 const COMMANDS = [
