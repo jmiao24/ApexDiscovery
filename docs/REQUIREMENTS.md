@@ -308,10 +308,10 @@ competitors.
     the next run respawns.
 
   **Moderate — robustness:**
-  - [ ] Sidecar restart logic is copy-pasted 3× in `runtime.rs` with no
-    lifecycle lock (`jupyter.rs:27` has one): concurrent calls can double-spawn
-    and orphan a child. Extract one `restart_sidecar()` under a lifecycle
-    mutex.
+  - [x] ~~Sidecar restart logic is copy-pasted with no lifecycle lock:
+    concurrent calls can double-spawn and orphan a child.~~ Fixed 2026-07-06:
+    one `restart_sidecar()` — the kill→spawn runs while holding the child
+    mutex (the lifecycle lock), used by all four config-changing commands.
   - [ ] No liveness supervision: a crashed sidecar/Jupyter stays "running"
     (`runtime.rs:286`, `jupyter.rs:250` ignore the `Terminated` event); OpenCode
     orphans on force-quit (Jupyter has pid-file cleanup, the sidecar doesn't).

@@ -147,10 +147,7 @@ pub fn import_opencode_login(app: AppHandle, state: State<'_, RuntimeState>) -> 
 
     // Restart the running sidecar so /config/providers reflects the login.
     if state.url.lock().unwrap().is_some() {
-        kill_child(&state);
-        let port = { *state.port.lock().unwrap().get_or_insert_with(free_port) };
-        let child = spawn_sidecar(&app, port)?;
-        *state.child.lock().unwrap() = Some(child);
+        restart_sidecar(&app, &state)?;
     }
     Ok(true)
 }
@@ -356,6 +353,23 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
     // Drain events so the child's stdout/stderr buffer never blocks it.
     tauri::async_runtime::spawn(async move { while rx.recv().await.is_some() {} });
     Ok(child)
+}
+
+/// Kill and respawn the sidecar on its stable port, returning the base URL.
+/// The whole kill→spawn runs while HOLDING the child mutex — it doubles as
+/// the lifecycle lock, so two concurrent restarts (e.g. Settings saves racing
+/// an approval-mode switch) can never double-spawn and orphan a child. This
+/// is the single restart path; config-changing commands must use it.
+fn restart_sidecar(app: &AppHandle, state: &RuntimeState) -> Result<String, String> {
+    let mut child = state.child.lock().unwrap();
+    if let Some(c) = child.take() {
+        let _ = c.kill();
+    }
+    let port = { *state.port.lock().unwrap().get_or_insert_with(free_port) };
+    *child = Some(spawn_sidecar(app, port)?);
+    let url = format!("http://127.0.0.1:{port}");
+    *state.url.lock().unwrap() = Some(url.clone());
+    Ok(url)
 }
 
 /// Start the bundled OpenCode (idempotent). Returns its base URL.
@@ -622,10 +636,7 @@ pub fn remove_config_entry(
     tighten_private(&path);
 
     if state.url.lock().unwrap().is_some() {
-        kill_child(&state);
-        let port = { *state.port.lock().unwrap().get_or_insert_with(free_port) };
-        let child = spawn_sidecar(&app, port)?;
-        *state.child.lock().unwrap() = Some(child);
+        restart_sidecar(&app, &state)?;
     }
     Ok(())
 }
@@ -675,15 +686,8 @@ pub fn set_approval_mode(
     tighten_private(&path);
 
     // Same restart flow as configure_opencode: reload rules on a stable port.
-    let was_running = state.url.lock().unwrap().is_some();
-    if was_running {
-        kill_child(&state);
-        let port = { *state.port.lock().unwrap().get_or_insert_with(free_port) };
-        let child = spawn_sidecar(&app, port)?;
-        *state.child.lock().unwrap() = Some(child);
-        let url = format!("http://127.0.0.1:{port}");
-        *state.url.lock().unwrap() = Some(url.clone());
-        Ok(url)
+    if state.url.lock().unwrap().is_some() {
+        restart_sidecar(&app, &state)
     } else {
         Ok(path.to_string_lossy().to_string())
     }
@@ -710,15 +714,8 @@ pub fn configure_opencode(
     tighten_private(&path);
 
     // Restart so the running server reloads the new provider config.
-    let was_running = state.url.lock().unwrap().is_some();
-    if was_running {
-        kill_child(&state);
-        let port = { *state.port.lock().unwrap().get_or_insert_with(free_port) };
-        let child = spawn_sidecar(&app, port)?;
-        *state.child.lock().unwrap() = Some(child);
-        let url = format!("http://127.0.0.1:{port}");
-        *state.url.lock().unwrap() = Some(url.clone());
-        Ok(url)
+    if state.url.lock().unwrap().is_some() {
+        restart_sidecar(&app, &state)
     } else {
         Ok(path.to_string_lossy().to_string())
     }
