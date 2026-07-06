@@ -347,10 +347,153 @@ def check_biology(ctx: Ctx) -> list[Finding]:
 
 
 # --------------------------------------------------------------------------- #
+# Chemistry — molecular validity (valence)
+# --------------------------------------------------------------------------- #
+
+# Max bonds an uncharged organic-subset atom can form. Only elements whose
+# valence is unambiguous are listed — carbon (never 5-bonded) and the
+# monovalent halogens are the high-precision cases the acceptance names.
+_MAX_VALENCE = {"C": 4, "F": 1, "Cl": 1, "Br": 1, "I": 1}
+# Variable names / call names that mark a string literal as a molecule SMILES.
+_SMILES_VARS = re.compile(r"(?:^|_)(smiles?|smi|mol)$", re.IGNORECASE)
+_SMILES_FUNCS = {"MolFromSmiles", "MolFromSmarts", "smiles_to_mol", "read_smiles"}
+
+
+def _smiles_over_valence(smi: str) -> str | None:
+    """If some organic-subset atom in `smi` exceeds its valence by EXPLICIT
+    bonds, return "<Element> has N bonds"; else None. Returns None (bail) on any
+    SMILES feature we do not model — bracket atoms, unknown tokens — so we never
+    guess. Counts explicit bond orders only, so implicit-H atoms are safe."""
+    atoms: list[str] = []          # element per atom index
+    order: list[float] = []        # summed explicit bond order per atom
+    prev: int | None = None        # previous chain atom
+    pending: float | None = None   # explicit bond order awaiting the next atom
+    stack: list[int | None] = []   # branch return points
+    ring: dict[str, tuple[int, float]] = {}
+    bond_val = {"-": 1.0, "=": 2.0, "#": 3.0, ":": 1.5, "/": 1.0, "\\": 1.0}
+    i, n = 0, len(smi)
+    if not smi:
+        return None
+    while i < n:
+        ch = smi[i]
+        if ch == "[":
+            return None  # bracket atom — its valence/charge/H is explicit; bail
+        if ch in bond_val:
+            pending = bond_val[ch]
+            i += 1
+            continue
+        if ch == "(":
+            stack.append(prev)
+            i += 1
+            continue
+        if ch == ")":
+            if not stack:
+                return None
+            prev = stack.pop()
+            i += 1
+            continue
+        if ch == ".":
+            prev, pending = None, None
+            i += 1
+            continue
+        if ch.isdigit() or ch == "%":
+            if ch == "%":
+                label, i = smi[i + 1 : i + 3], i + 3
+            else:
+                label, i = ch, i + 1
+            if prev is None:
+                return None
+            o = pending or 1.0
+            if label in ring:
+                a0, o0 = ring.pop(label)
+                b = max(o, o0)
+                order[a0] += b
+                order[prev] += b
+            else:
+                ring[label] = (prev, o)
+            pending = None
+            continue
+        # atom
+        two = smi[i : i + 2]
+        if two in ("Cl", "Br"):
+            elem, i = two, i + 2
+        elif ch in "BCNOPSFI" or ch in "bcnops":
+            elem, i = ch.upper(), i + 1
+        else:
+            return None  # unmodeled token — bail rather than misparse
+        idx = len(atoms)
+        atoms.append(elem)
+        order.append(0.0)
+        if prev is not None:
+            o = pending or 1.0
+            order[prev] += o
+            order[idx] += o
+        pending = None
+        prev = idx
+    if stack or ring:
+        return None  # unbalanced branches / open ring bonds — malformed, bail
+    for elem, tot in zip(atoms, order):
+        cap = _MAX_VALENCE.get(elem)
+        if cap is not None and tot > cap:
+            # Round so an aromatic 1.5 pair reads as an integer count.
+            return f"{elem} has {int(round(tot))} bonds (max {cap})"
+    return None
+
+
+def _chem_finding(ctx: Ctx, lineno: int, smi: str, detail: str) -> Finding:
+    return Finding(
+        "error", "chem · valence",
+        "Invalid molecule: impossible valence in SMILES",
+        ctx.snippet(lineno)
+        + f'\n  "{smi}" — {detail}. This SMILES cannot be a real molecule; '
+        "validate with RDKit (Chem.MolFromSmiles returns None) instead of "
+        "emitting a structure from memory.",
+    )
+
+
+def check_chemistry(ctx: Ctx) -> list[Finding]:
+    out: list[Finding] = []
+    if ctx.tree is not None:
+        for node in ast.walk(ctx.tree):
+            # (a) smiles = "..."  /  smi = "..."
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant) \
+                    and isinstance(node.value.value, str):
+                named = any(
+                    isinstance(t, ast.Name) and _SMILES_VARS.search(t.id)
+                    for t in node.targets
+                )
+                if named:
+                    detail = _smiles_over_valence(node.value.value)
+                    if detail:
+                        out.append(_chem_finding(ctx, ctx.line_of(node), node.value.value, detail))
+            # (b) Chem.MolFromSmiles("...") and friends
+            if isinstance(node, ast.Call) and _call_name(node) in _SMILES_FUNCS:
+                for arg in node.args:
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        detail = _smiles_over_valence(arg.value)
+                        if detail:
+                            out.append(_chem_finding(ctx, ctx.line_of(node), arg.value, detail))
+        return out
+
+    # R / non-python fallback: SMILES assigned or passed by string literal.
+    for m in re.finditer(
+        r"""(?:smiles?|smi|mol)\s*(?:<-|=)\s*["']([^"']+)["']"""
+        r"""|(?:MolFromSmiles|MolFromSmarts|smiles_to_mol)\s*\(\s*["']([^"']+)["']""",
+        ctx.src, re.IGNORECASE,
+    ):
+        smi = m.group(1) or m.group(2)
+        detail = _smiles_over_valence(smi)
+        if detail:
+            ln = ctx.src[: m.start()].count("\n") + 1
+            out.append(_chem_finding(ctx, ln, smi, detail))
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # Registry + driver
 # --------------------------------------------------------------------------- #
 
-VALIDATORS = [check_physics, check_earth, check_biology]
+VALIDATORS = [check_physics, check_earth, check_biology, check_chemistry]
 
 _CODE_EXT = {".py": "python", ".r": "r", ".R": "r"}
 

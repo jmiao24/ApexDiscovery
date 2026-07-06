@@ -1,6 +1,6 @@
 ---
 name: domain-check
-description: Use whenever you write or run scientific analysis code (physics, earth/geo, or biology) in this workspace — before executing it and again after generating results. Runs a deterministic domain-correctness gate that catches code which runs but is scientifically wrong (unit/dimension mismatch, Euclidean distance on lat/lon without a CRS, 0-based/1-based coordinate and strand errors). Surfaces structured findings; never claims the code is correct.
+description: Use whenever you write or run scientific analysis code (physics, earth/geo, biology, or chemistry) in this workspace — before executing it and again after generating results. Runs a deterministic domain-correctness gate that catches code which runs but is scientifically wrong (unit/dimension mismatch, Euclidean distance on lat/lon without a CRS, 0-based/1-based coordinate and strand errors, impossible SMILES valence). Surfaces structured findings; never claims the code is correct.
 ---
 
 # Domain-correctness gate
@@ -43,9 +43,15 @@ It prints exactly one ` ```review ` fenced JSON block on stdout.
   half-open, so length is `end - start`, never `+1`); a sequence sliced from a
   stranded feature file (GFF/GTF/BED) with no reverse-complement for the `-`
   strand.
+- **chem · valence** — a SMILES string literal (assigned to a `smiles`/`smi`
+  variable, or passed to `MolFromSmiles`/`MolFromSmarts`) whose explicit bonds
+  give an atom an impossible valence — the classic five-bond carbon, or a
+  halogen bonded more than once. Flags a structure emitted from memory that
+  cannot be a real molecule; validate with RDKit instead.
 
-Rules favour precision: an unrecognized unit, or arithmetic with no discipline
-signal, is left silent rather than flagged.
+Rules favour precision: an unrecognized unit, arithmetic with no discipline
+signal, or a SMILES using bracket atoms (which carry their own valence/charge)
+is left silent rather than flagged.
 
 ## Reporting findings
 

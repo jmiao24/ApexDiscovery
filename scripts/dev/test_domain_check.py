@@ -133,6 +133,43 @@ class Biology(unittest.TestCase):
         self.assertNotIn("biology · strand", tags(src))
 
 
+class Chemistry(unittest.TestCase):
+    def test_five_bond_carbon_in_smiles_literal(self):
+        # The C&EN caffeine-test failure class: a carbon with 5 bonds. Here a
+        # neopentane-like center written with one bond too many.
+        src = 'smiles = "C(C)(C)(C)(C)C"\n'
+        self.assertIn("chem · valence", tags(src))
+
+    def test_five_bond_carbon_via_molfromsmiles_arg(self):
+        src = 'from rdkit import Chem\nmol = Chem.MolFromSmiles("CC(C)(C)(C)C")\n'
+        self.assertIn("chem · valence", tags(src))
+
+    def test_valid_caffeine_smiles_ok(self):
+        # A real, valid caffeine SMILES must NOT be flagged.
+        src = 'smiles = "Cn1cnc2c1c(=O)n(C)c(=O)n2C"\n'
+        self.assertNotIn("chem · valence", tags(src))
+
+    def test_valid_acetic_acid_ok(self):
+        self.assertNotIn("chem · valence", tags('smi = "CC(=O)O"\n'))
+
+    def test_over_valent_halogen(self):
+        # Fluorine can only bond once; two bonds is impossible.
+        self.assertIn("chem · valence", tags('smiles = "F(C)C"\n'))
+
+    def test_non_chemistry_string_not_parsed_as_smiles(self):
+        # A plain string not in a chemistry context is never treated as SMILES.
+        self.assertNotIn("chem · valence", tags('label = "C(C)(C)(C)(C)C"\n'))
+
+    def test_bracket_atoms_are_not_flagged(self):
+        # Bracket atoms specify their own valence/charge/H — we bail rather than
+        # risk a false positive (precision over recall).
+        self.assertNotIn("chem · valence", tags('smiles = "[C](C)(C)(C)(C)C"\n'))
+
+    def test_r_molfromsmiles_regex_fallback(self):
+        fs = findings('mol <- MolFromSmiles("C(C)(C)(C)(C)C")\n', lang="r")
+        self.assertTrue(any(f.tag == "chem · valence" for f in fs))
+
+
 class Driver(unittest.TestCase):
     def test_run_emits_contract(self):
         # end-to-end: temp file -> run() -> review contract shape.
