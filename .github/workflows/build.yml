@@ -79,7 +79,7 @@ jobs:
           NO_STRIP: true
         with:
           projectPath: apps/desktop
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} ${{ startsWith(matrix.platform, 'ubuntu') && '--verbose' || '' }}
           # On a v* tag push, attach installers to a draft GitHub Release.
           # Empty tagName (workflow_dispatch) skips release creation.
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
