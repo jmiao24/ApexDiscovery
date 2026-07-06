@@ -1,7 +1,9 @@
 name: build
 
-# Builds macOS (.dmg/.app) and Windows (NSIS .exe / .msi) installers.
-# Windows installers can only be produced on a Windows runner — hence the matrix.
+# Builds macOS (.dmg/.app), Windows (NSIS .exe / .msi) and Linux
+# (.deb/.rpm/.AppImage) installers. Each platform's installer can only be
+# produced on its own runner — hence the matrix. On a `v*` tag push the
+# installers are also attached to a draft GitHub Release.
 
 on:
   push:
@@ -20,9 +22,19 @@ jobs:
             target: x86_64-apple-darwin
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl \
+            wget file libxdo-dev libssl-dev libayatana-appindicator3-dev \
+            librsvg2-dev
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -62,9 +74,16 @@ jobs:
 
       - name: Build the app (Tauri)
         uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
           args: --target ${{ matrix.target }}
+          # On a v* tag push, attach installers to a draft GitHub Release.
+          # Empty tagName (workflow_dispatch) skips release creation.
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && format('Open Science {0}', github.ref_name) || '' }}
+          releaseDraft: true
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
@@ -75,4 +94,7 @@ jobs:
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.rpm
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
           if-no-files-found: warn

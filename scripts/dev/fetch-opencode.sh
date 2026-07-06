@@ -13,22 +13,29 @@ mkdir -p "$OUT_DIR"
 TRIPLE="${1:-$(rustc -Vv | sed -n 's/host: //p')}"
 
 case "$TRIPLE" in
-  aarch64-apple-darwin)      ASSET="opencode-darwin-arm64.zip" ;;
-  x86_64-apple-darwin)       ASSET="opencode-darwin-x64.zip" ;;
-  x86_64-pc-windows-msvc)    ASSET="opencode-windows-x64.zip" ;;
-  aarch64-pc-windows-msvc)   ASSET="opencode-windows-arm64.zip" ;;
+  aarch64-apple-darwin)         ASSET="opencode-darwin-arm64.zip" ;;
+  x86_64-apple-darwin)          ASSET="opencode-darwin-x64.zip" ;;
+  x86_64-pc-windows-msvc)       ASSET="opencode-windows-x64.zip" ;;
+  aarch64-pc-windows-msvc)      ASSET="opencode-windows-arm64.zip" ;;
+  x86_64-unknown-linux-gnu)     ASSET="opencode-linux-x64.tar.gz" ;;
+  aarch64-unknown-linux-gnu)    ASSET="opencode-linux-arm64.tar.gz" ;;
   *) echo "Unsupported triple: $TRIPLE" >&2; exit 1 ;;
 esac
 
 URL="https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/${ASSET}"
 TMP="$(mktemp -d)"
 echo "Downloading $URL"
-curl -fsSL "$URL" -o "$TMP/oc.zip"
-if command -v unzip >/dev/null 2>&1; then
-  unzip -oq "$TMP/oc.zip" -d "$TMP"
-else
-  tar -xf "$TMP/oc.zip" -C "$TMP"   # bsdtar (macOS/Windows) extracts zip
-fi
+curl -fsSL "$URL" -o "$TMP/$ASSET"
+case "$ASSET" in
+  *.tar.gz) tar -xzf "$TMP/$ASSET" -C "$TMP" ;;
+  *)
+    if command -v unzip >/dev/null 2>&1; then
+      unzip -oq "$TMP/$ASSET" -d "$TMP"
+    else
+      tar -xf "$TMP/$ASSET" -C "$TMP"   # bsdtar (macOS/Windows) extracts zip
+    fi
+    ;;
+esac
 
 # The archive contains an `opencode` (or opencode.exe) binary.
 if [ -f "$TMP/opencode.exe" ]; then

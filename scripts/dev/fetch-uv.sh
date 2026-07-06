@@ -13,6 +13,7 @@ TRIPLE="${1:-$(rustc -Vv | sed -n 's/host: //p')}"
 
 case "$TRIPLE" in
   aarch64-apple-darwin | x86_64-apple-darwin) ASSET="uv-$TRIPLE.tar.gz" ;;
+  x86_64-unknown-linux-gnu | aarch64-unknown-linux-gnu) ASSET="uv-$TRIPLE.tar.gz" ;;
   x86_64-pc-windows-msvc | aarch64-pc-windows-msvc) ASSET="uv-$TRIPLE.zip" ;;
   *) echo "Unsupported triple: $TRIPLE" >&2; exit 1 ;;
 esac
