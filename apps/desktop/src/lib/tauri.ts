@@ -274,6 +274,20 @@ export async function hpcCancel(host: string, jobId: string): Promise<void> {
   await invoke("hpc_cancel", { host, jobId });
 }
 
+export interface ModalStatus {
+  installed: boolean;
+  version: string | null;
+  authenticated: boolean;
+  hint: string | null;
+}
+
+/** Detect whether the user's Modal CLI is installed and authenticated. */
+export async function modalStatus(): Promise<ModalStatus | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ModalStatus>("modal_status");
+}
+
 /** Copy a bundled example project into the workspace (idempotent; never
  *  overwrites user edits). Returns the workspace directory name. */
 export async function installExample(name: string): Promise<string> {

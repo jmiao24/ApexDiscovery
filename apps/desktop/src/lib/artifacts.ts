@@ -13,6 +13,7 @@ import type {
 
 const EXT_KIND: Record<string, ArtifactKind> = {
   png: "figure", jpg: "figure", jpeg: "figure", gif: "figure", webp: "figure", svg: "figure",
+  fits: "figure", fit: "figure", fts: "figure",
   py: "script", r: "script", jl: "script", sh: "script",
   ipynb: "notebook",
   pdf: "report", tex: "report", md: "report", docx: "report", pptx: "report",
@@ -20,6 +21,7 @@ const EXT_KIND: Record<string, ArtifactKind> = {
   mol: "data", sdf: "data", smi: "data", smiles: "data",
   bed: "data", bedgraph: "data", bdg: "data", gff: "data", gff3: "data", gtf: "data", vcf: "data",
   stl: "model", obj: "model", ply: "model", gltf: "model", glb: "model",
+  dos: "data", qcode: "data", anom: "figure", eigenval: "data", phase: "figure",
 };
 
 const EXT_LANG: Record<string, string> = {
@@ -105,10 +107,19 @@ export type PreviewKind =
   | "pptx"
   | "molecule"
   | "mesh"
-  | "genome";
+  | "genome"
+  | "fits"
+  | "dos"
+  | "qcode"
+  | "anomaly"
+  | "bands"
+  | "phase";
 
 /** 3D mesh / CAD formats rendered by the three.js viewer. */
 export const MESH_EXTS = ["stl", "obj", "ply", "gltf", "glb"];
+
+/** FITS astronomy formats rendered by the native FITS viewer. */
+export const FITS_EXTS = ["fits", "fit", "fts"];
 
 /** How a file should be previewed, from its extension. This is the previewer
  *  registry: native webview viewers first (pdf/html/image via the local file
@@ -123,10 +134,25 @@ export function previewKind(ext: string): PreviewKind {
   if (e === "md" || e === "markdown") return "markdown";
   if (e === "docx" || e === "xlsx" || e === "pptx") return e;
   if (MESH_EXTS.includes(e)) return "mesh";
+  if (FITS_EXTS.includes(e)) return "fits";
+  if (e === "dos") return "dos";
+  if (e === "qcode") return "qcode";
+  if (e === "anom") return "anomaly";
+  if (e === "eigenval") return "bands";
+  if (e === "phase") return "phase";
   if (["mol", "mol2", "sdf", "smi", "smiles", "cif", "mcif", "mmcif", "pdb", "pqr", "xyz", "cube"].includes(e))
     return "molecule";
   if (["bed", "bedgraph", "bdg", "gff", "gff3", "gtf", "vcf"].includes(e)) return "genome";
   return "text";
+}
+
+/** Some scientific tools use fixed, extensionless filenames (VASP DOSCAR, …).
+ *  Prefer a name match, else fall back to the extension registry. */
+export function previewKindForName(filename: string): PreviewKind {
+  const base = (filename.split(/[\\/]/).pop() ?? filename).toLowerCase();
+  if (base === "doscar" || base.startsWith("doscar.")) return "dos";
+  if (base === "eigenval" || base.startsWith("eigenval.")) return "bands";
+  return previewKind(extOf(filename));
 }
 
 /** Build a previewable file-inspector from an artifact surfaced in the thread. */

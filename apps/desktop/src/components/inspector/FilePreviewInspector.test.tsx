@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FilePreviewInspector as FilePreviewInspectorT } from "@ai4s/shared";
-import { FilePreviewInspector } from "./FilePreviewInspector";
+import { FilePreviewInspector, PreviewError } from "./FilePreviewInspector";
 
 const md: FilePreviewInspectorT = {
   variant: "file",
@@ -38,5 +38,28 @@ describe("FilePreviewInspector — markdown", () => {
     rerender(<FilePreviewInspector data={b} onClose={() => {}} />);
     expect(await screen.findByRole("heading", { name: "Beta" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Alpha" })).not.toBeInTheDocument();
+  });
+});
+
+describe("PreviewError", () => {
+  it("shows a helpful card with Open-externally for a too-large file", async () => {
+    const onOpen = vi.fn();
+    render(
+      <PreviewError
+        error="file too large to preview (>25 MB)"
+        filename="huge.nc"
+        onOpenExternally={onOpen}
+      />,
+    );
+    expect(screen.getByText(/huge\.nc is too large to preview/)).toBeInTheDocument();
+    expect(screen.getByText(/large-file probe/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Open externally/ }));
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
+
+  it("renders other errors as a plain line, no card", () => {
+    render(<PreviewError error="Preview is available in the desktop app." filename="x.bin" onOpenExternally={() => {}} />);
+    expect(screen.getByText(/available in the desktop app/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open externally/ })).not.toBeInTheDocument();
   });
 });

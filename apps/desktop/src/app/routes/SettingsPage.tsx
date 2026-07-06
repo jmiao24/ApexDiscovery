@@ -35,6 +35,7 @@ import {
 } from "@/lib/tauri";
 import { setupScienceMcp } from "@/lib/tauri";
 import { ClusterCard } from "@/components/settings/ClusterCard";
+import { ModalCard } from "@/components/settings/ModalCard";
 import { DataFlowCard } from "@/components/settings/DataFlowCard";
 import { SCIENCE_CONNECTORS, connectorConfig } from "@/lib/scienceConnectors";
 import { toast } from "@/lib/toast";
@@ -60,6 +61,8 @@ export function SettingsPage() {
   const [settingUpJupyter, setSettingUpJupyter] = useState(false);
   // Which curated science connector is currently being provisioned, by id.
   const [enablingConnector, setEnablingConnector] = useState<string | null>(null);
+  // API keys typed for key-requiring connectors, keyed by connector id.
+  const [connectorKeys, setConnectorKeys] = useState<Record<string, string>>({});
 
   // Add-MCP-server form.
   const [mName, setMName] = useState("");
@@ -262,8 +265,9 @@ export function SettingsPage() {
     try {
       toast.success(`Setting up ${c.label} — first run downloads a managed Python, please wait…`);
       const python = await setupScienceMcp(c.pkg);
-      await getClient()!.addMcpServer(c.id, connectorConfig(c, python));
+      await getClient()!.addMcpServer(c.id, connectorConfig(c, python, connectorKeys[c.id]));
       toast.success(`${c.label} enabled — the agent can now use it from chat.`);
+      setConnectorKeys((k) => ({ ...k, [c.id]: "" })); // don't keep the key in UI state
       await refresh();
       await loadCatalog();
     } catch (e) {
@@ -616,35 +620,70 @@ export function SettingsPage() {
               {/* Curated open-source science connectors — one-click enable. */}
               {isTauri &&
                 SCIENCE_CONNECTORS.filter((c) => !mcpServers.some((s) => s.name === c.id)).map(
-                  (c) => (
-                    <div
-                      key={c.id}
-                      className="flex items-center gap-2.5 border-b border-border bg-surface px-3 py-2.5 text-[13px]"
-                    >
-                      <Search size={14} className="shrink-0 text-muted" />
-                      <div className="min-w-0 flex-1">
-                        <span className="font-medium text-text">{c.label}</span>
-                        <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted ring-1 ring-border">
-                          open source
-                        </span>
-                        <div className="truncate text-xs text-muted">{c.description}</div>
-                        <div className="truncate font-mono text-[11px] text-muted/70">{c.source}</div>
-                      </div>
-                      <button
-                        className={btnAccent("h-8")}
-                        onClick={() => void enableConnector(c.id)}
-                        disabled={enablingConnector !== null || busy}
+                  (c) => {
+                    const keyMissing = Boolean(c.apiKeyEnv) && !connectorKeys[c.id]?.trim();
+                    return (
+                      <div
+                        key={c.id}
+                        className="border-b border-border bg-surface px-3 py-2.5 text-[13px]"
                       >
-                        {enablingConnector === c.id ? (
-                          <>
-                            <Loader2 size={12} className="animate-spin" /> Setting up…
-                          </>
-                        ) : (
-                          "Enable"
+                        <div className="flex items-center gap-2.5">
+                          <Search size={14} className="shrink-0 text-muted" />
+                          <div className="min-w-0 flex-1">
+                            <span className="font-medium text-text">{c.label}</span>
+                            <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted ring-1 ring-border">
+                              {c.discipline}
+                            </span>
+                            <span className="ml-1.5 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted ring-1 ring-border">
+                              open source
+                            </span>
+                            <div className="truncate text-xs text-muted">{c.description}</div>
+                            <div className="truncate font-mono text-[11px] text-muted/70">
+                              {c.source}
+                              {c.installNote ? ` · ${c.installNote}` : ""}
+                            </div>
+                          </div>
+                          <button
+                            className={btnAccent("h-8")}
+                            onClick={() => void enableConnector(c.id)}
+                            disabled={enablingConnector !== null || busy || keyMissing}
+                            title={keyMissing ? "Enter the API key first" : undefined}
+                          >
+                            {enablingConnector === c.id ? (
+                              <>
+                                <Loader2 size={12} className="animate-spin" /> Setting up…
+                              </>
+                            ) : (
+                              "Enable"
+                            )}
+                          </button>
+                        </div>
+                        {c.apiKeyEnv && (
+                          <div className="mt-2 flex items-center gap-2 pl-6">
+                            <input
+                              type="password"
+                              value={connectorKeys[c.id] ?? ""}
+                              onChange={(e) =>
+                                setConnectorKeys((k) => ({ ...k, [c.id]: e.target.value }))
+                              }
+                              placeholder={`${c.apiKeyEnv} (free key)`}
+                              className="h-8 min-w-0 flex-1 rounded-input border border-border bg-surface-2 px-2 font-mono text-[12px] text-text placeholder:text-muted/60"
+                            />
+                            {c.apiKeyUrl && (
+                              <a
+                                href={c.apiKeyUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-accent hover:underline"
+                              >
+                                <ExternalLink size={11} /> Get a free key
+                              </a>
+                            )}
+                          </div>
                         )}
-                      </button>
-                    </div>
-                  ),
+                      </div>
+                    );
+                  },
                 )}
               {/* Featured: one-click Jupyter (shown until its MCP entry exists). */}
               {isTauri && !mcpServers.some((s) => s.name === "jupyter") && (
@@ -783,6 +822,8 @@ export function SettingsPage() {
 
         {/* ---- Cluster (HPC) ---- */}
         <ClusterCard />
+
+        <ModalCard />
 
         {/* ---- Privacy & data flow ---- */}
         <DataFlowCard model={defaultModel} workspace={wsPath} />

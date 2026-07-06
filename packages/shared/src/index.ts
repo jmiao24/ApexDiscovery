@@ -77,8 +77,13 @@ export interface ToolCallBlock {
 
 export type FindingLevel = "warn" | "ok" | "error";
 
-/** Which traceability audit produced a finding (P0-4's three first-class checks). */
-export type ReviewCheck = "citation" | "number" | "figure";
+/**
+ * Which check produced a finding: P0-4's three traceability audits, `domain`
+ * for P0-5's domain-correctness gates, and `integrity` for P1-6's
+ * analysis-integrity gate. `domain`/`integrity` findings carry their own `tag`
+ * (e.g. "physics · units", "stats · prereg") so new checks need no UI change.
+ */
+export type ReviewCheck = "citation" | "number" | "figure" | "domain" | "integrity";
 
 export interface ReviewFinding {
   level: FindingLevel;
@@ -86,6 +91,9 @@ export interface ReviewFinding {
   /** Monospace evidence body. */
   evidence?: string;
   check?: ReviewCheck;
+  /** Freeform label shown on the card, overriding the check name (used by
+   *  domain-correctness findings, e.g. "earth · crs"). */
+  tag?: string;
 }
 
 export interface ReviewerBlock {

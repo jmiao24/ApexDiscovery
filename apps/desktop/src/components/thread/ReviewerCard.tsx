@@ -13,6 +13,8 @@ const CHECK_TAG: Record<ReviewCheck, string> = {
   citation: "citation",
   number: "number",
   figure: "figure ↔ code",
+  domain: "domain",
+  integrity: "integrity",
 };
 
 /** Structured reviewer findings. Dismissal is a session-local reading aid —
@@ -57,9 +59,9 @@ export function ReviewerCard({ block }: { block: ReviewerBlock }) {
                   >
                     {badge.label}
                   </span>
-                  {f.check && (
+                  {(f.tag || f.check) && (
                     <span className="rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted ring-1 ring-border">
-                      {CHECK_TAG[f.check]}
+                      {f.tag ?? (f.check ? CHECK_TAG[f.check] : "")}
                     </span>
                   )}
                   <span className="text-sm font-medium text-text">{f.title}</span>

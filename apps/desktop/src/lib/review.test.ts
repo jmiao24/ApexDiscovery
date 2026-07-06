@@ -28,6 +28,50 @@ describe("splitReview", () => {
     expect(clean).toContain("I reviewed the figure.");
   });
 
+  it("parses a domain-correctness finding with its tag", () => {
+    const md =
+      "```review\n" +
+      JSON.stringify({
+        findings: [
+          {
+            level: "error",
+            check: "domain",
+            tag: "earth · crs",
+            title: "Euclidean distance on latitude/longitude",
+            evidence: "analysis.py:9",
+          },
+        ],
+        note: "Domain-correctness gate — no guarantee of correctness.",
+      }) +
+      "\n```";
+    const { review } = splitReview(md);
+    expect(review!.findings[0]).toMatchObject({
+      level: "error",
+      check: "domain",
+      tag: "earth · crs",
+      title: "Euclidean distance on latitude/longitude",
+    });
+  });
+
+  it("parses an analysis-integrity finding with its tag", () => {
+    const md =
+      "```review\n" +
+      JSON.stringify({
+        findings: [
+          {
+            level: "warn",
+            check: "integrity",
+            tag: "stats · prereg",
+            title: "Predictor not in the preregistration",
+            evidence: "analysis.py:2",
+          },
+        ],
+      }) +
+      "\n```";
+    const { review } = splitReview(md);
+    expect(review!.findings[0]).toMatchObject({ check: "integrity", tag: "stats · prereg" });
+  });
+
   it("leaves text untouched when there is no fence or the JSON is malformed", () => {
     expect(splitReview("plain answer").review).toBeNull();
     const malformed = "```review\n{not json}\n```";

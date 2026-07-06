@@ -1,17 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { Code2, Eye, ExternalLink, History, Loader2, X } from "lucide-react";
 import type { FilePreviewInspector as FilePreviewInspectorT } from "@ai4s/shared";
-import { extOf, previewKind, type PreviewKind } from "@/lib/artifacts";
+import { previewKindForName, type PreviewKind } from "@/lib/artifacts";
 import { base64ToBytes, openArtifactExternally, previewUrl, readArtifact } from "@/lib/artifactFile";
 import { parseTableFile } from "@/lib/csv";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { ProvenancePanel } from "./ProvenancePanel";
 import { TablePreview } from "./TablePreview";
+import { TableChart } from "./TableChart";
+import { canChart } from "@/lib/tableChart";
 import { DocxView, PptxView, XlsxView } from "./OfficePreview";
 import { MoleculeView } from "./MoleculeView";
 import { MeshView } from "./MeshView";
 import { GenomeView } from "./GenomeView";
+import { FitsView } from "./FitsView";
+import { DosView } from "./DosView";
+import { BandView } from "./BandView";
+import { QCodeView } from "./QCodeView";
+import { AnomalyMapView } from "./AnomalyMapView";
+import { PhaseView } from "./PhaseView";
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { cn } from "@/lib/cn";
 
@@ -29,13 +37,15 @@ export function FilePreviewInspector({
   data: FilePreviewInspectorT;
   onClose: () => void;
 }) {
-  const ext = extOf(data.filename);
-  const kind = previewKind(ext);
+  const kind = previewKindForName(data.filename);
   const needsUrl = kind === "pdf" || kind === "image" || kind === "html";
   const needsText =
     kind === "table" || kind === "text" || kind === "html" || kind === "markdown" ||
-    kind === "molecule" || kind === "genome";
-  const needsBytes = kind === "docx" || kind === "xlsx" || kind === "pptx" || kind === "mesh";
+    kind === "molecule" || kind === "genome" || kind === "qcode" || kind === "anomaly" ||
+    kind === "phase";
+  const needsBytes =
+    kind === "docx" || kind === "xlsx" || kind === "pptx" || kind === "mesh" ||
+    kind === "fits" || kind === "dos" || kind === "bands";
 
   const [url, setUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(data.content ?? null);
@@ -148,7 +158,13 @@ export function FilePreviewInspector({
             <Loader2 size={15} className="animate-spin" /> Loading {data.filename}…
           </div>
         )}
-        {!showHistory && !loading && error && <div className="p-4 text-sm text-muted">{error}</div>}
+        {!showHistory && !loading && error && (
+          <PreviewError
+            error={error}
+            filename={data.filename}
+            onOpenExternally={() => void openArtifactExternally(data.path, data.root)}
+          />
+        )}
         {!showHistory && !loading && !error && (
           <Body
             kind={kind}
@@ -196,6 +212,48 @@ function Body({
   if (kind === "mesh") {
     return bytes !== null ? (
       <MeshView filename={filename} bytes={bytes} />
+    ) : (
+      <Note text="Preview is available in the desktop app." />
+    );
+  }
+  if (kind === "fits") {
+    return bytes !== null ? (
+      <FitsView filename={filename} bytes={bytes} />
+    ) : (
+      <Note text="Preview is available in the desktop app." />
+    );
+  }
+  if (kind === "dos") {
+    return bytes !== null ? (
+      <DosView filename={filename} bytes={bytes} />
+    ) : (
+      <Note text="Preview is available in the desktop app." />
+    );
+  }
+  if (kind === "bands") {
+    return bytes !== null ? (
+      <BandView filename={filename} bytes={bytes} />
+    ) : (
+      <Note text="Preview is available in the desktop app." />
+    );
+  }
+  if (kind === "qcode") {
+    return text !== null ? (
+      <QCodeView filename={filename} text={text} />
+    ) : (
+      <Note text="Preview is available in the desktop app." />
+    );
+  }
+  if (kind === "anomaly") {
+    return text !== null ? (
+      <AnomalyMapView filename={filename} text={text} />
+    ) : (
+      <Note text="Preview is available in the desktop app." />
+    );
+  }
+  if (kind === "phase") {
+    return text !== null ? (
+      <PhaseView filename={filename} text={text} />
     ) : (
       <Note text="Preview is available in the desktop app." />
     );
@@ -292,7 +350,7 @@ function Body({
   }
   if (kind === "table") {
     return text !== null ? (
-      <TablePreview table={parseTableFile(filename, text)} />
+      <TableView table={parseTableFile(filename, text)} />
     ) : (
       <Note text="Preview is available in the desktop app." />
     );
@@ -308,6 +366,68 @@ function Body({
 
 function Note({ text }: { text: string }) {
   return <div className="p-4 text-sm text-muted">{text}</div>;
+}
+
+/** Tabular file preview with a Table ↔ Chart toggle. The Chart tab appears only
+ *  when the data has a numeric column to plot (P1-5 native chart surface). */
+function TableView({ table }: { table: import("@/lib/csv").ParsedTable }) {
+  const [view, setView] = useState<"table" | "chart">("table");
+  const chartable = canChart(table);
+  return (
+    <div className="flex h-full flex-col">
+      {chartable && (
+        <div className="flex items-center gap-1 border-b border-border px-3 py-1.5">
+          <ToggleBtn active={view === "table"} onClick={() => setView("table")}>
+            Table
+          </ToggleBtn>
+          <ToggleBtn active={view === "chart"} onClick={() => setView("chart")}>
+            Chart
+          </ToggleBtn>
+        </div>
+      )}
+      <div className="min-h-0 flex-1 overflow-auto">
+        {view === "chart" && chartable ? (
+          <TableChart table={table} />
+        ) : (
+          <TablePreview table={table} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Preview errors. A "too large" file gets a helpful card — the preview is
+ *  capped so a huge file can't lock the app; the user can still open it in the
+ *  OS app, and the agent can introspect it with the large-file probe. */
+export function PreviewError({
+  error,
+  filename,
+  onOpenExternally,
+}: {
+  error: string;
+  filename: string;
+  onOpenExternally: () => void;
+}) {
+  const tooLarge = /too large/i.test(error);
+  if (!tooLarge) return <div className="p-4 text-sm text-muted">{error}</div>;
+  return (
+    <div className="p-4">
+      <div className="rounded-card border border-border bg-surface p-4 text-sm text-muted">
+        <div className="mb-1 font-medium text-text">{filename} is too large to preview</div>
+        <p className="mb-3">
+          Previews are capped so a large file can't freeze the app. Open it in your
+          system app, or ask the agent to introspect it (schema, sample, key
+          numbers) with the large-file probe instead of loading the whole file.
+        </p>
+        <button
+          className="inline-flex items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-1.5 text-[13px] text-text hover:bg-surface"
+          onClick={onOpenExternally}
+        >
+          <ExternalLink size={13} /> Open externally
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function ToggleBtn({

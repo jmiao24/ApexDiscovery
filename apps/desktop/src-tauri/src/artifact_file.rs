@@ -5,6 +5,16 @@ use tauri::AppHandle;
 
 use crate::runtime::workspace_dir;
 
+/// Largest file we inline into a preview. Beyond this the UI shows a "too large"
+/// note (with an open-externally affordance) rather than loading it — a huge
+/// file must never lock the app. Large scientific files are meant to be
+/// introspected via the large-file probe, not loaded whole.
+const PREVIEW_CAP_BYTES: u64 = 25 * 1024 * 1024;
+
+pub(crate) fn exceeds_preview_cap(size: u64) -> bool {
+    size > PREVIEW_CAP_BYTES
+}
+
 #[derive(serde::Serialize)]
 pub struct ArtifactFile {
     path: String,
@@ -53,6 +63,15 @@ pub fn mime_for(ext: &str) -> (&'static str, bool) {
         "ply" => ("model/ply", false),
         "gltf" => ("model/gltf+json", false),
         "glb" => ("model/gltf-binary", false),
+        // FITS astronomy files — binary (base64) so the native viewer gets an
+        // ArrayBuffer to parse (header cards + big-endian image/spectrum data).
+        "fits" | "fit" | "fts" => ("application/fits", false),
+        // Qualitative-coding traceback — JSON text, rendered by the native viewer.
+        "qcode" => ("application/json", true),
+        // Climate-anomaly grid — CSV/text, rendered by the native map viewer.
+        "anom" => ("text/csv", true),
+        // Binary phase diagram — JSON text, rendered by the native viewer.
+        "phase" => ("application/json", true),
         "txt" => ("text/plain", true),
         "docx" => ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", false),
         "xlsx" => ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", false),
@@ -164,12 +183,16 @@ pub fn read_artifact(app: AppHandle, path: String, root: Option<String>) -> Resu
         .unwrap_or("")
         .to_string();
     let (mime, is_text) = mime_for(&ext);
-    let bytes = std::fs::read(&full).map_err(|e| format!("read failed: {e}"))?;
-    let size = bytes.len() as u64;
-    // Cap previews so a huge file can't lock the UI.
-    if size > 25 * 1024 * 1024 {
-        return Err("file too large to preview (>25 MB)".into());
+    // Check the size from metadata BEFORE reading the bytes — otherwise a
+    // multi-GB file is fully loaded into memory (and can OOM the app) before the
+    // cap is ever consulted. Stat first, reject early, then read.
+    let size = std::fs::metadata(&full)
+        .map_err(|e| format!("read failed: {e}"))?
+        .len();
+    if exceeds_preview_cap(size) {
+        return Err(format!("file too large to preview (>{} MB)", PREVIEW_CAP_BYTES / (1024 * 1024)));
     }
+    let bytes = std::fs::read(&full).map_err(|e| format!("read failed: {e}"))?;
     let (encoding, data) = if is_text {
         ("utf8", String::from_utf8_lossy(&bytes).into_owned())
     } else {
@@ -473,13 +496,22 @@ fn base64_encode(input: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{base64_encode, dir_entries, locate_under, mime_for, unique_name};
+    use super::{base64_encode, dir_entries, exceeds_preview_cap, locate_under, mime_for, unique_name};
 
     #[test]
     fn genome_and_molecule_files_are_text() {
         for ext in ["bed", "bedgraph", "gff", "gff3", "gtf", "vcf"] {
             assert!(mime_for(ext).1, "{ext} must be a text type");
         }
+    }
+
+    #[test]
+    fn preview_cap_rejects_only_oversize_files() {
+        assert!(!exceeds_preview_cap(0));
+        assert!(!exceeds_preview_cap(1024));
+        assert!(!exceeds_preview_cap(25 * 1024 * 1024)); // exactly the cap is allowed
+        assert!(exceeds_preview_cap(25 * 1024 * 1024 + 1)); // one byte over is rejected
+        assert!(exceeds_preview_cap(2 * 1024 * 1024 * 1024)); // a 2 GB file never loads
     }
 
     #[test]

@@ -8,6 +8,7 @@ import {
   extToKind,
   fileInspectorFromBlock,
   previewKind,
+  previewKindForName,
   refToArtifactBlock,
   resolveArtifactContent,
 } from "./artifacts";
@@ -141,6 +142,28 @@ describe("previewKind", () => {
     ]) {
       expect(previewKind(ext)).toBe("molecule");
     }
+  });
+
+  it("renders FITS astronomy files with the FITS viewer", () => {
+    for (const ext of ["fits", "fit", "fts"]) expect(previewKind(ext)).toBe("fits");
+  });
+});
+
+describe("previewKindForName", () => {
+  it("recognizes extensionless VASP files by filename", () => {
+    expect(previewKindForName("DOSCAR")).toBe("dos");
+    expect(previewKindForName("run/DOSCAR")).toBe("dos");
+    expect(previewKindForName("DOSCAR.dat")).toBe("dos");
+    expect(previewKindForName("nacl.dos")).toBe("dos");
+    expect(previewKindForName("EIGENVAL")).toBe("bands");
+    expect(previewKindForName("run/EIGENVAL")).toBe("bands");
+  });
+
+  it("falls back to the extension registry for everything else", () => {
+    expect(previewKindForName("sky.fits")).toBe("fits");
+    expect(previewKindForName("plot.png")).toBe("image");
+    expect(previewKindForName("notes.md")).toBe("markdown");
+    expect(previewKindForName("main.py")).toBe("text");
   });
 });
 

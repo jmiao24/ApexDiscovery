@@ -6,12 +6,13 @@ import {
   FlaskConical,
   Folder,
   Image as ImageIcon,
+  Highlighter,
   Loader2,
   NotebookPen,
   Sheet,
   X,
 } from "lucide-react";
-import { extOf, extToKind, previewKind, type PreviewKind } from "@/lib/artifacts";
+import { extOf, extToKind, previewKindForName, type PreviewKind } from "@/lib/artifacts";
 import { listDir, type DirEntry } from "@/lib/artifactFile";
 import { isTauri, workspaceBase } from "@/lib/tauri";
 import { useRuntimeStore } from "@/lib/runtime";
@@ -26,13 +27,14 @@ const EXT_LANG: Record<string, string> = {
 
 function iconFor(entry: DirEntry) {
   if (entry.isDir) return <Folder size={15} className="text-accent" />;
-  const kind = previewKind(extOf(entry.name));
+  const kind = previewKindForName(entry.name);
   const cls = "text-muted";
   if (entry.name.endsWith(".ipynb")) return <NotebookPen size={15} className={cls} />;
-  if (kind === "image") return <ImageIcon size={15} className={cls} />;
+  if (kind === "image" || kind === "fits" || kind === "anomaly" || kind === "phase") return <ImageIcon size={15} className={cls} />;
   if (kind === "table") return <Sheet size={15} className={cls} />;
-  if (kind === "molecule") return <FlaskConical size={15} className={cls} />;
+  if (kind === "molecule" || kind === "dos" || kind === "bands") return <FlaskConical size={15} className={cls} />;
   if (kind === "genome") return <Dna size={15} className={cls} />;
+  if (kind === "qcode") return <Highlighter size={15} className={cls} />;
   return <FileText size={15} className={cls} />;
 }
 
@@ -168,7 +170,7 @@ function FilePreview({
 }) {
   const ext = extOf(entry.name);
   if (ext === "ipynb") return <NotebookEditor path={entry.path} root={root} onClose={onClose} />;
-  const kind: PreviewKind = previewKind(ext);
+  const kind: PreviewKind = previewKindForName(entry.name);
   return (
     <FilePreviewInspector
       data={{

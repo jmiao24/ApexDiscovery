@@ -9,6 +9,23 @@ Audit a workspace document (report, manuscript, or notebook) with three checks.
 You verify **traceability** — that claims trace to sources, data, and code —
 not truth. Never state or imply that the document is error-free.
 
+## PDF manuscripts — extract first, never guess
+
+If the document is a **PDF**, do not read the raw bytes or infer its contents.
+Run the bundled extractor first — it pulls the text plus the concrete citation
+identifiers and quantitative claims deterministically, so you audit real
+identifiers, not ones recalled from memory:
+
+```bash
+python "$XDG_CONFIG_HOME/opencode/skills/traceability-review/pdf_extract.py" MANUSCRIPT.pdf
+```
+
+It prints JSON: `{backend, pages, chars, citations:{dois,arxiv,pmids},
+claims:[{kind,text,context}], text}`. Use `citations` as the input to Check 1,
+`claims` as the input to Check 2, and `text` to locate figure references for
+Check 3. If it returns `{"error": …}` (no PDF backend installed), say so plainly
+and fall back to whatever text you can read — do not fabricate identifiers.
+
 ## Check 1 · Citation audit
 
 1. Extract every citation identifier from the document: DOI (`10.xxxx/…`),
