@@ -218,6 +218,99 @@ competitors.
   genomics formats (BAM/CRAM/FASTQ via pysam), GRIB, and ROOT; and wiring the
   probe into an automatic pre-read step in the UI.
 
+### P0-7 · Safety-defaults compliance + audit debt — 🔴 Open · NEW (2026-07-05 audit)
+
+- **Evidence.** A four-track architecture audit (layering/boundaries, Rust
+  backend, frontend structure, safety defaults) on 2026-07-05. Overall verdict:
+  the skeleton is solid — the SDK boundary is real (zero raw HTTP in the app),
+  package deps are clean, zero `any`/`ts-ignore` under strict mode, 274
+  behavioral tests, exemplary pure domain parsers, and uniform Rust path
+  sandboxing (`resolve_under`). But the AGENTS.md non-negotiable safety
+  defaults are not met, and two serious Rust defects exist. Note: this
+  contradicts P2-3's "approval mode ✅" — the permission *UI* ships and works,
+  but under shipped defaults it only fires for external-directory and
+  doom-loop, not for command execution.
+- **Requirement.** Close the gap between the promised safety defaults and what
+  the shipped binary actually does; fix the two critical Rust defects; then pay
+  down the structural debt.
+- **Acceptance.** Each checkbox below is independently verifiable (a fresh
+  install prompts for approval on a shell command; a URL containing `&` opens
+  correctly on Windows; a `while True: pass` cell can be reset without
+  restarting the app).
+- **Status.** 🔴 Open. Severity-ranked backlog:
+
+  **Critical — safety defaults (AGENTS.md non-negotiable):**
+  - [ ] **Approval mode is not configured anywhere.** The bundled OpenCode
+    1.17.13 binary's embedded default is `{"*":"allow"}` (only
+    `doom_loop`/`external_directory` default to `ask`), so bash / file edits /
+    dependency installs run **unprompted**. Fix: write a `permission` block
+    (`bash`/`edit`/`webfetch`: `"ask"`) into the app-private `opencode.json`
+    before sidecar start (`opencode_config.rs` `merge_config`).
+  - [ ] **Sidecar runs with `--cors "*"` and no server auth**
+    (`runtime.rs:270`): any local webpage can scan loopback ports, drive agent
+    turns, and `GET /global/config` to read stored API keys. Remove the flag or
+    add auth. Same for the preview server's `Access-Control-Allow-Origin: *` +
+    no token + no Host check (`preview_server.rs:64`) — add a per-URL token.
+  - [ ] **Workspace confinement doesn't bind bash**: file tools prompt via
+    `external_directory`, but bash (default `allow`, real `$HOME`) escapes
+    freely. Covered by the permission fix above.
+  - [ ] **API keys are plaintext on disk** — provider keys, connector keys
+    (MP/FRED), and the Jupyter token all land in `opencode.json` (not only the
+    mode-600 `auth.json` P2-3 describes). The keychain revert (P2-3) was a
+    deliberate call for signed-release reasons; revisit, and meanwhile at
+    minimum keep secrets out of world-readable config and out of the
+    unauthenticated `/global/config` surface. (Verified clean: no keys in
+    provenance/logs/localStorage/git.)
+
+  **Critical — Rust defects:**
+  - [ ] **Windows command injection** in `open_url`/`os_open`
+    (`artifact_file.rs:466-478`, `:222-237`): `cmd /C start "" <arg>` lets
+    `cmd` re-parse `&`/`^`/`|`, so an agent-emitted link like
+    `https://x.com/?a=1&calc` executes `calc`; also breaks any legit URL
+    containing `&`. Use ShellExecuteW / `tauri-plugin-opener`.
+  - [ ] **Kernel deadlock** (`kernel.rs:282-295`): `kernel_execute` holds the
+    global kernel-map mutex across an unbounded blocking `read_line`; a
+    `while True: pass` cell wedges every kernel command **including
+    `kernel_reset`** — only an app restart recovers. Per-kernel locks + read
+    timeout/interrupt.
+
+  **Moderate — robustness:**
+  - [ ] Sidecar restart logic is copy-pasted 3× in `runtime.rs` with no
+    lifecycle lock (`jupyter.rs:27` has one): concurrent calls can double-spawn
+    and orphan a child. Extract one `restart_sidecar()` under a lifecycle
+    mutex.
+  - [ ] No liveness supervision: a crashed sidecar/Jupyter stays "running"
+    (`runtime.rs:286`, `jupyter.rs:250` ignore the `Terminated` event); OpenCode
+    orphans on force-quit (Jupyter has pid-file cleanup, the sidecar doesn't);
+    killed kernels are never `wait()`ed → zombies (`kernel.rs:309-322`).
+  - [ ] Blocking work on async workers: dialog calls park tokio workers
+    (`runtime.rs:393`, `artifact_file.rs:397,485`); `record_provenance` holds
+    its mutex across `pip freeze` and re-parses the whole JSONL per write
+    (`provenance.rs:225,268-283`).
+  - [ ] Windows Jupyter token is guessable (`pid + nanos`, `jupyter.rs:106-125`)
+    — use a CSPRNG. `detect_tools` (`tools.rs:15`) probes without
+    `enriched_path()`, so Finder-launched apps misreport Python/R/uv as
+    missing.
+
+  **Cleanup — structure (not urgent):**
+  - [ ] Split `lib/runtime.ts` (1,014 lines, ~6 concerns): extract the pure
+    fold/history reducers and connection/retry; stop hardcoding `OpenScience/`
+    in `tidyToolTitle` (`runtime.ts:835`).
+  - [ ] Extract ProvidersCard/McpCard from `SettingsPage.tsx` (903 lines, 20
+    `useState`, zero tests) following the existing ClusterCard pattern.
+  - [ ] Hot-path rerenders: no-selector `useRuntimeStore()` in `Sidebar.tsx:22`,
+    `SettingsPage.tsx:51`, `SkillsPage.tsx:13` rerenders per SSE token — use
+    selectors.
+  - [ ] Delete dead entities: 10 empty `features/*` dirs,
+    `lib/{api,events,store,theme}/`, 5 empty `components/*` dirs, README-only
+    `packages/ui`; remove the unused `xlsx` CDN-tarball dep
+    (`package.json:45` — code uses exceljs).
+  - [ ] Schema duplication: `ProvenanceRecord` + MIME registries are
+    hand-mirrored TS↔Rust with no schema-version field — add a version field +
+    a cross-language round-trip fixture test.
+  - [ ] Bundle: three.js is statically imported (~600 KB in the initial bundle
+    via `MeshView.tsx:3`) — lazy-load it; `debug_log.rs` has no rotation.
+
 ---
 
 ## P1 — Strong differentiators (win vs. the criticism)
@@ -510,6 +603,7 @@ competitors.
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | 🟡 Partial — 3 checks + PDF-manuscript extractor shipped; weak-model robustness pending |
 | **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | 🟡 **Partial — 3 gates ship (physics/earth/biology), deterministic + pluggable; library round-trip + more fields pending** |
 | P0-6 | Large files: reference, don't load | P0 | 🟡 Partial — memory-pointer probe ships (table/parquet/hdf5/fits/netcdf/log); genomics/GRIB/ROOT pending |
+| **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🔴 **Open — 2026-07-05 audit: permission mode never configured (bash defaults to allow), `--cors *` unauthenticated sidecar, Windows cmd injection, kernel deadlock; + moderate/cleanup backlog** |
 | P1-1 | Multi-discipline from day one | P1 | 🟡 Partial — pluggable + climate example; non-bio depth pending |
 | P1-2 | Domain + literature connectors | P1 | 🟡 Partial — literature/bio + non-bio (Materials Project, FRED) shipped; physics/earth planned |
 | P1-3 | Scientific renderers | P1 | 🟡 Partial — base + 3D structure + genome + FITS + DOS + band + phase + qualitative-coding + anomaly map (all 4 disciplines; materials trio complete); ternary/coastlines next |
