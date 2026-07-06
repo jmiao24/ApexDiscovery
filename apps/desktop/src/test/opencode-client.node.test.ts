@@ -93,6 +93,19 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
     client.close();
   });
 
+  it("maps time.completed onto history messages and aborts a session", async () => {
+    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    await client.connect();
+    const sessionId = await client.createSession();
+    await client.sendPrompt(sessionId, "run a literature review");
+    const messages = await client.getMessages(sessionId);
+    const last = messages[messages.length - 1];
+    expect(last.role).toBe("assistant");
+    expect(last.completed).toBe(2); // the turn is over — the reconcile signal
+    await expect(client.abortSession(sessionId)).resolves.toBeUndefined();
+    client.close();
+  });
+
   it("reports an error status when the server is unreachable", async () => {
     const client = new OpenCodeClient({ baseUrl: "http://127.0.0.1:1" });
     await expect(client.connect()).rejects.toBeTruthy();

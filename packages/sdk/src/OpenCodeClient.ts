@@ -238,10 +238,24 @@ export class OpenCodeClient {
     );
     if (!res.ok) throw new Error(`Failed to load messages (${res.status})`);
     const arr = (await res.json()) as Array<{
-      info: { role: "user" | "assistant" };
+      info: { role: "user" | "assistant"; time?: { completed?: number } };
       parts: HistoryMessage["parts"];
     }>;
-    return arr.map((m) => ({ role: m.info.role, parts: m.parts ?? [] }));
+    return arr.map((m) => ({
+      role: m.info.role,
+      completed: m.info.time?.completed,
+      parts: m.parts ?? [],
+    }));
+  }
+
+  /** Interrupt the session's current turn (POST /session/:id/abort). A no-op
+   *  on an idle session — the server just answers false. */
+  async abortSession(sessionId: string): Promise<void> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/session/${encodeURIComponent(sessionId)}/abort`,
+      { method: "POST", headers: this.headers(true), body: "{}" },
+    );
+    if (!res.ok) throw new Error(`Failed to interrupt the session (${res.status})`);
   }
 
   /** Real skills loaded by OpenCode (built-in + bundled + user). */

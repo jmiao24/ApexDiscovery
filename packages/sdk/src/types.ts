@@ -144,6 +144,9 @@ export interface CommandInfo {
 /** A message loaded from history (GET /session/:id/message). */
 export interface HistoryMessage {
   role: "user" | "assistant";
+  /** Epoch ms when the message finished — unset while it is still streaming.
+   *  On the LAST message this is the server's truth for "is the turn over". */
+  completed?: number;
   parts: HistoryPart[];
 }
 export interface HistoryPart {

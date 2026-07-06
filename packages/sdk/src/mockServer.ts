@@ -34,7 +34,7 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
     push({ type: "session.idle", properties: { sessionID } });
     messages[sessionID] = [
       { info: { role: "user" }, parts: [{ type: "text", text: "run a literature review" }] },
-      { info: { role: "assistant" }, parts: [{ type: "text", text: "Planning the analysis. Wrote data/corpus.csv." }] },
+      { info: { role: "assistant", time: { created: 1, completed: 2 } }, parts: [{ type: "text", text: "Planning the analysis. Wrote data/corpus.csv." }] },
     ];
   };
 
@@ -62,6 +62,11 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
       return;
     }
     if (req.method === "DELETE" && /^\/session\/[^/]+$/.test(url)) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end("true");
+      return;
+    }
+    if (req.method === "POST" && /^\/session\/[^/]+\/abort$/.test(url)) {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end("true");
       return;

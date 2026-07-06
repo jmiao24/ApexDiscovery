@@ -36,7 +36,12 @@ export function CommandPalette() {
         e.preventDefault();
         setOpen(!useUiStore.getState().paletteOpen);
       }
-      if (e.key === "Escape") setOpen(false);
+      // Consume Esc only when the palette is open — a marked-handled Esc must
+      // not also interrupt a running agent turn (LiveSessionPage listens too).
+      if (e.key === "Escape" && useUiStore.getState().paletteOpen) {
+        e.preventDefault();
+        setOpen(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

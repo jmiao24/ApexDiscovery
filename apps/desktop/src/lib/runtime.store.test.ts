@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   runShell: vi.fn(),
   runCommand: vi.fn(),
   replyPermission: vi.fn(),
+  abortSession: vi.fn(),
+  getMessages: vi.fn(),
+  /** History the mock server returns for any session. */
+  messages: [] as unknown[],
   /** Next runShell call throws (HTTP-level failure). */
   failShell: false,
   /** Next runCommand call throws before any event (HTTP-level failure). */
@@ -102,6 +106,13 @@ vi.mock("@ai4s/sdk", () => {
     async replyPermission(requestId: string, reply: string) {
       mocks.replyPermission(requestId, reply);
     }
+    async abortSession(sid: string) {
+      mocks.abortSession(sid);
+    }
+    async getMessages(sid: string) {
+      mocks.getMessages(sid);
+      return mocks.messages;
+    }
     close() {}
   }
   return { OpenCodeClient, DEFAULT_OPENCODE_URL: "http://127.0.0.1:4096" };
@@ -117,6 +128,7 @@ beforeEach(async () => {
   mocks.failShell = false;
   mocks.failCommand = false;
   mocks.dropCommandPost = false;
+  mocks.messages = [];
   useRuntimeStore.setState({
     currentId: null,
     workspacePinned: false,
@@ -392,6 +404,85 @@ describe("subagent permission asks and long sync turns", () => {
     expect(mocks.replyPermission).toHaveBeenCalledTimes(3);
     expect(mocks.replyPermission).toHaveBeenCalledWith("per_b", "always");
     expect(useRuntimeStore.getState().permissions).toHaveLength(0);
+  });
+});
+
+// A missed session.idle (SSE reconnect window, directory-scoped event stream)
+// must not spin "Working…" forever: the store reconciles its running locks
+// against the server's truth, and the user can always interrupt a turn.
+describe("stale running locks and interrupt", () => {
+  const doneHistory = [
+    { role: "user", parts: [{ type: "text", text: "hi" }] },
+    { role: "assistant", completed: 1783301200079, parts: [{ type: "text", text: "all done" }] },
+  ];
+
+  it("reconcileRunning clears a stale lock and reloads the missed history", async () => {
+    await useRuntimeStore.getState().sendPrompt("hi");
+    expect(useRuntimeStore.getState().runningSessions["ses_new"]).toBe(true);
+    mocks.messages = doneHistory; // the turn ended server-side; idle was missed
+    await useRuntimeStore.getState().reconcileRunning();
+    const s = useRuntimeStore.getState();
+    expect(s.runningSessions["ses_new"]).toBeUndefined();
+    expect(
+      s.threads["ses_new"].blocks.some((b) => b.kind === "agent" && b.markdown === "all done"),
+    ).toBe(true);
+  });
+
+  it("reconcileRunning keeps the lock while the turn is genuinely running", async () => {
+    await useRuntimeStore.getState().sendPrompt("hi");
+    mocks.messages = [
+      { role: "user", parts: [{ type: "text", text: "hi" }] },
+      { role: "assistant", parts: [{ type: "text", text: "thinking…" }] }, // no `completed`
+    ];
+    await useRuntimeStore.getState().reconcileRunning();
+    expect(useRuntimeStore.getState().runningSessions["ses_new"]).toBe(true);
+  });
+
+  it("connect() reconciles running locks left over from before the reconnect", async () => {
+    await useRuntimeStore.getState().sendPrompt("hi");
+    mocks.messages = doneHistory;
+    await useRuntimeStore.getState().connect(); // e.g. a workspace switch
+    await new Promise((r) => setTimeout(r, 10)); // reconcile runs behind connect
+    expect(useRuntimeStore.getState().runningSessions["ses_new"]).toBeUndefined();
+  });
+
+  it("interrupt aborts the turn, unlocks the composer and marks the thread", async () => {
+    await useRuntimeStore.getState().sendPrompt("hi");
+    await useRuntimeStore.getState().interrupt();
+    expect(mocks.abortSession).toHaveBeenCalledWith("ses_new");
+    const s = useRuntimeStore.getState();
+    expect(s.runningSessions["ses_new"]).toBeUndefined();
+    expect(s.sending).toBe(false);
+    expect(s.threads["ses_new"].blocks.slice(-1)[0]).toEqual({
+      kind: "status-line",
+      text: "Interrupted",
+      tone: "error",
+    });
+  });
+
+  it("the abort's own error/idle events add no noise after an interrupt", async () => {
+    await useRuntimeStore.getState().sendPrompt("hi");
+    await useRuntimeStore.getState().interrupt();
+    const before = useRuntimeStore.getState().threads["ses_new"].blocks;
+    mocks.fireEvent({ type: "error", sessionId: "ses_new", message: "The message was aborted" });
+    mocks.fireEvent({ type: "session.idle", sessionId: "ses_new" });
+    expect(useRuntimeStore.getState().threads["ses_new"].blocks).toEqual(before);
+  });
+
+  it("a new turn after an interrupt folds its events normally again", async () => {
+    await useRuntimeStore.getState().sendPrompt("hi");
+    await useRuntimeStore.getState().interrupt();
+    mocks.fireEvent({ type: "session.idle", sessionId: "ses_new" }); // consumes the guard
+    await useRuntimeStore.getState().sendPrompt("again");
+    mocks.fireEvent({ type: "session.idle", sessionId: "ses_new" });
+    const s = useRuntimeStore.getState();
+    expect(s.runningSessions["ses_new"]).toBeUndefined();
+    expect(s.threads["ses_new"].blocks.slice(-1)[0]).toMatchObject({ kind: "status-line", tone: "done" });
+  });
+
+  it("interrupt does nothing when no turn is running", async () => {
+    await useRuntimeStore.getState().interrupt();
+    expect(mocks.abortSession).not.toHaveBeenCalled();
   });
 });
 

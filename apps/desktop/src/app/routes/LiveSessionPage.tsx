@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FolderOpen, Loader2, NotebookPen, PlugZap } from "lucide-react";
+import { FolderOpen, Loader2, NotebookPen, PlugZap, Square } from "lucide-react";
 import { DRAFT_KEY, rootSessionOf, useRuntimeStore } from "@/lib/runtime";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { useScrollMemory } from "@/lib/scrollMemory";
@@ -46,6 +46,8 @@ export function LiveSessionPage() {
     answerQuestion,
     rejectQuestion,
     replyPermission,
+    interrupt,
+    reconcileRunning,
   } = useRuntimeStore();
 
   // A deliberate workspace move restarts the sidecar — expected and brief, so
@@ -90,6 +92,36 @@ export function LiveSessionPage() {
   // working indicator, so a sent message is never silently "nowhere".
   const running = !!(currentId && runningSessions[currentId]);
   const working = sending || running;
+  // What the agent is doing right now — the newest still-running tool call.
+  const currentTool = working
+    ? [...(thread?.blocks ?? [])]
+        .reverse()
+        .find((b): b is Extract<typeof b, { kind: "tool-call" }> =>
+          b.kind === "tool-call" && b.status === "running",
+        )
+    : undefined;
+
+  // Esc interrupts the running turn (like a terminal agent). Modals own Esc
+  // while open; the composer's palette marks its Esc as handled.
+  useEffect(() => {
+    if (!running) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+      void interrupt();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [running, interrupt]);
+
+  // Backstop while "Working…": if session.idle got lost (SSE reconnect
+  // windows), a slow poll re-checks the server so the spinner can never
+  // outlive the turn.
+  useEffect(() => {
+    if (!running) return;
+    const t = window.setInterval(() => void reconcileRunning(), 15_000);
+    return () => window.clearInterval(t);
+  }, [running, reconcileRunning]);
 
   // The oldest unanswered request blocks the run — surface it. Requests from
   // subagents carry their CHILD session id; resolve through the parent chain
@@ -224,13 +256,30 @@ export function LiveSessionPage() {
             {working && (
               // Typing-indicator at the bottom of the conversation: the message
               // just echoed above it, so the user always sees the send is alive.
-              <div className="flex items-center gap-2 text-sm text-muted">
-                <Loader2 size={14} className="animate-spin" />
-                {activeRequest
-                  ? "Paused — the agent needs your answer below"
-                  : sending && !currentId
-                    ? "Starting the session in its folder…"
-                    : "Working…"}
+              <div className="flex min-w-0 items-center gap-2 text-sm text-muted">
+                <Loader2 size={14} className="shrink-0 animate-spin" />
+                <span className="shrink-0">
+                  {activeRequest
+                    ? "Paused — the agent needs your answer below"
+                    : sending && !currentId
+                      ? "Starting the session in its folder…"
+                      : "Working…"}
+                </span>
+                {!activeRequest && currentTool && (
+                  <span className="truncate font-mono text-xs" title={currentTool.title}>
+                    {currentTool.title}
+                  </span>
+                )}
+                {running && (
+                  <button
+                    onClick={() => void interrupt()}
+                    className="flex shrink-0 items-center gap-1 rounded-input px-2 py-0.5 text-xs ring-1 ring-border hover:bg-surface-2 hover:text-text"
+                    title="Interrupt this turn (Esc)"
+                  >
+                    <Square size={9} fill="currentColor" />
+                    Stop
+                  </button>
+                )}
               </div>
             )}
           </div>

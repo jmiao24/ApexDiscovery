@@ -129,6 +129,12 @@ interface RuntimeState {
   runShell: (command: string) => Promise<string | null>;
   /** Run a "/" slash command (config command / skill / MCP prompt). */
   runCommand: (name: string, args?: string) => Promise<string | null>;
+  /** Interrupt the current session's running turn (Stop button / Esc). */
+  interrupt: () => Promise<void>;
+  /** Check every session holding a running lock against the server: if its
+   *  turn is actually over (idle was missed — SSE reconnect windows, the
+   *  directory-scoped event stream), reload the missed history and unlock. */
+  reconcileRunning: () => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
   hideExample: (id: string) => void;
   installSkill: (text: string) => Promise<string | null>;
@@ -151,6 +157,19 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 /** Tool calls already written to provenance — success events can repeat per callId. */
 const recordedProvenance = new Set<string>();
+
+/** Sessions the user just interrupted: the thread already shows "Interrupted",
+ *  so the abort's own trailing events (an "aborted" error, session.idle) must
+ *  not add a second line. Consumed by the idle event; a new turn clears it. */
+const interruptedSessions = new Set<string>();
+
+/** Server-side truth for "is this session's turn over": the last message is an
+ *  assistant message that has finished streaming (time.completed set). A last
+ *  USER message means a turn was accepted but not yet answered — still running. */
+export function turnIsOver(messages: HistoryMessage[]): boolean {
+  const last = messages[messages.length - 1];
+  return !!last && last.role === "assistant" && !!last.completed;
+}
 
 /** Last SSE arrival per session (monotonic sequence, not wall time). Lets a
  *  failed sync POST tell "the connection died but the turn is alive" (events
@@ -248,6 +267,7 @@ async function performTurn(
       void get().refreshSessions();
     }
     const sid = id;
+    interruptedSessions.delete(sid); // a fresh turn folds its events normally
     void logDebug(`turn → ${sid}`);
     if (syncTurn) {
       set((s) => ({
@@ -460,6 +480,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         // line where the user is looking), and it ends that session's turn so
         // the composer unlocks. Errors without a session keep the banner.
         const sid = event.sessionId;
+        // After a user interrupt the abort's own "aborted" error is expected —
+        // the thread already says "Interrupted"; don't add a second red line.
+        if (sid && interruptedSessions.has(sid)) return;
         if (sid) {
           set((s) => {
             const cur = s.threads[sid] ?? emptyThread();
@@ -506,6 +529,19 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       }
       const sid = event.sessionId;
       if (!sid) return;
+      // The idle after a user interrupt: the thread already ends with
+      // "Interrupted" — consume the guard, keep the locks clear, skip the fold.
+      if (event.type === "session.idle" && interruptedSessions.delete(sid)) {
+        set((s) => {
+          const runningSessions = { ...s.runningSessions };
+          const shellTurns = { ...s.shellTurns };
+          delete runningSessions[sid];
+          delete shellTurns[sid];
+          return { runningSessions, shellTurns };
+        });
+        void get().refreshSessions();
+        return;
+      }
       // A task tool names the subagent session it spawned — remember the
       // parent link so the child's permission/question asks surface in THIS
       // conversation, and refresh the list so the child's title is known.
@@ -559,6 +595,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       // Catalog (skills/agents/commands) fills in behind the page — a session
       // switch must not wait on it to show the conversation.
       void get().loadCatalog();
+      // Every reconnect is a window where session.idle can have been missed
+      // (the event stream is directory-scoped and torn down on purpose) —
+      // check any session still holding a running lock against the server.
+      void get().reconcileRunning();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       void logDebug(`connect FAILED: ${msg}`);
@@ -706,6 +746,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         /* pending-request recovery is best-effort */
       }
     })();
+    // A session reopened while "Working…" may have finished behind our back.
+    void get().reconcileRunning();
     if (get().threads[id]?.loaded) return;
     try {
       const messages = await client.getMessages(id);
@@ -746,6 +788,69 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       (sid) => client!.runCommand(sid, name, args),
       true,
     ),
+
+  interrupt: async () => {
+    const sid = get().currentId;
+    if (!sid || !client || !get().runningSessions[sid]) return;
+    try {
+      await client.abortSession(sid);
+    } catch {
+      // The abort POST failing usually means the turn is already dead —
+      // fall through: unlock locally either way so the user is never stuck.
+    }
+    interruptedSessions.add(sid);
+    set((s) => {
+      const runningSessions = { ...s.runningSessions };
+      const shellTurns = { ...s.shellTurns };
+      delete runningSessions[sid];
+      delete shellTurns[sid];
+      const cur = s.threads[sid] ?? emptyThread();
+      return {
+        runningSessions,
+        shellTurns,
+        threads: {
+          ...s.threads,
+          [sid]: {
+            ...cur,
+            loaded: true,
+            blocks: [...cur.blocks, { kind: "status-line", text: "Interrupted", tone: "error" }],
+          },
+        },
+      };
+    });
+  },
+
+  reconcileRunning: async () => {
+    const c = client;
+    const running = Object.keys(get().runningSessions);
+    if (!c || running.length === 0) return;
+    for (const sid of running) {
+      try {
+        const messages = await c.getMessages(sid);
+        // Still ours to answer for? The lock may have cleared while we fetched.
+        if (!turnIsOver(messages) || !get().runningSessions[sid]) continue;
+        void logDebug(`reconcile: missed idle for ${sid} — unlocking`);
+        set((s) => {
+          const runningSessions = { ...s.runningSessions };
+          const shellTurns = { ...s.shellTurns };
+          delete runningSessions[sid];
+          delete shellTurns[sid];
+          return {
+            runningSessions,
+            shellTurns,
+            // The idle was missed, so the tail of the turn was too — replace
+            // the thread with the full history rather than leave it stale.
+            threads: {
+              ...s.threads,
+              [sid]: { ...historyToThread(messages, s.commands), loaded: true },
+            },
+          };
+        });
+      } catch {
+        /* best-effort — the next reconnect or poll tries again */
+      }
+    }
+  },
 
   deleteSession: async (id) => {
     if (client) {
