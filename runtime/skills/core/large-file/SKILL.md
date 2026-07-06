@@ -1,6 +1,6 @@
 ---
 name: large-file
-description: Use BEFORE reading any data file that could be large (CSV/TSV, Parquet, HDF5, FITS, NetCDF, NDJSON, or big text/simulation logs like VASP OUTCAR). Returns a compact memory pointer — header/schema/shape/sample/key numbers — by introspection and sampling in bounded memory, so you never load a file bigger than the context window into the model. Reference data via the pointer; read specific ranges deterministically.
+description: Use BEFORE reading any data file that could be large (CSV/TSV, Parquet, HDF5, FITS, NetCDF, NDJSON, genomics FASTQ/FASTA/VCF/BAM, GRIB, ROOT, or big text/simulation logs like VASP OUTCAR). Returns a compact memory pointer — header/schema/shape/sample/key numbers — by introspection and sampling in bounded memory, so you never load a file bigger than the context window into the model. Reference data via the pointer; read specific ranges deterministically.
 ---
 
 # Large files: reference, don't load
@@ -36,14 +36,27 @@ size (a 13 MB CSV → ~800 bytes; a 16 MB HDF5 → ~450 bytes).
 - **FITS** — HDU list with dimensions and header keys (memmapped headers).
 - **NetCDF** — dimensions and variables with dtypes.
 - **NDJSON** — union of keys, record count, and a sample.
+- **Genomics (stdlib, gzip-aware — `.gz` is seen through automatically):**
+  - **FASTQ** (`.fastq`/`.fq`, incl. `.fastq.gz`) — read count, read-length
+    min/max/mean over a bounded scan, and sample read ids (never full
+    sequences). A 90 GB FASTQ is counted by streaming, not loaded.
+  - **FASTA** (`.fasta`/`.fa`/`.fna`) — sequence count, total residues, sample ids.
+  - **VCF** (`.vcf`, incl. `.vcf.gz`) — variant count, sample names from the
+    `#CHROM` header, contigs, and a sample of variant rows.
+- **BAM/CRAM** (`.bam`/`.cram`) — reference list + header via `pysam` (header
+  only, no alignment records read).
+- **GRIB** (`.grib`/`.grib2`) — variables/coords via `cfgrib`, or a message
+  sample via `pygrib`.
+- **ROOT** (`.root`) — tree/branch listing with entry counts via `uproot`
+  (metadata only).
 - **Text / logs** — line count and head/tail; scientific logs (VASP `OUTCAR`,
   `OSZICAR`) also get deterministic numeric extraction (e.g. final
   `free energy TOTEN`, `energy(sigma->0)`, convergence flag) — the numbers, not
   the prose.
 
 Binary formats degrade gracefully: if the library (`pyarrow`/`h5py`/`astropy`/
-`netCDF4`) isn't installed, the pointer says so with an install hint — it never
-dumps raw bytes.
+`netCDF4`/`pysam`/`cfgrib`/`uproot`) isn't installed, the pointer says so with an
+install hint — it never dumps raw bytes. FASTQ/FASTA/VCF need no library at all.
 
 ## Then read only what you need
 

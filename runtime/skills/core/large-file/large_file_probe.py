@@ -19,6 +19,7 @@ Output: one compact JSON object on stdout (the pointer).
 from __future__ import annotations
 
 import csv
+import gzip
 import json
 import re
 import sys
@@ -76,6 +77,51 @@ def _clip(s: str) -> str:
     return s if len(s) <= MAX_CELL else s[:MAX_CELL] + "…"
 
 
+def is_gzip(path: Path) -> bool:
+    """Gzip magic bytes — genomics text (FASTQ/VCF) is routinely gzipped."""
+    with path.open("rb") as fh:
+        return fh.read(2) == b"\x1f\x8b"
+
+
+def _open_text(path: Path):
+    if is_gzip(path):
+        return gzip.open(path, "rt", encoding="utf-8", errors="replace")
+    return path.open("r", encoding="utf-8", errors="replace")
+
+
+def stream_lines(path: Path):
+    """Yield decoded lines (gzip or plain) one at a time — constant memory."""
+    with _open_text(path) as fh:
+        for line in fh:
+            yield line.rstrip("\n")
+
+
+def count_lines_any(path: Path) -> int:
+    """Newline count for gzip OR plain files, streamed in constant memory."""
+    if not is_gzip(path):
+        return count_lines(path)
+    total = 0
+    with gzip.open(path, "rb") as fh:
+        while True:
+            chunk = fh.read(1 << 20)
+            if not chunk:
+                break
+            total += chunk.count(b"\n")
+    return total
+
+
+def _decompressed_ext(path: Path) -> str:
+    """Real format extension, seeing through a `.gz`/`.bgz`/`.bz2` wrapper so
+    `reads.fastq.gz` is detected as FASTQ, not as a generic gzip blob."""
+    name = path.name.lower()
+    for z in (".gz", ".bgz", ".bz2"):
+        if name.endswith(z):
+            name = name[: -len(z)]
+            break
+    dot = name.rfind(".")
+    return name[dot:] if dot != -1 else ""
+
+
 # --------------------------------------------------------------------------- #
 # Format detection
 # --------------------------------------------------------------------------- #
@@ -88,6 +134,21 @@ LOG_HINT = re.compile(r"OUTCAR|OSZICAR|\.log$|\.out$", re.IGNORECASE)
 
 def detect_format(path: Path) -> str:
     ext = path.suffix.lower()
+    # Genomics/earth formats first — they may carry a `.gz` wrapper, so look
+    # through it at the real extension (reads.fastq.gz → fastq).
+    dext = _decompressed_ext(path)
+    if dext in {".fastq", ".fq"}:
+        return "fastq"
+    if dext in {".fasta", ".fa", ".fna", ".faa", ".ffn"}:
+        return "fasta"
+    if dext == ".vcf":
+        return "vcf"
+    if dext in {".bam", ".cram", ".sam"}:
+        return "bam"
+    if dext in {".grib", ".grib2", ".grb", ".grb2"}:
+        return "grib"
+    if dext == ".root":
+        return "root"
     if ext in {".parquet", ".pq"}:
         return "parquet"
     if ext in {".h5", ".hdf5", ".he5"}:
@@ -322,6 +383,164 @@ def probe_netcdf(path: Path) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# Genomics — FASTQ / FASTA / VCF (stdlib, gzip-aware) + BAM (library)
+# --------------------------------------------------------------------------- #
+
+# How many records to scan for length stats before stopping — bounds work on a
+# 90 GB file while still giving a representative spread.
+_STATS_SCAN = 100_000
+
+
+def probe_fastq(path: Path, sample: int) -> dict:
+    gz = is_gzip(path)
+    reads = 0
+    ids: list[str] = []
+    lmin = lmax = None
+    ltotal = scanned = 0
+    for i, line in enumerate(stream_lines(path)):
+        phase = i % 4
+        if phase == 0:  # header line "@id desc"
+            reads += 1
+            if len(ids) < sample:
+                ids.append(_clip(line[1:] if line.startswith("@") else line))
+        elif phase == 1 and scanned < _STATS_SCAN:  # sequence
+            n = len(line)
+            lmin = n if lmin is None else min(lmin, n)
+            lmax = n if lmax is None else max(lmax, n)
+            ltotal += n
+            scanned += 1
+    out = {
+        "format": "fastq",
+        "gzipped": gz,
+        "approx_reads": reads,
+        "sample_ids": ids,
+    }
+    if scanned:
+        out["read_length"] = {"min": lmin, "max": lmax,
+                              "mean": round(ltotal / scanned, 1),
+                              "scanned_reads": scanned}
+    return out
+
+
+def probe_fasta(path: Path, sample: int) -> dict:
+    seqs = 0
+    ids: list[str] = []
+    total_bp = 0
+    for line in stream_lines(path):
+        if line.startswith(">"):
+            seqs += 1
+            if len(ids) < sample:
+                ids.append(_clip(line[1:].strip()))
+        else:
+            total_bp += len(line.strip())
+    return {
+        "format": "fasta",
+        "gzipped": is_gzip(path),
+        "approx_sequences": seqs,
+        "approx_residues": total_bp,
+        "sample_ids": ids,
+    }
+
+
+def probe_vcf(path: Path, sample: int) -> dict:
+    meta = 0
+    samples: list[str] = []
+    variants = 0
+    sample_rows: list[str] = []
+    contigs: list[str] = []
+    seen_header = False
+    for line in stream_lines(path):
+        if line.startswith("##"):
+            meta += 1
+            m = re.match(r"##contig=<ID=([^,>]+)", line)
+            if m and len(contigs) < 30:
+                contigs.append(m.group(1))
+        elif line.startswith("#CHROM"):
+            cols = line.split("\t")
+            samples = cols[9:] if len(cols) > 9 else []
+            seen_header = True
+        elif line.strip():
+            variants += 1
+            if len(sample_rows) < sample:
+                sample_rows.append(_clip("\t".join(line.split("\t")[:5])))
+    out = {
+        "format": "vcf",
+        "gzipped": is_gzip(path),
+        "meta_lines": meta,
+        "has_header": seen_header,
+        "samples": samples,
+        "n_samples": len(samples),
+        "approx_variants": variants,
+        "sample_variants": sample_rows,
+    }
+    if contigs:
+        out["contigs"] = contigs
+    return out
+
+
+def probe_bam(path: Path) -> dict:
+    try:
+        import pysam  # type: ignore
+    except ImportError:
+        return _needs("pysam", "bam")
+    ext = _decompressed_ext(path)
+    mode = "rc" if ext == ".cram" else "rb" if ext == ".bam" else "r"
+    with pysam.AlignmentFile(str(path), mode, check_sq=False) as af:  # header only
+        refs = list(getattr(af, "references", []) or [])
+        header = af.header.to_dict() if hasattr(af, "header") else {}
+        sq = header.get("SQ", [])
+    return {
+        "format": "bam",
+        "n_references": len(refs),
+        "references": refs[:30],
+        "mapped": header.get("HD", {}),
+        "n_sequences_in_header": len(sq),
+    }
+
+
+def probe_grib(path: Path) -> dict:
+    for pkg, mod in (("cfgrib", "cfgrib"), ("pygrib", "pygrib")):
+        try:
+            __import__(mod)
+        except ImportError:
+            continue
+        if pkg == "cfgrib":
+            import cfgrib  # type: ignore
+            ds = cfgrib.open_dataset(str(path))
+            return {
+                "format": "grib",
+                "variables": [
+                    {"name": k, "dims": list(v.dims), "shape": list(v.shape)}
+                    for k, v in list(ds.data_vars.items())[:100]
+                ],
+                "coords": list(ds.coords)[:50],
+            }
+        import pygrib  # type: ignore
+        with pygrib.open(str(path)) as g:
+            msgs = [str(m)[:120] for _, m in zip(range(20), g)]
+        return {"format": "grib", "sample_messages": msgs, "n_sampled": len(msgs)}
+    return _needs("cfgrib", "grib")
+
+
+def probe_root(path: Path) -> dict:
+    try:
+        import uproot  # type: ignore
+    except ImportError:
+        return _needs("uproot", "root")
+    trees = []
+    with uproot.open(str(path)) as f:  # metadata only — no branch data read
+        for key in f.keys(recursive=False):
+            obj = f[key]
+            branches = getattr(obj, "keys", lambda: [])()
+            entry = {"name": key, "type": type(obj).__name__}
+            if branches:
+                entry["n_entries"] = int(getattr(obj, "num_entries", 0))
+                entry["branches"] = [str(b) for b in list(branches)[:50]]
+            trees.append(entry)
+    return {"format": "root", "n_keys": len(trees), "keys": trees[:50]}
+
+
+# --------------------------------------------------------------------------- #
 # Driver
 # --------------------------------------------------------------------------- #
 
@@ -353,6 +572,18 @@ def probe(path: Path, sample: int) -> dict:
             detail = probe_fits(path)
         elif fmt == "netcdf":
             detail = probe_netcdf(path)
+        elif fmt == "fastq":
+            detail = probe_fastq(path, sample)
+        elif fmt == "fasta":
+            detail = probe_fasta(path, sample)
+        elif fmt == "vcf":
+            detail = probe_vcf(path, sample)
+        elif fmt == "bam":
+            detail = probe_bam(path)
+        elif fmt == "grib":
+            detail = probe_grib(path)
+        elif fmt == "root":
+            detail = probe_root(path)
         elif fmt == "log":
             detail = probe_text(path, sample, is_log=True)
         else:

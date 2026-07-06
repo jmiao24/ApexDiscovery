@@ -124,6 +124,74 @@ class BinaryFormats(unittest.TestCase):
         self.assertTrue("datasets" in r or "hint" in r or "introspection" in r)
 
 
+class Genomics(unittest.TestCase):
+    def _fastq(self, n):
+        recs = []
+        for i in range(n):
+            recs += [f"@read{i} desc", "ACGT" * (i % 3 + 1), "+", "IIII" * (i % 3 + 1)]
+        return "\n".join(recs) + "\n"
+
+    def test_fastq_reads_and_length_stats(self):
+        p = tmp("reads.fastq", self._fastq(100))
+        r = lp.probe(p, 3)
+        self.assertEqual(r["format"], "fastq")
+        self.assertEqual(r["approx_reads"], 100)  # 400 lines / 4
+        self.assertIn("read_length", r)           # min/max observed on the sample
+        self.assertTrue(r["sample_ids"])          # first read ids, no full sequences dumped
+
+    def test_fastq_gzip(self):
+        import gzip
+        d = tempfile.mkdtemp()
+        p = Path(d) / "reads.fq.gz"
+        with gzip.open(p, "wt") as fh:
+            fh.write(self._fastq(40))
+        r = lp.probe(p, 3)
+        self.assertEqual(r["format"], "fastq")
+        self.assertEqual(r["approx_reads"], 40)
+        self.assertTrue(r.get("gzipped"))
+
+    def test_fasta_sequences(self):
+        body = ">seq1 alpha\nACGTACGT\nACGT\n>seq2 beta\nTTTT\n"
+        p = tmp("genome.fasta", body)
+        r = lp.probe(p, 5)
+        self.assertEqual(r["format"], "fasta")
+        self.assertEqual(r["approx_sequences"], 2)
+        self.assertIn("seq1", " ".join(r["sample_ids"]))
+
+    def test_vcf_variants_and_samples(self):
+        body = (
+            "##fileformat=VCFv4.2\n"
+            "##source=test\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1\tS2\n"
+            "1\t100\t.\tA\tG\t50\tPASS\t.\tGT\t0/1\t1/1\n"
+            "1\t200\t.\tC\tT\t60\tPASS\t.\tGT\t0/0\t0/1\n"
+        )
+        p = tmp("calls.vcf", body)
+        r = lp.probe(p, 5)
+        self.assertEqual(r["format"], "vcf")
+        self.assertEqual(r["approx_variants"], 2)
+        self.assertEqual(r["samples"], ["S1", "S2"])
+
+    def test_bam_missing_lib_hint(self):
+        # Binary; degrades to a clear pysam install hint, never a raw dump.
+        p = tmp("aln.bam", "not really bam")
+        r = lp.probe(p, 3)
+        self.assertEqual(r["format"], "bam")
+        self.assertTrue("hint" in r or "header" in r or "introspection" in r)
+
+    def test_grib_missing_lib_hint(self):
+        p = tmp("weather.grib2", "binary")
+        r = lp.probe(p, 3)
+        self.assertEqual(r["format"], "grib")
+        self.assertTrue("hint" in r or "messages" in r or "introspection" in r)
+
+    def test_root_missing_lib_hint(self):
+        p = tmp("events.root", "binary")
+        r = lp.probe(p, 3)
+        self.assertEqual(r["format"], "root")
+        self.assertTrue("hint" in r or "trees" in r or "introspection" in r)
+
+
 class Driver(unittest.TestCase):
     def test_missing_file(self):
         self.assertIn("error", lp.probe(Path("/no/such/file.csv"), 3))

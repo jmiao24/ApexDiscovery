@@ -218,10 +218,17 @@ competitors.
   numeric extraction for VASP `OUTCAR`/`OSZICAR` (final `free energy TOTEN`,
   `energy(sigma->0)`, convergence). **Verified on this host**: a 13.5 MB CSV →
   788 B pointer, a real 1.6 MB Parquet → 447 B, a 16 MB HDF5 → 456 B (each
-  ~18,000–37,000× smaller than the file, no whole-file load). 11 probe tests;
-  binary formats degrade to a clear install-hint pointer, never a raw dump. Gap:
-  genomics formats (BAM/CRAM/FASTQ via pysam), GRIB, and ROOT; and wiring the
-  probe into an automatic pre-read step in the UI.
+  ~18,000–37,000× smaller than the file, no whole-file load). Now also
+  **genomics + remaining physical-science formats**: **FASTQ** (`.fastq`/`.fq`,
+  incl. `.fastq.gz`), **FASTA**, and **VCF** (incl. `.vcf.gz`) are STDLIB and
+  gzip-aware — a 90 GB FASTQ is counted by streaming (read count, read-length
+  min/max/mean over a bounded scan, sample ids — never full sequences), VCF
+  reports variant count + sample names + contigs; **BAM/CRAM** (pysam header),
+  **GRIB** (cfgrib/pygrib), and **ROOT** (uproot) introspect via their library
+  or degrade to an install hint. **Verified on this host**: a 500k-read
+  `.fastq.gz` → 462 B pointer, streamed in constant memory; a 3,000-variant VCF
+  → samples + contigs parsed. 18 probe tests. Gap: wiring the probe into an
+  automatic pre-read step in the UI.
 
 ### P0-7 · Safety-defaults compliance + audit debt — 🟡 Partial · NEW (2026-07-05 audit)
 
@@ -653,7 +660,7 @@ competitors.
 | P0-3 | Artifact provenance / reproducibility | P0 | ✅ Done — versioned records + env/package lockfile + Reproduce |
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | 🟡 Partial — 3 checks + PDF-manuscript extractor shipped; weak-model robustness pending |
 | **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | 🟡 **Partial — 4 gates ship (physics/earth/biology/chemistry), deterministic + pluggable; library round-trip + social-science field pending** |
-| P0-6 | Large files: reference, don't load | P0 | 🟡 Partial — memory-pointer probe ships (table/parquet/hdf5/fits/netcdf/log); genomics/GRIB/ROOT pending |
+| P0-6 | Large files: reference, don't load | P0 | 🟡 Partial — memory-pointer probe ships (table/parquet/hdf5/fits/netcdf/log + genomics FASTQ/FASTA/VCF/BAM, GRIB, ROOT); only UI auto-pre-read wiring pending |
 | **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — ALL critical items addressed (approval modes, sidecar/preview auth, kernel deadlock, Windows injection, owner-only key files); keychain-at-rest deferred to signed releases (P2-3); moderate/cleanup backlog remains** |
 | P1-1 | Multi-discipline from day one | P1 | 🟡 Partial — pluggable + climate example; non-bio depth pending |
 | P1-2 | Domain + literature connectors | P1 | 🟡 Partial — literature/bio + non-bio across ALL 5 disciplines (materials, economics, physics space-weather, earth Open-Meteo + USGS) shipped, each MCP-handshake verified; astronomy catalogs (no PyPI MCP) + more chem/social DBs pending |
@@ -671,14 +678,15 @@ runtime, local compute, provenance, notebooks, privacy. The next frontier is the
 discipline-specific 20% and the one cross-cutting gap this revision adds:
 
 1. **P0-5 domain-correctness gates** — the deterministic, pluggable layer now
-   ships with three gates (physics/earth/biology); next is library
-   round-tripping and chemistry/materials + social-science rule sets.
-2. **P1-2 / P1-3 non-bio connectors + viewers** — makes physics/chemistry/earth/
-   social scientists feel the tool is for them (start with Materials Project MCP
-   + NASA ADS; band/DOS + FITS + anomaly-map viewers).
-3. **Deepen the shipped gates** — P0-5 (library round-trip + more disciplines),
-   P1-6 (in-app prereg artifact + Stata/SPSS UI), and P0-6 (genomics/GRIB/ROOT
-   formats). The three cross-cutting NEW builds now each ship a first version.
+   ships with four gates (physics/earth/biology/chemistry); next is library
+   round-tripping (SMILES→RDKit, POSCAR→pymatgen) and a social-science gate.
+2. **P1-2 / P1-3 non-bio connectors + viewers** — connectors now span all five
+   targeted disciplines (materials, economics, physics space-weather, earth
+   Open-Meteo/USGS); next is astronomy catalogs (no PyPI MCP yet) and richer
+   viewers.
+3. **Deepen the shipped gates** — P0-5 (library round-trip + social science),
+   P1-6 (in-app prereg artifact + Stata/SPSS UI), and P0-6 (probe now covers
+   genomics/GRIB/ROOT; only UI auto-pre-read wiring remains).
 
 ## What to say (and not say)
 
