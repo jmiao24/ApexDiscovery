@@ -183,15 +183,20 @@ competitors.
   trig on a degree-valued angle), **earth · crs** (Euclidean distance on
   lat/lon; geopandas geometric op with no CRS set), **biology · coords/strand**
   (BED off-by-one — 0-based half-open, so length is `end - start`, no `+1`;
-  strand-unaware sequence extraction), plus a fourth discipline: **chem ·
-  valence** (a SMILES literal — assigned to a `smiles`/`smi` variable or passed
-  to `MolFromSmiles` — whose explicit bonds give an atom an impossible valence:
+  strand-unaware sequence extraction), a fourth discipline **chem · valence**
+  (a SMILES literal — assigned to a `smiles`/`smi` variable or passed to
+  `MolFromSmiles` — whose explicit bonds give an atom an impossible valence:
   the C&EN five-bond carbon, or an over-bonded halogen; a stdlib SMILES
-  bond-counter that bails on bracket atoms to stay precise). Rules favour
-  precision (unrecognized units / no discipline signal / bracket-atom SMILES
-  stay silent); 27 validator tests. Gaps: full library round-tripping
-  (SMILES→RDKit sanitization, POSCAR→pymatgen validity) rather than static
-  patterns; a social-science correctness gate; broader per-field rule depth.
+  bond-counter that bails on bracket atoms to stay precise), and a fifth
+  **social science** — **social · multiple-comparisons** (a significance test
+  in a loop or ≥3 times with no FDR/Bonferroni correction — the named silent
+  p-hacking risk) and **social · categorical** (a numeric reduction
+  `.mean()`/`.std()` on a nominal code like `gender`/`region`, treating a label
+  as interval; a `groupby` key is correctly not flagged). Rules favour
+  precision (unrecognized units / no discipline signal / bracket-atom SMILES /
+  a single test / a groupby key stay silent); 34 validator tests. Gaps: full
+  library round-tripping (SMILES→RDKit sanitization, POSCAR→pymatgen validity)
+  rather than static patterns; broader per-field rule depth.
 
 ### P0-6 · Large files: reference, don't load — 🟡 Partial · was inside P0-2/P2-1
 
@@ -659,7 +664,7 @@ competitors.
 | P0-2 | Local data + local compute | P0 | ✅ Done — local Python **and** R + data-flow card |
 | P0-3 | Artifact provenance / reproducibility | P0 | ✅ Done — versioned records + env/package lockfile + Reproduce |
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | 🟡 Partial — 3 checks + PDF-manuscript extractor shipped; weak-model robustness pending |
-| **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | 🟡 **Partial — 4 gates ship (physics/earth/biology/chemistry), deterministic + pluggable; library round-trip + social-science field pending** |
+| **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | 🟡 **Partial — 5 gates ship (physics/earth/biology/chemistry/social science), deterministic + pluggable; library round-trip (SMILES→RDKit, POSCAR→pymatgen) pending** |
 | P0-6 | Large files: reference, don't load | P0 | 🟡 Partial — memory-pointer probe ships (table/parquet/hdf5/fits/netcdf/log + genomics FASTQ/FASTA/VCF/BAM, GRIB, ROOT); only UI auto-pre-read wiring pending |
 | **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — ALL critical items addressed (approval modes, sidecar/preview auth, kernel deadlock, Windows injection, owner-only key files); keychain-at-rest deferred to signed releases (P2-3); moderate/cleanup backlog remains** |
 | P1-1 | Multi-discipline from day one | P1 | 🟡 Partial — pluggable + climate example; non-bio depth pending |
@@ -678,8 +683,8 @@ runtime, local compute, provenance, notebooks, privacy. The next frontier is the
 discipline-specific 20% and the one cross-cutting gap this revision adds:
 
 1. **P0-5 domain-correctness gates** — the deterministic, pluggable layer now
-   ships with four gates (physics/earth/biology/chemistry); next is library
-   round-tripping (SMILES→RDKit, POSCAR→pymatgen) and a social-science gate.
+   ships with five gates (physics/earth/biology/chemistry/social science); next
+   is library round-tripping (SMILES→RDKit, POSCAR→pymatgen validity).
 2. **P1-2 / P1-3 non-bio connectors + viewers** — connectors now span all five
    targeted disciplines (materials, economics, physics space-weather, earth
    Open-Meteo/USGS); next is astronomy catalogs (no PyPI MCP yet) and richer

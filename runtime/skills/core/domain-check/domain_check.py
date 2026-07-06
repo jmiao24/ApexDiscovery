@@ -490,10 +490,104 @@ def check_chemistry(ctx: Ctx) -> list[Finding]:
 
 
 # --------------------------------------------------------------------------- #
+# Social science — statistical method validity
+# --------------------------------------------------------------------------- #
+
+# Significance tests whose p-values inflate false positives when run many times
+# without a multiple-comparison correction.
+_SIG_TESTS = {
+    "ttest_ind", "ttest_rel", "ttest_1samp", "pearsonr", "spearmanr",
+    "kendalltau", "f_oneway", "mannwhitneyu", "wilcoxon", "chi2_contingency",
+    "kruskal", "ranksums",
+}
+# Correction functions/markers — if any appears, we assume the author corrected.
+_CORRECTION = re.compile(
+    r"multipletests|fdrcorrection|false_discovery|bonferroni|\bholm\b|"
+    r"p_adjust|\.correct\b|multitest",
+    re.IGNORECASE,
+)
+# Central-tendency / spread reductions that are meaningless on a nominal code.
+_NUMERIC_REDUCE = {"mean", "median", "std", "var", "sem", "skew", "kurt"}
+# Unambiguous NOMINAL variable names — averaging their codes has no meaning.
+_NOMINAL = {
+    "gender", "sex", "race", "ethnicity", "region", "country", "nationality",
+    "religion", "party", "condition", "treatment", "arm", "group", "category",
+    "cluster", "occupation", "state", "province", "county", "zipcode", "zip",
+}
+
+
+def _is_nominal_name(name: str) -> bool:
+    n = name.lower()
+    return n in _NOMINAL or _suffix(n) in _NOMINAL
+
+
+def _sig_test_calls(tree: ast.AST) -> list[ast.Call]:
+    return [n for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and _call_name(n) in _SIG_TESTS]
+
+
+def _inside_loop(tree: ast.AST, target: ast.Call) -> bool:
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.For, ast.While)):
+            if any(c is target for c in ast.walk(node)):
+                return True
+    return False
+
+
+def check_social(ctx: Ctx) -> list[Finding]:
+    out: list[Finding] = []
+    if ctx.tree is None:
+        return out
+
+    # (1) Multiple comparisons without correction — silent p-hacking.
+    tests = _sig_test_calls(ctx.tree)
+    if tests and not _CORRECTION.search(ctx.src):
+        looped = next((t for t in tests if _inside_loop(ctx.tree, t)), None)
+        if looped is not None or len(tests) >= 3:
+            node = looped or tests[0]
+            how = "inside a loop" if looped is not None else f"{len(tests)} times"
+            out.append(Finding(
+                "warn", "social · multiple-comparisons",
+                "Many significance tests, no multiple-comparison correction",
+                ctx.snippet(ctx.line_of(node))
+                + f"\n  a significance test runs {how} with no "
+                "multipletests/FDR/Bonferroni correction anywhere — the "
+                "family-wise false-positive rate is inflated (p-hacking risk). "
+                "Collect the p-values and correct them.",
+            ))
+
+    # (2) Central tendency of a nominal category code — meaningless.
+    for node in ast.walk(ctx.tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+            continue
+        if node.func.attr not in _NUMERIC_REDUCE:
+            continue
+        recv = node.func.value
+        key = None
+        if isinstance(recv, ast.Subscript):  # df['gender']
+            sl = recv.slice
+            if isinstance(sl, ast.Constant) and isinstance(sl.value, str):
+                key = sl.value
+        elif isinstance(recv, ast.Attribute):  # df.gender
+            key = recv.attr
+        if key and _is_nominal_name(key):
+            out.append(Finding(
+                "warn", "social · categorical",
+                f"Numeric reduction .{node.func.attr}() on a nominal variable "
+                f"('{key}')",
+                ctx.snippet(ctx.line_of(node))
+                + f"\n  '{key}' is a categorical code; its {node.func.attr} has "
+                "no meaning. Use counts/proportions (value_counts), or group by "
+                "it — don't average the code.",
+            ))
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # Registry + driver
 # --------------------------------------------------------------------------- #
 
-VALIDATORS = [check_physics, check_earth, check_biology, check_chemistry]
+VALIDATORS = [check_physics, check_earth, check_biology, check_chemistry, check_social]
 
 _CODE_EXT = {".py": "python", ".r": "r", ".R": "r"}
 

@@ -170,6 +170,58 @@ class Chemistry(unittest.TestCase):
         self.assertTrue(any(f.tag == "chem · valence" for f in fs))
 
 
+class SocialScience(unittest.TestCase):
+    def test_tests_in_a_loop_without_correction(self):
+        # Many significance tests inside a loop, no multiple-comparison
+        # correction — the named silent-p-hacking failure class.
+        src = (
+            "from scipy import stats\n"
+            "for col in cols:\n"
+            "    t, p = stats.ttest_ind(a[col], b[col])\n"
+        )
+        self.assertIn("social · multiple-comparisons", tags(src))
+
+    def test_three_tests_without_correction(self):
+        src = (
+            "from scipy import stats\n"
+            "r1 = stats.ttest_ind(a, b)\n"
+            "r2 = stats.pearsonr(x, y)\n"
+            "r3 = stats.f_oneway(g1, g2, g3)\n"
+        )
+        self.assertIn("social · multiple-comparisons", tags(src))
+
+    def test_correction_present_ok(self):
+        src = (
+            "from scipy import stats\n"
+            "from statsmodels.stats.multitest import multipletests\n"
+            "pvals = []\n"
+            "for col in cols:\n"
+            "    t, p = stats.ttest_ind(a[col], b[col])\n"
+            "    pvals.append(p)\n"
+            "multipletests(pvals, method='fdr_bh')\n"
+        )
+        self.assertNotIn("social · multiple-comparisons", tags(src))
+
+    def test_single_test_ok(self):
+        # One test needs no multiple-comparison correction.
+        src = "from scipy import stats\nt, p = stats.ttest_ind(a, b)\n"
+        self.assertNotIn("social · multiple-comparisons", tags(src))
+
+    def test_mean_of_categorical_code(self):
+        # Taking the mean of a nominal code (gender coded 0/1/2) is meaningless.
+        self.assertIn("social · categorical", tags("m = df['gender'].mean()\n"))
+
+    def test_groupby_key_is_ok(self):
+        # gender as a groupby KEY (not the averaged value) is correct usage.
+        self.assertNotIn(
+            "social · categorical",
+            tags("m = df.groupby('gender')['income'].mean()\n"),
+        )
+
+    def test_mean_of_continuous_ok(self):
+        self.assertNotIn("social · categorical", tags("m = df['income'].mean()\n"))
+
+
 class Driver(unittest.TestCase):
     def test_run_emits_contract(self):
         # end-to-end: temp file -> run() -> review contract shape.
