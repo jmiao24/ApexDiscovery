@@ -451,6 +451,39 @@ def _chem_finding(ctx: Ctx, lineno: int, smi: str, detail: str) -> Finding:
     )
 
 
+def _rdkit_verdict(smi: str) -> str | None:
+    """Authoritative molecule validity via RDKit when it is installed:
+    "valid" | "invalid" | None (RDKit not importable → caller falls back to the
+    static bond-counter). RDKit sanitizes the parse, so it catches far more than
+    a five-bond carbon — bad ring closures, impossible aromaticity, and
+    over-valent N/O/S — and, being authoritative, also clears molecules the
+    static heuristic would wrongly flag."""
+    try:
+        from rdkit import Chem  # type: ignore
+        from rdkit import RDLogger  # type: ignore
+    except ImportError:
+        return None
+    RDLogger.DisableLog("rdApp.*")  # RDKit logs rejections to stderr; keep quiet
+    try:
+        mol = Chem.MolFromSmiles(smi)  # sanitizes; returns None on any invalidity
+    except Exception:
+        return "invalid"
+    return "valid" if mol is not None else "invalid"
+
+
+def _molecule_finding(ctx: Ctx, lineno: int, smi: str) -> Finding | None:
+    """Judge one SMILES literal: prefer RDKit (authoritative — catches more and
+    suppresses static false positives); fall back to the static bond-counter
+    when RDKit is unavailable."""
+    verdict = _rdkit_verdict(smi)
+    if verdict == "invalid":
+        return _chem_finding(ctx, lineno, smi, "RDKit rejects this structure")
+    if verdict == "valid":
+        return None  # authoritative: no finding, even if the heuristic would flag
+    detail = _smiles_over_valence(smi)  # RDKit absent → static check decides
+    return _chem_finding(ctx, lineno, smi, detail) if detail else None
+
+
 def check_chemistry(ctx: Ctx) -> list[Finding]:
     out: list[Finding] = []
     if ctx.tree is not None:
@@ -463,16 +496,16 @@ def check_chemistry(ctx: Ctx) -> list[Finding]:
                     for t in node.targets
                 )
                 if named:
-                    detail = _smiles_over_valence(node.value.value)
-                    if detail:
-                        out.append(_chem_finding(ctx, ctx.line_of(node), node.value.value, detail))
+                    f = _molecule_finding(ctx, ctx.line_of(node), node.value.value)
+                    if f:
+                        out.append(f)
             # (b) Chem.MolFromSmiles("...") and friends
             if isinstance(node, ast.Call) and _call_name(node) in _SMILES_FUNCS:
                 for arg in node.args:
                     if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                        detail = _smiles_over_valence(arg.value)
-                        if detail:
-                            out.append(_chem_finding(ctx, ctx.line_of(node), arg.value, detail))
+                        f = _molecule_finding(ctx, ctx.line_of(node), arg.value)
+                        if f:
+                            out.append(f)
         return out
 
     # R / non-python fallback: SMILES assigned or passed by string literal.
@@ -482,10 +515,9 @@ def check_chemistry(ctx: Ctx) -> list[Finding]:
         ctx.src, re.IGNORECASE,
     ):
         smi = m.group(1) or m.group(2)
-        detail = _smiles_over_valence(smi)
-        if detail:
-            ln = ctx.src[: m.start()].count("\n") + 1
-            out.append(_chem_finding(ctx, ln, smi, detail))
+        f = _molecule_finding(ctx, ctx.src[: m.start()].count("\n") + 1, smi)
+        if f:
+            out.append(f)
     return out
 
 

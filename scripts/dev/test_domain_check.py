@@ -7,6 +7,7 @@ Stdlib unittest only — no pytest dependency.
 import importlib.util
 import sys
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.dont_write_bytecode = True  # never leave __pycache__ in the shipped skill dir
@@ -168,6 +169,30 @@ class Chemistry(unittest.TestCase):
     def test_r_molfromsmiles_regex_fallback(self):
         fs = findings('mol <- MolFromSmiles("C(C)(C)(C)(C)C")\n', lang="r")
         self.assertTrue(any(f.tag == "chem · valence" for f in fs))
+
+
+class ChemistryRDKit(unittest.TestCase):
+    """When RDKit is available it is authoritative — it catches invalid
+    molecules the static bond-counter misses, and suppresses static false
+    positives. When absent, the static check stands. `_rdkit_verdict` is
+    patched to drive all three states deterministically without RDKit."""
+
+    def test_rdkit_flags_what_static_misses(self):
+        # An unclosed ring the static counter passes, but RDKit rejects.
+        with unittest.mock.patch.object(dc, "_rdkit_verdict", lambda s: "invalid"):
+            self.assertIn("chem · valence", tags('smiles = "c1ccc"\n'))
+
+    def test_rdkit_valid_suppresses_static_false_positive(self):
+        # A SMILES the static heuristic would flag, but RDKit says is valid →
+        # no finding (the real library overrides the heuristic).
+        with unittest.mock.patch.object(dc, "_rdkit_verdict", lambda s: "valid"):
+            self.assertNotIn("chem · valence", tags('smiles = "C(C)(C)(C)(C)C"\n'))
+
+    def test_static_used_when_rdkit_absent(self):
+        # verdict None = RDKit not importable → the static bond-counter decides.
+        with unittest.mock.patch.object(dc, "_rdkit_verdict", lambda s: None):
+            self.assertIn("chem · valence", tags('smiles = "C(C)(C)(C)(C)C"\n'))
+            self.assertNotIn("chem · valence", tags('smiles = "CC(=O)O"\n'))
 
 
 class SocialScience(unittest.TestCase):

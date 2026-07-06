@@ -44,10 +44,13 @@ It prints exactly one ` ```review ` fenced JSON block on stdout.
   stranded feature file (GFF/GTF/BED) with no reverse-complement for the `-`
   strand.
 - **chem · valence** — a SMILES string literal (assigned to a `smiles`/`smi`
-  variable, or passed to `MolFromSmiles`/`MolFromSmarts`) whose explicit bonds
-  give an atom an impossible valence — the classic five-bond carbon, or a
-  halogen bonded more than once. Flags a structure emitted from memory that
-  cannot be a real molecule; validate with RDKit instead.
+  variable, or passed to `MolFromSmiles`/`MolFromSmarts`) that cannot be a real
+  molecule. **If RDKit is installed it is used as the authoritative judge** —
+  `Chem.MolFromSmiles` sanitizes the parse, so it catches far more than a
+  five-bond carbon (bad ring closures, impossible aromaticity, over-valent
+  N/O/S) and, being authoritative, clears molecules a heuristic would
+  wrongly flag. Without RDKit it falls back to a stdlib bond-counter (carbon
+  >4, over-bonded halogen; bails on bracket atoms for precision).
 - **social · multiple-comparisons** — a significance test (`ttest_ind`,
   `pearsonr`, `f_oneway`, `chi2_contingency`, …) run inside a loop or ≥3 times
   with no `multipletests`/FDR/Bonferroni correction anywhere — the inflated
