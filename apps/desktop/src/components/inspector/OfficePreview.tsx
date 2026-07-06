@@ -225,12 +225,19 @@ export function PptxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
     let previewer: { destroy(): void } | undefined;
     (async () => {
       try {
-        const { init } = await import("pptx-preview");
+        const [{ init }, { normalizePptxForPreview }] = await Promise.all([
+          import("pptx-preview"),
+          import("@/lib/pptx"),
+        ]);
+        if (cancelled) return;
+        // Decks styled via paragraph-level defRPr render unstyled (tiny black
+        // text) in pptx-preview — rewrite them into explicit per-run form first.
+        const normalized = await normalizePptxForPreview(bytes);
         if (cancelled) return;
         // Fit slides to the pane, with a floor so a collapsed pane stays legible.
         const width = Math.max((wrapRef.current?.clientWidth ?? 0) - 32, 480);
         previewer = init(page, { width, mode: "list" });
-        await (previewer as ReturnType<typeof init>).preview(bytes);
+        await (previewer as ReturnType<typeof init>).preview(normalized);
       } catch (e) {
         if (!cancelled) setError(`Could not render this presentation: ${message(e)}`);
       } finally {

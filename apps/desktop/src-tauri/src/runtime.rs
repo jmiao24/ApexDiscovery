@@ -147,7 +147,8 @@ pub fn import_opencode_login(app: AppHandle, state: State<'_, RuntimeState>) -> 
 /// Deploy the bundled skill packs (Tauri resources) into the app-private
 /// profile's global skills dir (`<xdg-config>/opencode/skills/`), which OpenCode
 /// scans regardless of project detection: `skills/` is the external ai4s-skills
-/// pack, `skills-core/` the first-party skills from `runtime/skills/core`. The
+/// pack, `skills-office/` Anthropic's document skills (docx/pdf/pptx/xlsx),
+/// `skills-core/` the first-party skills from `runtime/skills/core`. The
 /// workspace's own `.opencode/skills/` stays reserved for skills the user
 /// installs. Runs before every sidecar start so app upgrades refresh the packs.
 fn deploy_bundled_skills(app: &AppHandle) {
@@ -155,7 +156,7 @@ fn deploy_bundled_skills(app: &AppHandle) {
         Ok(cfg) => cfg.join("opencode").join("skills"),
         Err(_) => return,
     };
-    for resource in ["skills", "skills-core"] {
+    for resource in ["skills", "skills-office", "skills-core"] {
         let src = match app
             .path()
             .resolve(resource, tauri::path::BaseDirectory::Resource)

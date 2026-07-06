@@ -64,6 +64,9 @@ importers:
       highlight.js:
         specifier: ^11.10.0
         version: 11.11.1
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       lucide-react:
         specifier: ^0.454.0
         version: 0.454.0(react@18.3.1)
