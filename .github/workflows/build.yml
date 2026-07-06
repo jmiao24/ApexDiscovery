@@ -74,12 +74,12 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # AppImage: linuxdeploy's strip chokes on the Bun-built opencode
-          # sidecar; NO_STRIP is the documented Tauri workaround.
-          NO_STRIP: true
         with:
           projectPath: apps/desktop
-          args: --target ${{ matrix.target }} ${{ startsWith(matrix.platform, 'ubuntu') && '--verbose' || '' }}
+          # Linux: deb+rpm only. AppImage is off because linuxdeploy runs ldd
+          # on every bundled ELF and ldd exits 1 on the Bun-built opencode
+          # sidecar, aborting the whole bundle (tauri-apps/tauri#8929).
+          args: --target ${{ matrix.target }} ${{ startsWith(matrix.platform, 'ubuntu') && '--bundles deb,rpm' || '' }}
           # On a v* tag push, attach installers to a draft GitHub Release.
           # Empty tagName (workflow_dispatch) skips release creation.
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
