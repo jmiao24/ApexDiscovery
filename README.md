@@ -157,6 +157,10 @@ Grab the latest installer from the
 [**Releases** page](https://github.com/ai4s-research/open-science/releases/latest):
 macOS `.dmg` (Apple Silicon / Intel), Windows `.exe` / `.msi`, Linux `.deb` / `.rpm`.
 
+> **System requirements:** macOS **13 Ventura or later** · Windows 10/11 (x64).
+> The bundled OpenCode agent runtime does not run on macOS 12 or older — the app
+> window would open but never connect.
+
 > The builds are **not code-signed yet**, so macOS and Windows warn on first launch.
 > This is a one-time step per install.
 

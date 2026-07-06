@@ -150,6 +150,9 @@
 下载最新安装包：macOS `.dmg`（Apple Silicon / Intel）、Windows `.exe` / `.msi`、
 Linux `.deb` / `.rpm`。
 
+> **系统要求：** macOS **13 Ventura 及以上** · Windows 10/11（x64）。
+> 内置的 OpenCode 智能体运行时不支持 macOS 12 及更早版本——窗口能打开但永远连不上。
+
 > 当前构建**尚未代码签名**，macOS 和 Windows 首次打开会有安全提示。每次安装只需处理一次。
 
 **macOS** —— 从网上下载的未签名应用会被 Gatekeeper 拦截，提示

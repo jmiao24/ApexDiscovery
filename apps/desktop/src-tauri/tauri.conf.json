@@ -29,6 +29,9 @@
     "active": true,
     "targets": "all",
     "externalBin": ["binaries/opencode", "binaries/uv"],
+    "macOS": {
+      "minimumSystemVersion": "13.0"
+    },
     "resources": {
       "../../../runtime/skills/external/ai4s-skills": "skills/",
       "../../../runtime/skills/external/anthropic-skills": "skills-office/",
