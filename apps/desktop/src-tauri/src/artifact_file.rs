@@ -219,21 +219,12 @@ fn encode_for_preview(
 }
 
 /// Open an absolute path with the OS default application / file manager.
+/// Via the `opener` crate: on Windows that is ShellExecuteW — NEVER
+/// `cmd /C start`, which re-parses `&`/`^`/`|` so an agent-emitted argument
+/// could execute commands (and any legit path containing `&` broke). It also
+/// reaps the helper process (the old spawn-and-forget leaked zombies).
 pub fn os_open(full: &Path) -> Result<(), String> {
-    let full_s = full.to_string_lossy().to_string();
-    #[cfg(target_os = "macos")]
-    let mut cmd = std::process::Command::new("open");
-    #[cfg(target_os = "windows")]
-    let mut cmd = {
-        let mut c = std::process::Command::new("cmd");
-        c.args(["/C", "start", ""]);
-        c
-    };
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let mut cmd = std::process::Command::new("xdg-open");
-    cmd.arg(full_s);
-    cmd.spawn().map_err(|e| format!("open failed: {e}"))?;
-    Ok(())
+    opener::open(full).map_err(|e| format!("open failed: {e}"))
 }
 
 /// Open a workspace file in the OS default application.
@@ -458,24 +449,14 @@ fn unique_name(dir: &Path, name: &str) -> String {
 
 /// Open an http(s) URL in the user's default browser. The webview itself must
 /// never navigate away from the app, so external links land here instead.
+/// Same `opener` rationale as `os_open` — a URL like `https://x.com/?a=1&b=2`
+/// used to execute `b=2` as a command on Windows via `cmd /C start`.
 #[tauri::command]
 pub fn open_url(url: String) -> Result<(), String> {
     if !url.starts_with("https://") && !url.starts_with("http://") {
         return Err("only http(s) URLs can be opened".into());
     }
-    #[cfg(target_os = "macos")]
-    let mut cmd = std::process::Command::new("open");
-    #[cfg(target_os = "windows")]
-    let mut cmd = {
-        let mut c = std::process::Command::new("cmd");
-        c.args(["/C", "start", ""]);
-        c
-    };
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let mut cmd = std::process::Command::new("xdg-open");
-    cmd.arg(&url);
-    cmd.spawn().map_err(|e| format!("open failed: {e}"))?;
-    Ok(())
+    opener::open(&url).map_err(|e| format!("open failed: {e}"))
 }
 
 /// Save text through a native "Save As" dialog. Returns the chosen path, or
@@ -515,8 +496,18 @@ fn base64_encode(input: &[u8]) -> String {
 mod tests {
     use super::{
         base64_encode, dir_entries, encode_for_preview, exceeds_preview_cap, locate_under,
-        mime_for, unique_name,
+        mime_for, open_url, unique_name,
     };
+
+    #[test]
+    fn open_url_rejects_non_http_schemes() {
+        // Only http(s) may leave the app — never file:, javascript:, or a bare
+        // command. (The open itself goes through the `opener` crate, which on
+        // Windows is ShellExecuteW — no `cmd /C start` re-parsing of `&`.)
+        assert!(open_url("javascript:alert(1)".into()).is_err());
+        assert!(open_url("file:///etc/hosts".into()).is_err());
+        assert!(open_url("calc".into()).is_err());
+    }
 
     #[test]
     fn unknown_extension_sniffs_text_vs_binary() {

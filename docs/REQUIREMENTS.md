@@ -281,11 +281,15 @@ competitors.
     provenance/logs/localStorage/git.)
 
   **Critical — Rust defects:**
-  - [ ] **Windows command injection** in `open_url`/`os_open`
-    (`artifact_file.rs:466-478`, `:222-237`): `cmd /C start "" <arg>` lets
-    `cmd` re-parse `&`/`^`/`|`, so an agent-emitted link like
-    `https://x.com/?a=1&calc` executes `calc`; also breaks any legit URL
-    containing `&`. Use ShellExecuteW / `tauri-plugin-opener`.
+  - [x] **Windows command injection** in `open_url`/`os_open`. ~~`cmd /C
+    start "" <arg>` lets `cmd` re-parse `&`/`^`/`|`, so an agent-emitted link
+    like `https://x.com/?a=1&calc` executes `calc`; also breaks any legit URL
+    containing `&`.~~ **Fixed (2026-07-06):** both now go through the `opener`
+    crate — verified in its source to call `ShellExecuteW` on Windows (no
+    shell re-parsing), `open` on macOS, `xdg-open` on Linux — and it reaps the
+    helper process (the old spawn-and-forget leaked a zombie per open). The
+    http(s)-only scheme gate stays (tested); `opener` cross-compiles for
+    `x86_64-pc-windows-msvc` (full Windows build remains CI's job, P1-4).
   - [x] **Kernel deadlock.** ~~`kernel_execute` holds the global kernel-map
     mutex across an unbounded blocking `read_line`; a `while True: pass` cell
     wedges every kernel command including `kernel_reset` — only an app restart
@@ -630,7 +634,7 @@ competitors.
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | 🟡 Partial — 3 checks + PDF-manuscript extractor shipped; weak-model robustness pending |
 | **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | 🟡 **Partial — 3 gates ship (physics/earth/biology), deterministic + pluggable; library round-trip + more fields pending** |
 | P0-6 | Large files: reference, don't load | P0 | 🟡 Partial — memory-pointer probe ships (table/parquet/hdf5/fits/netcdf/log); genomics/GRIB/ROOT pending |
-| **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — approval modes + sidecar/preview auth + kernel-deadlock fix (per-kernel locks, Stop button) shipped; still open: plaintext keys, Windows cmd injection + backlog** |
+| **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — approval modes + sidecar/preview auth + kernel-deadlock fix + Windows-injection fix shipped (both critical Rust defects closed); still open: plaintext keys at rest + moderate/cleanup backlog** |
 | P1-1 | Multi-discipline from day one | P1 | 🟡 Partial — pluggable + climate example; non-bio depth pending |
 | P1-2 | Domain + literature connectors | P1 | 🟡 Partial — literature/bio + non-bio (Materials Project, FRED) shipped; physics/earth planned |
 | P1-3 | Scientific renderers | P1 | 🟡 Partial — base + 3D structure + genome + FITS + DOS + band + phase + qualitative-coding + anomaly map (all 4 disciplines; materials trio complete); ternary/coastlines next |
