@@ -81,7 +81,10 @@ export function FilePreviewInspector({
           const f = await readArtifact(data.path, data.root);
           if (cancelled) return;
           if (f && f.encoding === "utf8") setText(f.data);
-          else if (!f && kind !== "html" && kind !== "markdown")
+          // The file was read but isn't text — say so instead of falling
+          // through to the "desktop app" note while inside the desktop app.
+          else if (f) setError("This file is binary and has no preview — open it externally.");
+          else if (kind !== "html" && kind !== "markdown")
             setError("Preview is available in the desktop app.");
         }
         if (needsBytes) {

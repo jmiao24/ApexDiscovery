@@ -4,6 +4,22 @@ import { describe, expect, it, vi } from "vitest";
 import type { FilePreviewInspector as FilePreviewInspectorT } from "@ai4s/shared";
 import { FilePreviewInspector, PreviewError } from "./FilePreviewInspector";
 
+// The markdown tests below carry inline `content`, so they never hit
+// readArtifact — this mock only feeds the binary-file test.
+vi.mock("@/lib/artifactFile", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("@/lib/artifactFile")>();
+  return {
+    ...mod,
+    readArtifact: vi.fn(async () => ({
+      path: "data/blob.bin",
+      mime: "application/octet-stream",
+      encoding: "base64",
+      data: "AAEC",
+      size: 3,
+    })),
+  };
+});
+
 const md: FilePreviewInspectorT = {
   variant: "file",
   path: "notes/report.md",
@@ -38,6 +54,22 @@ describe("FilePreviewInspector — markdown", () => {
     rerender(<FilePreviewInspector data={b} onClose={() => {}} />);
     expect(await screen.findByRole("heading", { name: "Beta" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Alpha" })).not.toBeInTheDocument();
+  });
+});
+
+describe("FilePreviewInspector — binary file behind a text preview", () => {
+  it("says the file is binary instead of the misleading 'desktop app' note", async () => {
+    // A text-kind preview whose read comes back base64 (genuinely binary
+    // bytes) must say so — not claim the preview needs the desktop app.
+    const bin: FilePreviewInspectorT = {
+      variant: "file",
+      path: "data/blob.bin",
+      filename: "blob.bin",
+      artifact: "data",
+    };
+    render(<FilePreviewInspector data={bin} onClose={() => {}} />);
+    expect(await screen.findByText(/binary and has no preview/)).toBeInTheDocument();
+    expect(screen.queryByText(/available in the desktop app/)).not.toBeInTheDocument();
   });
 });
 

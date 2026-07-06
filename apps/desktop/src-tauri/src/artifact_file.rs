@@ -193,12 +193,29 @@ pub fn read_artifact(app: AppHandle, path: String, root: Option<String>) -> Resu
         return Err(format!("file too large to preview (>{} MB)", PREVIEW_CAP_BYTES / (1024 * 1024)));
     }
     let bytes = std::fs::read(&full).map_err(|e| format!("read failed: {e}"))?;
-    let (encoding, data) = if is_text {
-        ("utf8", String::from_utf8_lossy(&bytes).into_owned())
-    } else {
-        ("base64", base64_encode(&bytes))
-    };
+    let (mime, encoding, data) = encode_for_preview(mime, is_text, bytes);
     Ok(ArtifactFile { path, mime: mime.to_string(), encoding, data, size })
+}
+
+/// Decide how file bytes reach the frontend: known text types as UTF-8, known
+/// binary as base64. An unknown extension is sniffed instead of assumed binary —
+/// valid UTF-8 with no NUL bytes previews as text (.bib, .rst, source files, …).
+fn encode_for_preview(
+    mime: &'static str,
+    is_text: bool,
+    bytes: Vec<u8>,
+) -> (&'static str, &'static str, String) {
+    if is_text {
+        return (mime, "utf8", String::from_utf8_lossy(&bytes).into_owned());
+    }
+    if mime == "application/octet-stream" {
+        return match String::from_utf8(bytes) {
+            Ok(s) if !s.contains('\0') => ("text/plain", "utf8", s),
+            Ok(s) => (mime, "base64", base64_encode(s.as_bytes())),
+            Err(e) => (mime, "base64", base64_encode(e.as_bytes())),
+        };
+    }
+    (mime, "base64", base64_encode(&bytes))
 }
 
 /// Open an absolute path with the OS default application / file manager.
@@ -496,7 +513,31 @@ fn base64_encode(input: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{base64_encode, dir_entries, exceeds_preview_cap, locate_under, mime_for, unique_name};
+    use super::{
+        base64_encode, dir_entries, encode_for_preview, exceeds_preview_cap, locate_under,
+        mime_for, unique_name,
+    };
+
+    #[test]
+    fn unknown_extension_sniffs_text_vs_binary() {
+        // A .bib file (unknown to mime_for) is valid UTF-8 → previews as text.
+        let (mime, is_text) = mime_for("bib");
+        assert!(!is_text);
+        let (m, enc, data) = encode_for_preview(mime, is_text, b"@article{k, title={T}}".to_vec());
+        assert_eq!((m, enc), ("text/plain", "utf8"));
+        assert_eq!(data, "@article{k, title={T}}");
+
+        // NUL bytes or invalid UTF-8 stay binary (base64).
+        let (_, enc, _) = encode_for_preview(mime, is_text, vec![b'a', 0, b'b']);
+        assert_eq!(enc, "base64");
+        let (_, enc, _) = encode_for_preview(mime, is_text, vec![0xff, 0xfe, 0x00]);
+        assert_eq!(enc, "base64");
+
+        // Known binary types are never sniffed.
+        let (mime, is_text) = mime_for("pdf");
+        let (_, enc, _) = encode_for_preview(mime, is_text, b"plain ascii".to_vec());
+        assert_eq!(enc, "base64");
+    }
 
     #[test]
     fn genome_and_molecule_files_are_text() {
