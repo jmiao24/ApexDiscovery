@@ -49,6 +49,45 @@ export async function openArtifactExternally(path: string, root?: FileRoot): Pro
   await invoke("open_path", { path, root });
 }
 
+/** Introspect a file too big to preview WITHOUT loading it: runs the bundled
+ *  large-file probe and returns its compact memory pointer (schema / shape /
+ *  sample / key numbers). Returns null outside the desktop app; throws the
+ *  probe's error message on failure. */
+export async function probeLargeFile(path: string, root?: FileRoot): Promise<LargeFilePointer | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  const json = await invoke<string>("probe_large_file", { path, root });
+  return JSON.parse(json) as LargeFilePointer;
+}
+
+/** The probe's JSON pointer. Fields vary by format; these are the common ones
+ *  the panel renders (all optional — unknown formats still show size + note). */
+export interface LargeFilePointer {
+  format?: string;
+  size?: string;
+  size_bytes?: number;
+  note?: string;
+  error?: string;
+  hint?: string;
+  // tables
+  columns?: { name: string; dtype: string }[];
+  n_columns?: number;
+  approx_rows?: number;
+  sample_head?: string[][];
+  // genomics
+  approx_reads?: number;
+  approx_sequences?: number;
+  approx_variants?: number;
+  read_length?: { min: number; max: number; mean: number };
+  samples?: string[];
+  sample_ids?: string[];
+  gzipped?: boolean;
+  // hdf5 / fits / netcdf / parquet
+  datasets?: { path: string; shape: number[]; dtype: string }[];
+  num_rows?: number;
+  [k: string]: unknown;
+}
+
 export interface NotebookEntry {
   path: string;
   /** Seconds since the epoch (newest first from the backend). */

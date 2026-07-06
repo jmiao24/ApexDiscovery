@@ -6,6 +6,7 @@ mod examples;
 mod hpc;
 mod jupyter;
 mod kernel;
+mod large_file;
 mod modal;
 mod opencode_config;
 mod preview_server;
@@ -85,6 +86,7 @@ pub fn run() {
             hpc::hpc_cancel,
             modal::modal_status,
             preview_server::preview_url,
+            large_file::probe_large_file,
             tools::detect_tools,
             debug_log::log_debug
         ])

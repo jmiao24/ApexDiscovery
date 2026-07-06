@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Code2, Eye, ExternalLink, History, Loader2, X } from "lucide-react";
-import type { FilePreviewInspector as FilePreviewInspectorT } from "@ai4s/shared";
+import { Code2, Eye, ExternalLink, FileSearch, History, Loader2, X } from "lucide-react";
+import type { FilePreviewInspector as FilePreviewInspectorT, FileRoot } from "@ai4s/shared";
 import { previewKindForName, type PreviewKind } from "@/lib/artifacts";
-import { base64ToBytes, openArtifactExternally, previewUrl, readArtifact } from "@/lib/artifactFile";
+import {
+  base64ToBytes,
+  openArtifactExternally,
+  previewUrl,
+  probeLargeFile,
+  readArtifact,
+  type LargeFilePointer,
+} from "@/lib/artifactFile";
 import { parseTableFile } from "@/lib/csv";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
@@ -165,6 +172,8 @@ export function FilePreviewInspector({
           <PreviewError
             error={error}
             filename={data.filename}
+            path={data.path}
+            root={data.root}
             onOpenExternally={() => void openArtifactExternally(data.path, data.root)}
           />
         )}
@@ -400,35 +409,135 @@ function TableView({ table }: { table: import("@/lib/csv").ParsedTable }) {
 }
 
 /** Preview errors. A "too large" file gets a helpful card — the preview is
- *  capped so a huge file can't lock the app; the user can still open it in the
- *  OS app, and the agent can introspect it with the large-file probe. */
+ *  capped so a huge file can't lock the app. The user can open it in the OS
+ *  app, or **inspect it without loading**: the large-file probe returns a
+ *  compact memory pointer (schema / shape / sample / key numbers) by streaming
+ *  and sampling, so even a 90 GB file is introspected, never loaded. */
 export function PreviewError({
   error,
   filename,
+  path,
+  root,
   onOpenExternally,
 }: {
   error: string;
   filename: string;
+  path?: string;
+  root?: FileRoot;
   onOpenExternally: () => void;
 }) {
   const tooLarge = /too large/i.test(error);
+  const [pointer, setPointer] = useState<LargeFilePointer | null>(null);
+  const [probing, setProbing] = useState(false);
+  const [probeError, setProbeError] = useState<string | null>(null);
+
+  const inspect = async () => {
+    if (!path) return;
+    setProbing(true);
+    setProbeError(null);
+    try {
+      setPointer(await probeLargeFile(path, root));
+    } catch (e) {
+      setProbeError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setProbing(false);
+    }
+  };
+
   if (!tooLarge) return <div className="p-4 text-sm text-muted">{error}</div>;
   return (
     <div className="p-4">
       <div className="rounded-card border border-border bg-surface p-4 text-sm text-muted">
         <div className="mb-1 font-medium text-text">{filename} is too large to preview</div>
         <p className="mb-3">
-          Previews are capped so a large file can't freeze the app. Open it in your
-          system app, or ask the agent to introspect it (schema, sample, key
-          numbers) with the large-file probe instead of loading the whole file.
+          Previews are capped so a large file can't freeze the app. Inspect it
+          without loading — the large-file probe reads its schema, shape, a
+          sample, and key numbers by streaming, never loading the whole file —
+          or open it in your system app.
         </p>
-        <button
-          className="inline-flex items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-1.5 text-[13px] text-text hover:bg-surface"
-          onClick={onOpenExternally}
-        >
-          <ExternalLink size={13} /> Open externally
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {path && (
+            <button
+              className="inline-flex items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-1.5 text-[13px] text-text hover:bg-surface disabled:opacity-60"
+              onClick={() => void inspect()}
+              disabled={probing}
+            >
+              {probing ? <Loader2 size={13} className="animate-spin" /> : <FileSearch size={13} />}
+              Inspect without loading
+            </button>
+          )}
+          <button
+            className="inline-flex items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-1.5 text-[13px] text-text hover:bg-surface"
+            onClick={onOpenExternally}
+          >
+            <ExternalLink size={13} /> Open externally
+          </button>
+        </div>
+        {probeError && <div className="mt-3 text-[13px] text-error">{probeError}</div>}
+        {pointer && <LargeFilePointerPanel p={pointer} />}
       </div>
+    </div>
+  );
+}
+
+/** Render the probe's memory pointer as a compact, readable fact sheet. */
+function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
+  if (p.error) return <div className="mt-3 text-[13px] text-error">{p.error}</div>;
+  const fmt = (n: number) => n.toLocaleString("en-US");
+  const rows: [string, string][] = [];
+  if (p.format) rows.push(["Format", p.format]);
+  if (p.size) rows.push(["Size", p.size + (p.gzipped ? " (gzipped)" : "")]);
+  if (p.approx_rows !== undefined) rows.push(["Rows (approx.)", fmt(p.approx_rows)]);
+  if (p.num_rows !== undefined) rows.push(["Rows", fmt(p.num_rows)]);
+  if (p.approx_reads !== undefined) rows.push(["Reads (approx.)", fmt(p.approx_reads)]);
+  if (p.approx_sequences !== undefined) rows.push(["Sequences (approx.)", fmt(p.approx_sequences)]);
+  if (p.approx_variants !== undefined) rows.push(["Variants (approx.)", fmt(p.approx_variants)]);
+  if (p.n_columns !== undefined) rows.push(["Columns", fmt(p.n_columns)]);
+  if (p.read_length) rows.push(["Read length", `${p.read_length.min}–${p.read_length.max} (mean ${p.read_length.mean})`]);
+  if (p.samples?.length) rows.push(["Samples", p.samples.join(", ")]);
+
+  return (
+    <div className="mt-3 rounded-input border border-border bg-surface-2 p-3">
+      {p.hint && <div className="mb-2 text-[13px] text-text">{p.hint}</div>}
+      {rows.length > 0 && (
+        <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-[12.5px]">
+          {rows.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="text-muted">{k}</dt>
+              <dd className="break-all font-mono text-text">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {p.columns && p.columns.length > 0 && (
+        <div className="mt-2">
+          <div className="mb-1 text-[12px] text-muted">Schema</div>
+          <div className="flex flex-wrap gap-1">
+            {p.columns.slice(0, 40).map((c) => (
+              <span key={c.name} className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11.5px] text-text">
+                {c.name} <span className="text-muted">{c.dtype}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {p.datasets && p.datasets.length > 0 && (
+        <div className="mt-2">
+          <div className="mb-1 text-[12px] text-muted">Datasets</div>
+          <div className="flex flex-col gap-0.5 font-mono text-[11.5px] text-text">
+            {p.datasets.slice(0, 20).map((d) => (
+              <span key={d.path}>{d.path} <span className="text-muted">[{d.shape.join("×")}] {d.dtype}</span></span>
+            ))}
+          </div>
+        </div>
+      )}
+      {p.sample_ids && p.sample_ids.length > 0 && (
+        <div className="mt-2">
+          <div className="mb-1 text-[12px] text-muted">Sample ids</div>
+          <div className="font-mono text-[11.5px] text-text">{p.sample_ids.slice(0, 5).join(", ")}</div>
+        </div>
+      )}
+      {p.note && <div className="mt-2 text-[11.5px] italic text-muted">{p.note}</div>}
     </div>
   );
 }

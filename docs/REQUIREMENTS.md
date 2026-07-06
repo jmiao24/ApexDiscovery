@@ -198,7 +198,7 @@ competitors.
   library round-tripping (SMILES→RDKit sanitization, POSCAR→pymatgen validity)
   rather than static patterns; broader per-field rule depth.
 
-### P0-6 · Large files: reference, don't load — 🟡 Partial · was inside P0-2/P2-1
+### P0-6 · Large files: reference, don't load — ✅ Done · was inside P0-2/P2-1
 
 - **Evidence.** Same failure mode in every field: files far exceed any context
   window — human FASTQ ~90 GB / BAM ~160 GB; multi-GB/TB HDF5/FITS sim snapshots;
@@ -213,7 +213,7 @@ competitors.
 - **Acceptance.** An analysis over a file larger than the context window completes
   by introspection/sampling, with no attempt to load the whole file into the
   model.
-- **Status.** 🟡 The memory-pointer contract now ships as the bundled
+- **Status.** ✅ The memory-pointer contract now ships as the bundled
   `large-file` skill (`runtime/skills/core/large-file/large_file_probe.py`,
   stdlib-first): a probe that returns a compact JSON pointer — schema / shape /
   approx row count / head+tail sample / extracted log numbers — in bounded
@@ -232,8 +232,15 @@ competitors.
   **GRIB** (cfgrib/pygrib), and **ROOT** (uproot) introspect via their library
   or degrade to an install hint. **Verified on this host**: a 500k-read
   `.fastq.gz` → 462 B pointer, streamed in constant memory; a 3,000-variant VCF
-  → samples + contigs parsed. 18 probe tests. Gap: wiring the probe into an
-  automatic pre-read step in the UI.
+  → samples + contigs parsed. 18 probe tests. **UI wiring shipped**: the "too
+  large to preview" card now offers **Inspect without loading** — a Rust
+  `probe_large_file` command (sandbox-resolved path, detected Python, enriched
+  PATH) runs the bundled probe and the pane renders the pointer as a compact
+  fact sheet (format, size, rows/reads/variants, read-length, schema chips,
+  sample ids, "not loaded" note), so a user — not just the agent — introspects
+  an over-window file in one click. **This closes P0-6** (acceptance: an
+  analysis over a file larger than the context window completes by
+  introspection/sampling, no whole-file load).
 
 ### P0-7 · Safety-defaults compliance + audit debt — 🟡 Partial · NEW (2026-07-05 audit)
 
@@ -665,7 +672,7 @@ competitors.
 | P0-3 | Artifact provenance / reproducibility | P0 | ✅ Done — versioned records + env/package lockfile + Reproduce |
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | 🟡 Partial — 3 checks + PDF-manuscript extractor shipped; weak-model robustness pending |
 | **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | 🟡 **Partial — 5 gates ship (physics/earth/biology/chemistry/social science), deterministic + pluggable; library round-trip (SMILES→RDKit, POSCAR→pymatgen) pending** |
-| P0-6 | Large files: reference, don't load | P0 | 🟡 Partial — memory-pointer probe ships (table/parquet/hdf5/fits/netcdf/log + genomics FASTQ/FASTA/VCF/BAM, GRIB, ROOT); only UI auto-pre-read wiring pending |
+| P0-6 | Large files: reference, don't load | P0 | ✅ Done — memory-pointer probe (table/parquet/hdf5/fits/netcdf/log + genomics FASTQ/FASTA/VCF/BAM, GRIB, ROOT) + one-click "Inspect without loading" in the too-large-preview card |
 | **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — ALL critical items addressed (approval modes, sidecar/preview auth, kernel deadlock, Windows injection, owner-only key files); keychain-at-rest deferred to signed releases (P2-3); moderate/cleanup backlog remains** |
 | P1-1 | Multi-discipline from day one | P1 | 🟡 Partial — pluggable + climate example; non-bio depth pending |
 | P1-2 | Domain + literature connectors | P1 | 🟡 Partial — literature/bio + non-bio across ALL 5 disciplines (materials, economics, physics space-weather, earth Open-Meteo + USGS) shipped, each MCP-handshake verified; astronomy catalogs (no PyPI MCP) + more chem/social DBs pending |
@@ -690,8 +697,9 @@ discipline-specific 20% and the one cross-cutting gap this revision adds:
    Open-Meteo/USGS); next is astronomy catalogs (no PyPI MCP yet) and richer
    viewers.
 3. **Deepen the shipped gates** — P0-5 (library round-trip + social science),
-   P1-6 (in-app prereg artifact + Stata/SPSS UI), and P0-6 (probe now covers
-   genomics/GRIB/ROOT; only UI auto-pre-read wiring remains).
+   P1-6 (in-app prereg artifact + Stata/SPSS UI). **P0-6 is now ✅ Done** — the
+   probe covers genomics/GRIB/ROOT and the UI exposes it as one-click "Inspect
+   without loading".
 
 ## What to say (and not say)
 

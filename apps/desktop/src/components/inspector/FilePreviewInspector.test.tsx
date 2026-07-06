@@ -6,6 +6,7 @@ import { FilePreviewInspector, PreviewError } from "./FilePreviewInspector";
 
 // The markdown tests below carry inline `content`, so they never hit
 // readArtifact — this mock only feeds the binary-file test.
+const probeLargeFile = vi.fn();
 vi.mock("@/lib/artifactFile", async (importOriginal) => {
   const mod = await importOriginal<typeof import("@/lib/artifactFile")>();
   return {
@@ -17,6 +18,7 @@ vi.mock("@/lib/artifactFile", async (importOriginal) => {
       data: "AAEC",
       size: 3,
     })),
+    probeLargeFile: (...args: unknown[]) => probeLargeFile(...args),
   };
 });
 
@@ -80,13 +82,48 @@ describe("PreviewError", () => {
       <PreviewError
         error="file too large to preview (>25 MB)"
         filename="huge.nc"
+        path="data/huge.nc"
         onOpenExternally={onOpen}
       />,
     );
     expect(screen.getByText(/huge\.nc is too large to preview/)).toBeInTheDocument();
-    expect(screen.getByText(/large-file probe/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Open externally/ }));
     expect(onOpen).toHaveBeenCalledOnce();
+  });
+
+  it("inspects a too-large file without loading it and renders the pointer", async () => {
+    probeLargeFile.mockResolvedValueOnce({
+      format: "fastq",
+      size: "90.0 GB",
+      approx_reads: 450_000_000,
+      read_length: { min: 150, max: 150, mean: 150 },
+      gzipped: true,
+      note: "Memory pointer — file introspected/sampled, not loaded.",
+    });
+    render(
+      <PreviewError
+        error="file too large to preview (>25 MB)"
+        filename="reads.fastq.gz"
+        path="data/reads.fastq.gz"
+        onOpenExternally={() => {}}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Inspect without loading/i }));
+    // The pointer's key facts render — the format value, the read count, and
+    // that it was sampled, not loaded.
+    expect(await screen.findByText("fastq")).toBeInTheDocument(); // the Format cell, exact
+    expect(screen.getByText(/450,000,000/)).toBeInTheDocument();
+    expect(screen.getByText(/not loaded/i)).toBeInTheDocument();
+    expect(probeLargeFile).toHaveBeenCalledWith("data/reads.fastq.gz", undefined);
+  });
+
+  it("shows the probe's error if introspection fails", async () => {
+    probeLargeFile.mockRejectedValueOnce(new Error("no Python found"));
+    render(
+      <PreviewError error="file too large to preview" filename="x.bam" path="x.bam" onOpenExternally={() => {}} />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Inspect without loading/i }));
+    expect(await screen.findByText(/no Python found/)).toBeInTheDocument();
   });
 
   it("renders other errors as a plain line, no card", () => {
