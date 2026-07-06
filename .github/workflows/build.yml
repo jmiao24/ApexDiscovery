@@ -74,6 +74,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # AppImage: linuxdeploy's strip chokes on the Bun-built opencode
+          # sidecar; NO_STRIP is the documented Tauri workaround.
+          NO_STRIP: true
         with:
           projectPath: apps/desktop
           args: --target ${{ matrix.target }}
