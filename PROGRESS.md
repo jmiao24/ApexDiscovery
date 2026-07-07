@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-07 05:35 · v0.1.2 published — collapsible sidebar + single-row titlebar + resizable/maximizable right pane + 48px headers, plus the provider-credential and macOS-13 fixes; CI matrix green, 6 installers attached (https://github.com/ai4s-research/open-science/releases/tag/v0.1.2).
+
 2026-07-06 21:45 · Header polish: all header rows (session titlebar, sidebar strip, every pane header) unified at 48px (1.5× the old 32px); macOS traffic lights re-centered for the taller row via trafficLightPosition {x:13, y:22} (measured on screen: lights and icons both center at 23.75px); header icons normalized to 14px / 1.5 stroke / solid text color so they match the 12px lights' height and no longer look washed out — 319 tests green, DMG rebuilt.
 
 2026-07-06 21:20 · Maximized pane header is now a single row with the traffic lights: PaneTitlebarInset (a 62px drag spacer rendered at the start of every pane header, macOS+maximized only) replaced the extra titlebar strip; cross-platform audit of the recent titlebar/pane work found no Windows/Linux issues — every drag region and pl-[78px] inset is gated on isTauri+Mac UA, titleBarStyle/hiddenTitle are macOS-only config keys, and allow-start-dragging is valid on all desktop platforms — 319 tests green, DMG rebuilt.
