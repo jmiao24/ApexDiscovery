@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-07 00:23 · New sessions now seed an agent harness instead of an empty folder: the evolve-agent scaffold (AGENTS.md rules, KNOWLEDGE.md, knowledge/, notes/) is maintained in-repo at `runtime/harness/`, bundled as a Tauri resource, and copied into each new dated folder by `harness::seed_harness` (non-clobbering, only on `new_dated_workspace` — never on switching to an existing session); per-session state files reset to blank templates, CLAUDE.md symlink dropped for cross-platform safety; DMG rebuilt and verified to contain Contents/Resources/harness.
+
 2026-07-07 00:10 · Failed tool steps no longer break out as prominent cards (they read like generated artifacts and drown the thread): failures/warnings stay quiet rows inside the group — red ✗, error output expandable — with a red "· N failed" count on the collapsed summary; only waiting-approval still renders standalone; 337 tests green, DMG rebuilt.
 
 2026-07-06 23:55 · Session-open jank fixed: collapsed tool details now lazy-mount (closed content stays out of the DOM; opening mounts collapsed and expands next frame, closing unmounts after the 300ms transition) — a history like the training session (16×50KB webfetch outputs, 20 file contents, 12 line-per-div diffs) no longer mounts ~1MB of hidden text on click; 335 tests green, DMG rebuilt.

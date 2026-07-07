@@ -489,7 +489,15 @@ pub fn new_dated_workspace(
         return Err("invalid folder name".into());
     }
     let dir = base_workspace_dir(&app)?.join(&name);
-    set_workspace(app, state, dir.to_string_lossy().to_string())
+    // `set_workspace` moves `app`; keep a handle to seed the harness afterwards.
+    let seed_app = app.clone();
+    let canon = set_workspace(app, state, dir.to_string_lossy().to_string())?;
+    // Seed the agent harness into the fresh folder so it starts with its
+    // operating rules, not an empty directory. Only NEW dated folders get seeded
+    // (never `set_workspace` alone — switching to an existing session must not
+    // re-plant the scaffold).
+    crate::harness::seed_harness(&seed_app, std::path::Path::new(&canon));
+    Ok(canon)
 }
 
 /// Native "choose a folder" dialog; returns the absolute path, or None on cancel.

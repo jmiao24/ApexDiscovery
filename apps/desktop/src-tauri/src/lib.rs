@@ -3,6 +3,7 @@
 mod artifact_file;
 mod debug_log;
 mod examples;
+mod harness;
 mod hpc;
 mod jupyter;
 mod kernel;
