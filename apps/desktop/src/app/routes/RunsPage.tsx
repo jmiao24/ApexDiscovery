@@ -146,6 +146,20 @@ export function RunsPage() {
                           <Package size={11} /> {r.env.packages.count} packages
                         </span>
                       )}
+                      {r.remoteHardware && (
+                        <span
+                          className="flex items-center gap-1 rounded bg-surface-2 px-1.5 py-0.5 font-mono"
+                          title="Remote hardware this run executed on"
+                        >
+                          <Cpu size={11} /> {r.remoteHardware}
+                        </span>
+                      )}
+                      {r.host && (
+                        <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono" title="Cluster host / Modal app">
+                          {r.host}
+                          {r.jobId && ` · job ${r.jobId}`}
+                        </span>
+                      )}
                       <span className="flex-1" />
                       {r.logHash && (
                         <button
@@ -178,13 +192,13 @@ export function RunsPage() {
                       )}
                     </div>
 
-                    {r.code.length > 0 && (
+                    {r.code && r.code.length > 0 && (
                       <FileGroup icon={<FileCode2 size={12} />} label="Code" files={r.code} />
                     )}
-                    {r.outputs.length > 0 && (
+                    {r.outputs && r.outputs.length > 0 && (
                       <FileGroup icon={<FileOutput size={12} />} label="Outputs" files={r.outputs} />
                     )}
-                    {r.outputs.length === 0 && r.surface && r.surface !== "local" && (
+                    {!r.outputs?.length && r.surface && r.surface !== "local" && (
                       <div className="text-xs text-muted">
                         Ran on {r.surface === "hpc" ? "an HPC cluster" : r.surface} — outputs live off
                         this machine and weren't captured locally.

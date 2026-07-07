@@ -62,6 +62,24 @@ modal run compute.py | tee modal_result.txt
 For large outputs, have the function write to a Modal Volume and download with
 `modal volume get`, rather than returning big objects.
 
+## 4 · Record the run (reproducibility)
+
+Modal runs on remote cloud hardware the app can't see, so record the run after
+it completes (from the workspace root):
+
+```bash
+python "$XDG_CONFIG_HOME/opencode/skills/modal-run/record_run.py" \
+  --surface modal --command "modal run compute.py" \
+  --status <ok|failed> --host "modal:<app-name>" \
+  --hardware "<the gpu= from @app.function, e.g. A10G — or 'CPU'>" \
+  --code compute.py --output modal_result.txt
+```
+
+The environment is reproduced by the `modal.Image` definition in `compute.py`
+(pinned `pip_install` + base image — already versioned in the workspace), so
+record the GPU/hardware string, not a package list. Use `--status failed` if the
+run errored.
+
 ## Rules
 
 - **User's account only.** Never handle, print, or store Modal tokens.

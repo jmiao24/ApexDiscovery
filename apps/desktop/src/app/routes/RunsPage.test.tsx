@@ -98,6 +98,15 @@ describe("RunsPage", () => {
     expect(screen.queryByText("output/metrics.json")).not.toBeInTheDocument();
   });
 
+  it("renders a run whose code/outputs arrays were omitted by the store", async () => {
+    // The Rust store omits empty arrays, so code/outputs can arrive undefined —
+    // the card must render, not crash on `.length`.
+    const bare = { ...run, code: undefined, outputs: undefined, logHash: undefined } as unknown as RunRecord;
+    listRuns.mockResolvedValue([bare]);
+    renderPage();
+    expect(await screen.findByText("python train.py --lr 3e-4")).toBeInTheDocument();
+  });
+
   it("explains the empty state", async () => {
     listRuns.mockResolvedValue([]);
     renderPage();

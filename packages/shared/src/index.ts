@@ -386,15 +386,24 @@ export interface RunRecord {
   /** The compute surface the run targeted. Absent means "local". Remote
    *  surfaces (hpc/modal) are recorded honestly but their outputs live off-box. */
   surface?: "local" | "hpc" | "modal" | "jupyter";
+  /** Remote runs only: the cluster host / Modal app the run executed on. */
+  host?: string;
+  /** Remote runs only: the scheduler job id / Modal call id, for traceability. */
+  jobId?: string;
+  /** Remote runs only: human-readable remote hardware (e.g. "1x A100, CUDA 12.2")
+   *  — the silicon the app can't probe from the laptop. */
+  remoteHardware?: string;
   /** Terminal outcome of the command. */
   status: "ok" | "failed";
   /** Wall-clock duration in ms, when start/end timing was available. */
   wallMs?: number;
   /** Code version: entry scripts named on the command line, each hashed, so a
-   *  later edit to the script is detectable when reproducing. */
-  code: RunArtifact[];
-  /** Files created or modified during the run's time window — its outputs. */
-  outputs: RunArtifact[];
+   *  later edit to the script is detectable when reproducing. May be absent
+   *  (the store omits empty arrays). */
+  code?: RunArtifact[];
+  /** Files created or modified during the run's time window — its outputs.
+   *  May be absent (the store omits empty arrays). */
+  outputs?: RunArtifact[];
   /** Captured stdout/stderr, content-addressed to `.openscience/logs/<hash>.txt`. */
   logHash?: string;
   /** Runtime environment (software + hardware) the run executed in. */

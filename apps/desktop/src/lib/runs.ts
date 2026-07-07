@@ -103,6 +103,12 @@ export function runInputFromEvent(event: ToolUpdatedEvent): RunInput | null {
   if (event.status !== "success" && event.status !== "failed") return null;
   const command = typeof event.input?.command === "string" ? event.input.command.trim() : "";
   if (!command) return null;
+  // Remote runs (HPC/Modal) execute off-box — their env, hardware, and outputs
+  // live on the cluster/cloud, invisible here. Recording them from the laptop
+  // would stamp the wrong environment, so the hpc-slurm / modal-run skills
+  // record them instead (into .openscience/remote-runs.jsonl) with real remote
+  // facts. The passive capture handles local runs only.
+  if (surfaceForCommand(command) !== "local") return null;
   if (!looksLikeExecution(command)) return null;
   return {
     command,
@@ -110,7 +116,7 @@ export function runInputFromEvent(event: ToolUpdatedEvent): RunInput | null {
     startedAt: event.startedAt,
     endedAt: event.endedAt,
     status: event.status === "success" ? "ok" : "failed",
-    surface: surfaceForCommand(command),
+    surface: "local",
   };
 }
 
@@ -135,14 +141,14 @@ export function reproduceRunPrompt(r: RunRecord): string {
         `The environment had ${env.packages.count} installed Python packages, pinned in \`.openscience/env/${env.packages.hash}.txt\` — install matching versions from that lockfile if the result differs.`,
       );
   }
-  const code = fileList(r.code);
+  const code = fileList(r.code ?? []);
   if (code) parts.push(`The code version is pinned by hash: ${code} — check it hasn't changed since.`);
   const remote = r.surface === "hpc" || r.surface === "modal";
   if (remote)
     parts.push(
       `This ran on ${r.surface === "hpc" ? "an HPC cluster" : "Modal"}, so its outputs live off this machine and weren't captured locally.`,
     );
-  const outputs = fileList(r.outputs);
+  const outputs = fileList(r.outputs ?? []);
   const compare = outputs
     ? `re-run it, then compare the regenerated outputs (${outputs}) against the recorded run and report whether they match — and what changed if not.`
     : remote

@@ -14,6 +14,9 @@ use crate::runtime::workspace_dir;
 
 const STORE_DIR: &str = ".openscience";
 const RUNS_FILE: &str = "runs.jsonl";
+/// Remote runs (HPC/Modal) recorded by the hpc-slurm / modal-run skills, which
+/// can see the remote side the app can't. Same schema; read_runs merges both.
+const REMOTE_RUNS_FILE: &str = "remote-runs.jsonl";
 const LOGS_DIR: &str = "logs";
 /// Captured stdout/stderr is capped like provenance content.
 const LOG_CAP: usize = 200_000;
@@ -42,15 +45,27 @@ pub struct RunRecord {
     /// Compute surface: "local" | "hpc" | "modal" | "jupyter". Absent = local.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface: Option<String>,
+    /// Remote runs only: cluster host / Modal app the run executed on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    /// Remote runs only: scheduler job id / Modal call id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
+    /// Remote runs only: human-readable remote hardware, e.g.
+    /// "1x A100 (node gpu-07), CUDA 12.2" — the silicon the app can't probe.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_hardware: Option<String>,
     /// "ok" | "failed".
     pub status: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wall_ms: Option<u64>,
-    /// Entry scripts named on the command line, hashed — code version.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// Entry scripts named on the command line, hashed — code version. Always
+    /// serialized (even empty) so the frontend can rely on the field existing.
+    #[serde(default)]
     pub code: Vec<RunArtifact>,
-    /// Files created/modified during the run's time window — its outputs.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// Files created/modified during the run's time window — its outputs. Always
+    /// serialized (even empty) so the frontend can rely on the field existing.
+    #[serde(default)]
     pub outputs: Vec<RunArtifact>,
     /// Captured stdout/stderr, content-addressed to `.openscience/logs/<hash>.txt`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -258,13 +273,22 @@ pub fn read_log(root: &Path, hash: &str) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("log unavailable: {e}"))
 }
 
-/// All recorded runs, newest first. Unparseable lines are skipped.
+/// Parse a JSONL run store; missing file or unparseable lines are skipped.
+fn read_run_file(path: &Path) -> Vec<RunRecord> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => text.lines().filter_map(|l| serde_json::from_str(l).ok()).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// All recorded runs, newest first — local runs (`runs.jsonl`) merged with
+/// remote runs the skills recorded (`remote-runs.jsonl`), sorted by start time.
 pub fn read_runs(root: &Path) -> Vec<RunRecord> {
-    let Ok(text) = std::fs::read_to_string(runs_file(root)) else {
-        return Vec::new();
-    };
-    let mut v: Vec<RunRecord> = text.lines().filter_map(|l| serde_json::from_str(l).ok()).collect();
-    v.reverse();
+    let dir = root.join(STORE_DIR);
+    let mut v = read_run_file(&dir.join(RUNS_FILE));
+    v.extend(read_run_file(&dir.join(REMOTE_RUNS_FILE)));
+    // Newest first; sort is stable so same-ts records keep file order.
+    v.sort_by_key(|r| std::cmp::Reverse(r.ts));
     v
 }
 
@@ -315,6 +339,9 @@ pub fn record_run_inner(
         model: model.clone(),
         command: command.to_string(),
         surface,
+        host: None,
+        job_id: None,
+        remote_hardware: None,
         status: status.to_string(),
         wall_ms,
         code,
@@ -557,6 +584,33 @@ mod tests {
         assert_eq!(read_runs(&root).len(), 1);
         // …but its partial output is NOT stamped "produced by run" in provenance.
         assert!(versions_for(&root, "partial.json").unwrap().is_empty());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn read_runs_merges_local_and_remote_stores_newest_first() {
+        let root = temp_root("merge");
+        // A local run at ts=100.
+        record_run_inner(&root, "python a.py", None, Some(100_000), Some(101_000), "ok", Some("local".into()), None, None, None).unwrap();
+        // A remote run at ts=200, written by the skill into remote-runs.jsonl.
+        let dir = root.join(".openscience");
+        std::fs::create_dir_all(&dir).unwrap();
+        // Exactly the shape the record_run.py skill helper emits.
+        let remote = r#"{"runId":"run_remote","ts":200,"command":"sbatch train.slurm","surface":"hpc","status":"ok","code":[{"path":"slurm/train.sbatch","size":14,"hash":"931ff5541588704b"}],"outputs":[{"path":"slurm/out.csv","size":10,"hash":"d9ddac7919a71e1e"}],"host":"login-a","jobId":"12345","remoteHardware":"1x A100 (node gpu-07), CUDA 12.2","wallMs":3600000}"#;
+        std::fs::write(dir.join("remote-runs.jsonl"), format!("{remote}\n")).unwrap();
+
+        let runs = read_runs(&root);
+        assert_eq!(runs.len(), 2);
+        // Newest (ts=200 remote) first, with all remote fields parsed.
+        assert_eq!(runs[0].run_id, "run_remote");
+        assert_eq!(runs[0].surface.as_deref(), Some("hpc"));
+        assert_eq!(runs[0].host.as_deref(), Some("login-a"));
+        assert_eq!(runs[0].job_id.as_deref(), Some("12345"));
+        assert_eq!(runs[0].remote_hardware.as_deref(), Some("1x A100 (node gpu-07), CUDA 12.2"));
+        assert_eq!(runs[0].wall_ms, Some(3_600_000));
+        assert_eq!(runs[0].outputs[0].path, "slurm/out.csv");
+        assert_eq!(runs[1].command, "python a.py");
 
         let _ = std::fs::remove_dir_all(root);
     }

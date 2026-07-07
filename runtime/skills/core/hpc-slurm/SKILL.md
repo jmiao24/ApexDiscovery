@@ -85,6 +85,32 @@ scp -o BatchMode=yes "<host>:<remote-dir>/slurm-<id>.out" \
 `<remote-dir>` is the literal directory you created in step 3 (`$REMOTE` does
 not survive into this shell call) — name each file to fetch explicitly.
 
+## 6 · Record the run (reproducibility)
+
+The app can't see the cluster, so a remote job leaves no run record on its own.
+After the job finishes and its results are fetched, record it — you gathered the
+facts already in step 4. First get the node/hardware and final state:
+
+```bash
+ssh -o BatchMode=yes <host> \
+  "sacct -j <id> --format=State,Elapsed,ExitCode,NodeList,AllocTRES -n -P"
+```
+
+Then record it (run from the workspace root):
+
+```bash
+python "$XDG_CONFIG_HOME/opencode/skills/hpc-slurm/record_run.py" \
+  --surface hpc --command "sbatch <job-name>.sbatch" \
+  --status <ok|failed> --host <host> --job-id <id> \
+  --hardware "<NodeList / AllocTRES, e.g. 1x A100 on gpu-07>" \
+  --code slurm/<job-name>.sbatch \
+  --output slurm/<job-name>/<result file>
+```
+
+The environment is reproduced by the batch script's `module load` / container
+directives (already versioned in the workspace) — record the hardware string,
+not a package list. Use `--status failed` for a non-success `sacct` state.
+
 Summarize: job id, final state (from sacct/squeue — quote it, do not assume
 success), elapsed time, and the fetched files. If the job failed, show the tail
 of `slurm-<id>.err` and propose a fix instead of resubmitting silently.

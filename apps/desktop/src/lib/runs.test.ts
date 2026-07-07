@@ -105,9 +105,12 @@ describe("runInputFromEvent", () => {
     });
   });
 
-  it("tags the compute surface for remote submissions", () => {
-    expect(runInputFromEvent(bash({ input: { command: "modal run app.py" } }))?.surface).toBe("modal");
-    expect(runInputFromEvent(bash({ input: { command: "srun python train.py" } }))?.surface).toBe("hpc");
+  it("skips remote submissions — the hpc-slurm/modal-run skills record those with real remote facts", () => {
+    // The local passive capture can't see remote env/hardware/outputs, so it
+    // stays out of the way rather than stamping the laptop's environment.
+    expect(runInputFromEvent(bash({ input: { command: "modal run app.py" } }))).toBeNull();
+    expect(runInputFromEvent(bash({ input: { command: "srun python train.py" } }))).toBeNull();
+    expect(runInputFromEvent(bash({ input: { command: 'ssh cluster "sbatch train.slurm"' } }))).toBeNull();
   });
 
   it("records a failed run too (a crashed experiment is provenance)", () => {
@@ -169,5 +172,13 @@ describe("reproduceRunPrompt", () => {
     // No env clause, no crash, no phantom files.
     expect(p).not.toContain("undefined");
     expect(p).not.toContain(".openscience/env/");
+  });
+
+  it("survives records with code/outputs fields absent (empty arrays omitted by the store)", () => {
+    // The Rust store omits empty code/outputs arrays, so a real record can have
+    // them undefined — the prompt must not throw on `.length`.
+    const bare = { ...run(), code: undefined, outputs: undefined } as unknown as RunRecord;
+    expect(() => reproduceRunPrompt(bare)).not.toThrow();
+    expect(reproduceRunPrompt(bare)).toContain("python train.py --lr 3e-4");
   });
 });
