@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   runCommand: vi.fn(),
   replyPermission: vi.fn(),
   abortSession: vi.fn(),
+  /** SSE events the real server streams back DURING an abort POST's await — an
+   *  "aborted" error and one or more session.idle events. Empty by default. */
+  abortTrailing: [] as unknown[],
   getMessages: vi.fn(),
   /** History the mock server returns for any session. */
   messages: [] as unknown[],
@@ -127,6 +130,10 @@ vi.mock("@ai4s/sdk", () => {
     }
     async abortSession(sid: string) {
       mocks.abortSession(sid);
+      // The real server answers an abort with its own SSE burst that streams
+      // back while this POST is still being awaited — reproduce that timing so
+      // the guard must already be set before the await, not after it.
+      for (const e of mocks.abortTrailing) mocks.fireEvent(e);
     }
     async getMessages(sid: string) {
       mocks.getMessages(sid);
@@ -151,6 +158,7 @@ beforeEach(async () => {
   mocks.failShell = false;
   mocks.failCommand = false;
   mocks.dropCommandPost = false;
+  mocks.abortTrailing = [];
   mocks.messages = [];
   mocks.approvalMode = "approve";
   useRuntimeStore.setState({
@@ -523,10 +531,28 @@ describe("stale running locks and interrupt", () => {
     expect(useRuntimeStore.getState().threads["ses_new"].blocks).toEqual(before);
   });
 
+  it("swallows the abort's trailing error and BOTH idle events (only 'Interrupted' shows)", async () => {
+    // Regression: the abort's SSE burst (an "aborted" error + two session.idle
+    // events) arrives DURING the abort POST's await. If the guard is set after
+    // the await, or consumed by the first idle, the thread grows a stray
+    // "Aborted" and one or two "done" lines before "Interrupted".
+    await useRuntimeStore.getState().sendPrompt("hi");
+    mocks.abortTrailing = [
+      { type: "error", sessionId: "ses_new", message: "The message was aborted" },
+      { type: "session.idle", sessionId: "ses_new" },
+      { type: "session.idle", sessionId: "ses_new" },
+    ];
+    await useRuntimeStore.getState().interrupt();
+    const statusLines = useRuntimeStore
+      .getState()
+      .threads["ses_new"].blocks.filter((b) => b.kind === "status-line");
+    expect(statusLines).toEqual([{ kind: "status-line", text: "Interrupted", tone: "error" }]);
+  });
+
   it("a new turn after an interrupt folds its events normally again", async () => {
     await useRuntimeStore.getState().sendPrompt("hi");
     await useRuntimeStore.getState().interrupt();
-    mocks.fireEvent({ type: "session.idle", sessionId: "ses_new" }); // consumes the guard
+    mocks.fireEvent({ type: "session.idle", sessionId: "ses_new" }); // suppressed; guard clears on the next turn
     await useRuntimeStore.getState().sendPrompt("again");
     mocks.fireEvent({ type: "session.idle", sessionId: "ses_new" });
     const s = useRuntimeStore.getState();

@@ -338,6 +338,41 @@ export async function logDebug(message: string): Promise<void> {
   }
 }
 
+/** True when the current UA is macOS (traffic lights live in the window chrome). */
+export function isMacUA(): boolean {
+  return typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
+}
+
+/** Whether the macOS traffic lights overlap our content and need a left inset.
+ *  Only in the packaged macOS webview (overlay titlebar) AND when not fullscreen
+ *  — native fullscreen slides the lights away, so the inset would be an empty
+ *  gap (the sidebar/expand buttons floated oddly indented in fullscreen). */
+export function trafficLightsPresent(tauri: boolean, mac: boolean, fullscreen: boolean): boolean {
+  return tauri && mac && !fullscreen;
+}
+
+/** Watch the window's fullscreen state (desktop only). Reports the current
+ *  value immediately and on every enter/leave — fullscreen resizes the window,
+ *  so a resize listener catches it. Returns an unlisten fn; in a plain browser
+ *  it reports `false` once and unlisten is a no-op. */
+export async function watchFullscreen(cb: (fullscreen: boolean) => void): Promise<() => void> {
+  if (!isTauri) {
+    cb(false);
+    return () => {};
+  }
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  const win = getCurrentWindow();
+  const sync = async () => {
+    try {
+      cb(await win.isFullscreen());
+    } catch {
+      // Window gone or API unavailable — keep the last known value.
+    }
+  };
+  await sync();
+  return win.onResized(() => void sync());
+}
+
 /** Write the provider key/model into OpenCode's config via the Rust command. */
 export async function configureOpenCode(
   creds: OpenCodeCredentials,

@@ -52,13 +52,53 @@ export function applyParagraphDefaults(xml: string): string {
   return changed ? new XMLSerializer().serializeToString(doc) : xml;
 }
 
-/** Rewrite every slide of the deck through applyParagraphDefaults. Returns the
- *  original bytes untouched when no slide needed it (or on any zip error). */
+/** Drop `<Override>` entries in `[Content_Types].xml` whose part is absent from
+ *  the package. Some generators emit phantom overrides (e.g. slideMaster2..N for
+ *  masters that were never written); pptx-preview then tries to load the missing
+ *  part and silently renders NOTHING — a blank pane — while PowerPoint/WPS just
+ *  ignore them. Removing them is safe: the part isn't there to describe.
+ *  Pure string → string; returns the input unchanged when every part exists. */
+export function dropMissingContentTypeOverrides(
+  xml: string,
+  hasPart: (zipPath: string) => boolean,
+): string {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  if (doc.getElementsByTagName("parsererror").length > 0) return xml;
+  let changed = false;
+  // Wildcard namespace: [Content_Types].xml puts Override in its default ns.
+  for (const ov of Array.from(doc.getElementsByTagNameNS("*", "Override"))) {
+    const part = ov.getAttribute("PartName") ?? "";
+    const zipPath = part.replace(/^\/+/, ""); // "/ppt/x.xml" → "ppt/x.xml"
+    if (zipPath && !hasPart(zipPath)) {
+      ov.parentNode?.removeChild(ov);
+      changed = true;
+    }
+  }
+  return changed ? new XMLSerializer().serializeToString(doc) : xml;
+}
+
+/** Normalize a deck for pptx-preview. Returns the original bytes untouched when
+ *  nothing needed fixing (or on any zip error — a normalization must never break
+ *  the preview). Two fixes, neither touching the file on disk:
+ *   1. Drop phantom [Content_Types].xml overrides (else the preview is blank).
+ *   2. Merge each paragraph's defRPr into its runs (else text renders unstyled). */
 export async function normalizePptxForPreview(bytes: ArrayBuffer): Promise<ArrayBuffer> {
   try {
     const zip = await JSZip.loadAsync(bytes);
-    const slides = Object.keys(zip.files).filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n));
     let changed = false;
+
+    const CONTENT_TYPES = "[Content_Types].xml";
+    const ctFile = zip.files[CONTENT_TYPES];
+    if (ctFile) {
+      const ct = await ctFile.async("string");
+      const out = dropMissingContentTypeOverrides(ct, (p) => !!zip.files[p]);
+      if (out !== ct) {
+        zip.file(CONTENT_TYPES, out);
+        changed = true;
+      }
+    }
+
+    const slides = Object.keys(zip.files).filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n));
     for (const name of slides) {
       const xml = await zip.files[name].async("string");
       const out = applyParagraphDefaults(xml);

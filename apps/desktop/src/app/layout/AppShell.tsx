@@ -7,8 +7,8 @@ import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { Toaster } from "@/components/ui/Toaster";
 import { mockProject } from "@/lib/mock";
 import { useRuntimeStore } from "@/lib/runtime";
-import { useUiStore } from "@/lib/store";
-import { ensureJupyter, isTauri, openExternal } from "@/lib/tauri";
+import { useOverlayTitlebar, useUiStore } from "@/lib/store";
+import { ensureJupyter, openExternal, watchFullscreen } from "@/lib/tauri";
 
 export function AppShell() {
   const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
@@ -31,6 +31,21 @@ export function AppShell() {
     void ensureJupyter();
   }, []);
 
+  // Track native fullscreen: macOS hides the traffic lights there, so headers
+  // must drop their traffic-light inset (see useOverlayTitlebar).
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void watchFullscreen((fs) => useUiStore.getState().setIsFullscreen(fs)).then((u) => {
+      if (cancelled) u();
+      else unlisten = u;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   // External links open in the system browser. Navigating the webview away
   // from the app would strand the user — there is no back button.
   useEffect(() => {
@@ -51,7 +66,7 @@ export function AppShell() {
   // macOS traffic lights don't overlap content, the window stays draggable,
   // and the sidebar can be re-expanded.
   const isMac = navigator.userAgent.includes("Mac");
-  const overlayTitlebar = isTauri && isMac;
+  const overlayTitlebar = useOverlayTitlebar();
   const pageOwnsTitlebar = useLocation().pathname.startsWith("/live");
 
   return (

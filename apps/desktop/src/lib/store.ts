@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { isMacUA, isTauri, trafficLightsPresent } from "./tauri";
 
 export type Theme = "light" | "dark";
 
@@ -46,6 +47,9 @@ interface UiState {
   inspectorMaximized: boolean;
   sidebarCollapsed: boolean;
   sidebarWidth: number;
+  /** macOS native fullscreen: the traffic lights slide away, so headers must
+   *  drop their traffic-light inset. Synced from the Tauri window in AppShell. */
+  isFullscreen: boolean;
   paletteOpen: boolean;
   /** One-shot text placed into the composer by another surface (e.g. the
    *  provenance Reproduce action) — consumed on the next composer render. */
@@ -58,6 +62,7 @@ interface UiState {
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
+  setIsFullscreen: (fullscreen: boolean) => void;
   setPaletteOpen: (open: boolean) => void;
   setComposerDraft: (draft: string | null) => void;
 }
@@ -68,6 +73,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   sidebarCollapsed:
     typeof window !== "undefined" && window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1",
   sidebarWidth: initialSidebarWidth(),
+  isFullscreen: false,
   paletteOpen: false,
   setTheme: (theme) => {
     if (typeof window !== "undefined") window.localStorage.setItem(THEME_KEY, theme);
@@ -90,6 +96,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ sidebarCollapsed });
   },
   toggleSidebar: () => get().setSidebarCollapsed(!get().sidebarCollapsed),
+  setIsFullscreen: (isFullscreen) => set({ isFullscreen }),
   setSidebarWidth: (width) => {
     const sidebarWidth = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(width)));
     if (typeof window !== "undefined")
@@ -100,3 +107,11 @@ export const useUiStore = create<UiState>((set, get) => ({
   composerDraft: null,
   setComposerDraft: (composerDraft) => set({ composerDraft }),
 }));
+
+/** Whether headers should inset for the macOS overlay-titlebar traffic lights.
+ *  False in a browser, on non-mac, and in fullscreen (the lights hide). The one
+ *  source of truth for every titlebar/header that clears the lights. */
+export function useOverlayTitlebar(): boolean {
+  const isFullscreen = useUiStore((s) => s.isFullscreen);
+  return trafficLightsPresent(isTauri, isMacUA(), isFullscreen);
+}

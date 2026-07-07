@@ -36,11 +36,19 @@ pub struct ProvenanceRecord {
     /// Text the tool wrote (capped); absent for binary or indirect writes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+    /// Unified diff of an incremental edit (capped); the lineage of a change
+    /// when the full file text wasn't in the event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub log: Option<String>,
     /// Runtime environment captured when the version was recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub env: Option<EnvInfo>,
+    /// The run that produced this version, when it came from executing code
+    /// (not an authored write). Links the file to its reproducibility recipe.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
 }
 
 /// The environment a version was produced in — enough to reproduce: which
@@ -59,6 +67,29 @@ pub struct EnvInfo {
     /// Installed Python packages (pip freeze), content-addressed to a lockfile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub packages: Option<PackageSnapshot>,
+    /// Hardware the code executed on — the part software can't otherwise pin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hardware: Option<HardwareInfo>,
+}
+
+/// The silicon a run executed on. Every field is best-effort ("record what we
+/// can"): a probe that isn't installed or fails just leaves its field absent.
+/// Captured once per app run (cheap; hardware doesn't change mid-session).
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HardwareInfo {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cores: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mem_gb: Option<u32>,
+    /// GPU model(s); empty when none detected.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gpu: Vec<String>,
+    /// Available accelerator: "cuda" | "mps" | "cpu".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accelerator: Option<String>,
 }
 
 /// A snapshot of the installed Python packages at record time. The full
@@ -100,9 +131,84 @@ fn pip_freeze() -> Option<String> {
         .clone()
 }
 
+/// Detect hardware once per app run by shelling out to the OS's own tools —
+/// `nvidia-smi` for NVIDIA GPUs, `sysctl`/`/proc` for CPU/RAM. Best-effort:
+/// any probe that isn't present just leaves its field empty.
+pub(crate) fn hardware_info() -> HardwareInfo {
+    static CACHE: std::sync::OnceLock<HardwareInfo> = std::sync::OnceLock::new();
+    CACHE.get_or_init(probe_hardware).clone()
+}
+
+fn probe_hardware() -> HardwareInfo {
+    let cores = std::thread::available_parallelism().ok().map(|n| n.get() as u32);
+    let (cpu, mem_gb) = probe_cpu_mem();
+    let gpu = probe_nvidia_gpus();
+    let accelerator = if !gpu.is_empty() {
+        Some("cuda".to_string())
+    } else if std::env::consts::OS == "macos" && std::env::consts::ARCH == "aarch64" {
+        Some("mps".to_string()) // Apple Silicon: Metal Performance Shaders
+    } else {
+        Some("cpu".to_string())
+    };
+    HardwareInfo { cpu, cores, mem_gb, gpu, accelerator }
+}
+
+/// CPU brand + total RAM (GB). macOS via `sysctl`, Linux via `/proc`.
+fn probe_cpu_mem() -> (Option<String>, Option<u32>) {
+    if std::env::consts::OS == "macos" {
+        let sysctl = |key: &str| {
+            crate::runtime::quiet_command("sysctl")
+                .args(["-n", key])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        };
+        let cpu = sysctl("machdep.cpu.brand_string").filter(|s| !s.is_empty());
+        let mem_gb = sysctl("hw.memsize")
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(|b| (b / 1_073_741_824) as u32);
+        (cpu, mem_gb)
+    } else if std::env::consts::OS == "linux" {
+        let cpu = std::fs::read_to_string("/proc/cpuinfo").ok().and_then(|t| {
+            t.lines()
+                .find(|l| l.starts_with("model name"))
+                .and_then(|l| l.split(':').nth(1))
+                .map(|s| s.trim().to_string())
+        });
+        let mem_gb = std::fs::read_to_string("/proc/meminfo").ok().and_then(|t| {
+            t.lines()
+                .find(|l| l.starts_with("MemTotal"))
+                .and_then(|l| l.split_whitespace().nth(1))
+                .and_then(|kb| kb.parse::<u64>().ok())
+                .map(|kb| (kb / 1_048_576) as u32) // kB -> GB
+        });
+        (cpu, mem_gb)
+    } else {
+        (None, None)
+    }
+}
+
+/// NVIDIA GPU model names via `nvidia-smi`; empty if the tool is absent.
+fn probe_nvidia_gpus() -> Vec<String> {
+    crate::runtime::quiet_command("nvidia-smi")
+        .args(["--query-gpu=name", "--format=csv,noheader"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// A short, deterministic content hash for lockfile addressing. DefaultHasher
 /// uses fixed keys, so the same freeze maps to the same file across runs.
-fn content_hash(text: &str) -> String {
+pub(crate) fn content_hash(text: &str) -> String {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     text.hash(&mut h);
@@ -141,7 +247,7 @@ fn python_version() -> Option<String> {
         .clone()
 }
 
-fn capture_env(root: &Path, app_version: String) -> EnvInfo {
+pub(crate) fn capture_env(root: &Path, app_version: String) -> EnvInfo {
     // Package capture is best-effort: no pip / write failure just omits it.
     let packages = pip_freeze().and_then(|f| write_lockfile(root, &f).ok());
     EnvInfo {
@@ -149,6 +255,7 @@ fn capture_env(root: &Path, app_version: String) -> EnvInfo {
         platform: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
         app: app_version,
         packages,
+        hardware: Some(hardware_info()),
     }
 }
 
@@ -207,6 +314,7 @@ fn cap_content(mut c: String) -> String {
 }
 
 /// Append one version record for `path`, assigning the next version number.
+#[allow(clippy::too_many_arguments)]
 pub fn append_record(
     root: &Path,
     path: &str,
@@ -214,8 +322,10 @@ pub fn append_record(
     session_id: Option<String>,
     model: Option<String>,
     content: Option<String>,
+    diff: Option<String>,
     log: Option<String>,
     env: Option<EnvInfo>,
+    run_id: Option<String>,
 ) -> Result<ProvenanceRecord, String> {
     let rel = normalize_rel(root, path)?;
     let file = store_file(root);
@@ -240,8 +350,10 @@ pub fn append_record(
         session_id,
         model,
         content: content.map(cap_content),
+        diff: diff.map(cap_content),
         log,
         env,
+        run_id,
     };
     let line = serde_json::to_string(&record).map_err(|e| e.to_string())?;
     use std::io::Write;
@@ -252,6 +364,66 @@ pub fn append_record(
         .map_err(|e| format!("provenance open failed: {e}"))?;
     writeln!(f, "{line}").map_err(|e| format!("provenance write failed: {e}"))?;
     Ok(record)
+}
+
+/// Append a `run`-produced version record for each of `paths` in ONE pass:
+/// reads the store once to compute per-path next versions, then writes all
+/// lines together. Used by runs.rs to link a run's outputs — a single read +
+/// write instead of one full store re-read per output, and the caller holds the
+/// same `ProvenanceState` lock as `record_provenance` so the two never race the
+/// version-then-append on `provenance.jsonl`.
+pub fn link_run_outputs(
+    root: &Path,
+    paths: &[String],
+    session_id: Option<String>,
+    model: Option<String>,
+    log: Option<String>,
+    env: Option<EnvInfo>,
+    run_id: String,
+) -> Result<(), String> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let file = store_file(root);
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("provenance dir failed: {e}"))?;
+    }
+    // Read once; compute the current max version per path.
+    let mut max_ver: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    for r in read_all(&file) {
+        let e = max_ver.entry(r.path).or_insert(0);
+        *e = (*e).max(r.version);
+    }
+    let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let mut buf = String::new();
+    for p in paths {
+        let rel = normalize_rel(root, p)?;
+        let v = max_ver.entry(rel.clone()).or_insert(0);
+        *v += 1;
+        let record = ProvenanceRecord {
+            path: rel,
+            version: *v,
+            ts,
+            tool: "run".to_string(),
+            session_id: session_id.clone(),
+            model: model.clone(),
+            content: None,
+            diff: None,
+            log: log.clone(),
+            env: env.clone(),
+            run_id: Some(run_id.clone()),
+        };
+        buf.push_str(&serde_json::to_string(&record).map_err(|e| e.to_string())?);
+        buf.push('\n');
+    }
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&file)
+        .map_err(|e| format!("provenance open failed: {e}"))?;
+    f.write_all(buf.as_bytes()).map_err(|e| format!("provenance write failed: {e}"))?;
+    Ok(())
 }
 
 /// All recorded versions of one artifact, oldest first.
@@ -269,6 +441,7 @@ pub fn versions_for(root: &Path, path: &str) -> Result<Vec<ProvenanceRecord>, St
 /// `pip freeze` (seconds) and every call re-reads the whole store — none of
 /// which may run on the UI thread.
 #[tauri::command(async)]
+#[allow(clippy::too_many_arguments)]
 pub fn record_provenance(
     app: AppHandle,
     state: tauri::State<ProvenanceState>,
@@ -277,12 +450,15 @@ pub fn record_provenance(
     session_id: Option<String>,
     model: Option<String>,
     content: Option<String>,
+    diff: Option<String>,
     log: Option<String>,
 ) -> Result<ProvenanceRecord, String> {
     let _guard = state.0.lock().map_err(|_| "provenance lock poisoned")?;
     let root = workspace_dir(&app)?;
     let env = capture_env(&root, app.package_info().version.to_string());
-    append_record(&root, &path, &tool, session_id, model, content, log, Some(env))
+    // Writes are authored, not runs — no run_id here (runs.rs sets it for
+    // files produced by executing code).
+    append_record(&root, &path, &tool, session_id, model, content, diff, log, Some(env), None)
 }
 
 /// `async`: reads the whole (unbounded) store off the UI thread.
@@ -319,12 +495,19 @@ mod tests {
     #[test]
     fn versions_increment_per_path_and_round_trip() {
         let root = temp_root("versions");
-        let r1 = append_record(&root, "fig/plot.py", "write", Some("ses_1".into()), Some("m".into()), Some("print(1)".into()), None, None).unwrap();
-        let r2 = append_record(&root, "fig/plot.py", "edit", Some("ses_1".into()), None, Some("print(2)".into()), None, None).unwrap();
+        let r1 = append_record(&root, "fig/plot.py", "write", Some("ses_1".into()), Some("m".into()), Some("print(1)".into()), None, None, None, None).unwrap();
+        // A file produced by a run carries its run_id (link to the recipe).
+        let r2 = append_record(&root, "fig/plot.py", "run", Some("ses_1".into()), None, None, None, None, None, Some("run_abc".into())).unwrap();
+        // An edit records its diff for lineage (no full content).
+        let e = append_record(&root, "fig/plot.py", "edit", None, None, None, Some("@@ -1 +1 @@\n-print(1)\n+print(2)".into()), None, None, None).unwrap();
+        assert_eq!(e.version, 3);
+        assert!(e.content.is_none());
+        assert_eq!(e.diff.as_deref(), Some("@@ -1 +1 @@\n-print(1)\n+print(2)"));
         let other = append_record(
             &root,
             "report.md",
             "write",
+            None,
             None,
             None,
             None,
@@ -334,15 +517,20 @@ mod tests {
                 platform: "macos-aarch64".into(),
                 app: "0.1.0".into(),
                 packages: Some(super::PackageSnapshot { count: 2, hash: "abc123".into() }),
+                hardware: None,
             }),
+            None,
         )
         .unwrap();
         assert_eq!((r1.version, r2.version, other.version), (1, 2, 1));
 
         let v = versions_for(&root, "fig/plot.py").unwrap();
-        assert_eq!(v.len(), 2);
+        assert_eq!(v.len(), 3);
         assert_eq!(v[0].content.as_deref(), Some("print(1)"));
-        assert_eq!(v[1].tool, "edit");
+        assert_eq!(v[0].run_id, None); // an authored write has no run
+        assert_eq!(v[2].diff.as_deref(), Some("@@ -1 +1 @@\n-print(1)\n+print(2)"));
+        assert_eq!(v[1].tool, "run");
+        assert_eq!(v[1].run_id.as_deref(), Some("run_abc")); // round-trips
         assert_eq!(v[1].session_id.as_deref(), Some("ses_1"));
         assert!(v[1].ts > 0);
         // env round-trips (and its absence stays absent).
@@ -386,7 +574,7 @@ mod tests {
         let root = temp_root("norm");
         // Absolute path under the workspace → same key as the relative form.
         let abs = root.join("a/b.txt");
-        append_record(&root, abs.to_str().unwrap(), "write", None, None, None, None, None).unwrap();
+        append_record(&root, abs.to_str().unwrap(), "write", None, None, None, None, None, None, None).unwrap();
         let v = versions_for(&root, "a/b.txt").unwrap();
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].path, "a/b.txt");
@@ -401,13 +589,13 @@ mod tests {
     #[test]
     fn corrupt_lines_are_skipped_and_content_is_capped() {
         let root = temp_root("corrupt");
-        append_record(&root, "x.py", "write", None, None, None, None, None).unwrap();
+        append_record(&root, "x.py", "write", None, None, None, None, None, None, None).unwrap();
         // A corrupt line must not lose the rest of the history.
         use std::io::Write;
         let file = root.join(".openscience/provenance.jsonl");
         let mut f = std::fs::OpenOptions::new().append(true).open(&file).unwrap();
         writeln!(f, "not json").unwrap();
-        append_record(&root, "x.py", "write", None, None, None, None, None).unwrap();
+        append_record(&root, "x.py", "write", None, None, None, None, None, None, None).unwrap();
         let v = versions_for(&root, "x.py").unwrap();
         assert_eq!(v.iter().map(|r| r.version).collect::<Vec<_>>(), vec![1, 2]);
 

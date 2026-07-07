@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Files, FolderTree, NotebookPen, PanelLeft, Plus, Settings, Trash2 } from "lucide-react";
+import { Files, FlaskConical, FolderTree, NotebookPen, PanelLeft, Plus, Settings, Trash2 } from "lucide-react";
 import type { Project } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
-import { isTauri } from "@/lib/tauri";
 import { useRuntimeStore } from "@/lib/runtime";
-import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
+import { SIDEBAR_MAX, SIDEBAR_MIN, useOverlayTitlebar, useUiStore } from "@/lib/store";
 import { StatusPills } from "./StatusPills";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import logo from "@/assets/logo.webp";
@@ -86,7 +85,7 @@ export function Sidebar({ project }: { project: Project }) {
   // With the overlay titlebar (macOS), reserve a draggable strip at the top so
   // the traffic lights don't overlap the logo and the window stays movable.
   const isMac = navigator.userAgent.includes("Mac");
-  const overlayTitlebar = isTauri && isMac;
+  const overlayTitlebar = useOverlayTitlebar();
 
   const width = dragWidth ?? sidebarWidth;
 
@@ -140,6 +139,7 @@ export function Sidebar({ project }: { project: Project }) {
         <NavRow icon={<Plus size={16} />} label="New" onClick={startNew} />
         <NavRow icon={<NotebookPen size={16} />} label="Notebooks" onClick={() => navigate("/notebooks")} />
         <NavRow icon={<FolderTree size={16} />} label="Files" onClick={() => navigate("/files")} />
+        <NavRow icon={<FlaskConical size={16} />} label="Runs" onClick={() => navigate("/runs")} />
         <NavRow icon={<Files size={16} />} label="Skills" onClick={() => navigate("/skills")} />
       </nav>
 

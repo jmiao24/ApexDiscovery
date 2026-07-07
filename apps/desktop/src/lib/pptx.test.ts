@@ -4,7 +4,7 @@
 // rendered as 18 px black (invisible on a dark slide). applyParagraphDefaults
 // rewrites each slide into the explicit per-run form the previewer understands.
 import { describe, expect, it } from "vitest";
-import { applyParagraphDefaults } from "./pptx";
+import { applyParagraphDefaults, dropMissingContentTypeOverrides } from "./pptx";
 
 const A = `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`;
 const P = `xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"`;
@@ -51,5 +51,46 @@ describe("applyParagraphDefaults", () => {
     const plain = wrap(`<a:p><a:r><a:t>plain</a:t></a:r></a:p>`);
     expect(applyParagraphDefaults(plain)).toBe(plain);
     expect(applyParagraphDefaults("<not-xml")).toBe("<not-xml");
+  });
+});
+
+// A generator emitted a valid single-master deck but declared slideMaster2..10
+// overrides for parts it never wrote. pptx-preview tried to load the missing
+// parts and rendered a BLANK pane (PowerPoint/WPS just ignore them). Dropping
+// the phantom overrides restores the preview.
+describe("dropMissingContentTypeOverrides", () => {
+  const CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types";
+  const ct = (overrides: string) =>
+    `<Types xmlns="${CT_NS}">` +
+    `<Default Extension="xml" ContentType="application/xml"/>` +
+    `<Default Extension="png" ContentType="image/png"/>` +
+    overrides +
+    `</Types>`;
+  const master = (n: number) =>
+    `<Override PartName="/ppt/slideMasters/slideMaster${n}.xml" ` +
+    `ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>`;
+
+  it("removes overrides whose part is absent, keeping present parts and Defaults", () => {
+    const present = new Set(["ppt/slideMasters/slideMaster1.xml"]);
+    const xml = ct(master(1) + master(2) + master(3));
+    const out = dropMissingContentTypeOverrides(xml, (p) => present.has(p));
+    expect(out).toContain("slideMaster1.xml");
+    expect(out).not.toContain("slideMaster2.xml");
+    expect(out).not.toContain("slideMaster3.xml");
+    // Defaults (matched by extension, not a part) are never touched.
+    expect(out).toContain(`Extension="png"`);
+  });
+
+  it("returns the input unchanged when every override's part exists", () => {
+    const xml = ct(master(1) + master(2));
+    const present = new Set([
+      "ppt/slideMasters/slideMaster1.xml",
+      "ppt/slideMasters/slideMaster2.xml",
+    ]);
+    expect(dropMissingContentTypeOverrides(xml, (p) => present.has(p))).toBe(xml);
+  });
+
+  it("leaves invalid XML untouched", () => {
+    expect(dropMissingContentTypeOverrides("<not-xml", () => false)).toBe("<not-xml");
   });
 });

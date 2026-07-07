@@ -2,8 +2,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FolderOpen, Loader2, NotebookPen, PanelLeft, PlugZap } from "lucide-react";
 import { DRAFT_KEY, rootSessionOf, subagentActivity, useRuntimeStore } from "@/lib/runtime";
-import { useUiStore } from "@/lib/store";
-import { isTauri } from "@/lib/tauri";
+import { useOverlayTitlebar, useUiStore } from "@/lib/store";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
@@ -183,7 +182,7 @@ export function LiveSessionPage() {
   // and empty stretches drag the window — one row, never two.
   const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
   const isMac = navigator.userAgent.includes("Mac");
-  const overlayTitlebar = isTauri && isMac;
+  const overlayTitlebar = useOverlayTitlebar();
 
   return (
     <div className="flex h-full min-w-0">
@@ -208,44 +207,46 @@ export function LiveSessionPage() {
               <PanelLeft size={14} strokeWidth={1.5} />
             </button>
           )}
-          {/* A draft has no session folder yet, so no Files toggle until the
-              first message creates the session. */}
+          {/* Left: the session title is the identity anchor. A draft shows no
+              title — the workspace picker lives in the composer until the
+              session exists. min-w-0 lets it truncate instead of shoving the
+              right-side controls off the bar. */}
+          {sessionId && (
+            <h1 className="min-w-0 truncate text-[13px] font-medium text-text">{title ?? ""}</h1>
+          )}
+          <div data-tauri-drag-region={overlayTitlebar || undefined} className="flex-1" />
+          {/* Right: quiet ghost controls — no border or fill until hovered or
+              active, so the row stays flat and editorial (one visual language
+              across the Files toggle and every notebook chip). The Files toggle
+              names this session's folder; a draft has none yet. */}
           {sessionId && (
             <button
               onClick={() => setShowFiles(!showFiles)}
               className={cn(
-                "flex items-center gap-1 rounded-input px-2 py-0.5 text-xs ring-1 ring-border hover:bg-surface-2",
-                showFiles ? "bg-surface-2 text-text" : "bg-surface text-muted",
+                "flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-surface-2",
+                showFiles ? "bg-surface-2 text-text" : "text-muted",
               )}
               title={`Browse this session's folder beside the chat${workspace ? ` — ${workspace}` : ""}`}
               aria-pressed={showFiles}
             >
-              <FolderOpen size={12} />
-              {/* An open session's folder is a fact — the toggle names it, replacing
-                  a separate folder chip (one element for "this session's files"). */}
+              <FolderOpen size={13} />
               <span className="max-w-[160px] truncate">
                 {workspace ? baseName(workspace) : "Files"}
               </span>
             </button>
           )}
-          {/* A draft shows no title and no folder — the workspace picker lives
-              in the composer's action row until the session exists. */}
-          {sessionId && (
-            <h1 className="truncate text-[13px] font-medium text-text">{title ?? ""}</h1>
-          )}
-          <div data-tauri-drag-region={overlayTitlebar || undefined} className="flex-1" />
           <ConnBadge status={displayStatus} />
           {uniqueNotebooks.map((nb) => (
             <button
               key={nb.path}
               onClick={() => openArtifact(nb)}
               className={cn(
-                "flex items-center gap-1 rounded-input px-2 py-0.5 font-mono text-xs ring-1 ring-border hover:bg-surface-2",
-                activeArtifact?.path === nb.path ? "bg-surface-2 text-text" : "bg-surface text-muted",
+                "flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-xs transition-colors hover:bg-surface-2",
+                activeArtifact?.path === nb.path ? "bg-surface-2 text-text" : "text-muted",
               )}
               title={`Open ${nb.path} — the agent works on this notebook in this session`}
             >
-              <NotebookPen size={11} />
+              <NotebookPen size={12} />
               <span className="max-w-[180px] truncate">{nb.filename}</span>
             </button>
           ))}

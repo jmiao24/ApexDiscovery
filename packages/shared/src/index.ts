@@ -327,9 +327,15 @@ export interface ProvenanceRecord {
   model?: string;
   /** Text the tool wrote (capped); absent for binary or indirect writes. */
   content?: string;
+  /** Unified diff of an incremental edit, when the full content wasn't captured
+   *  (edits carry a diff, not the whole file). Shown as the version's lineage. */
+  diff?: string;
   log?: string;
   /** Runtime environment captured when the version was recorded. */
   env?: ProvenanceEnv;
+  /** The run that produced this version, when it came from executing code
+   *  (not an authored write). Links the file to its reproducibility recipe. */
+  runId?: string;
 }
 
 /** The environment a version was produced in — enough to reproduce. */
@@ -342,6 +348,67 @@ export interface ProvenanceEnv {
   app: string;
   /** Installed Python packages (pip freeze), content-addressed to a lockfile. */
   packages?: PackageSnapshot;
+  /** Hardware the code executed on (CPU/GPU/accelerator). */
+  hardware?: HardwareInfo;
+}
+
+/** The silicon a run executed on — the part of reproducibility software can't
+ *  capture. Every field is best-effort ("record what we can"). */
+export interface HardwareInfo {
+  /** CPU brand string, e.g. "Apple M2 Pro" or "Intel Core i7-9750H". */
+  cpu?: string;
+  /** Logical CPU count. */
+  cores?: number;
+  /** Total physical memory in GB (rounded). */
+  memGb?: number;
+  /** GPU model(s), e.g. ["NVIDIA A100-SXM4-40GB"]; empty when none detected. */
+  gpu?: string[];
+  /** Compute accelerator available: "cuda" | "mps" | "cpu". */
+  accelerator?: string;
+}
+
+/**
+ * One experiment/analysis execution — the reproducibility recipe. Unlike a
+ * `ProvenanceRecord` (an authored file's text), a run captures WHAT ran, WHERE
+ * (env + hardware), and WHAT it produced, so a result can be regenerated and
+ * compared. Stored append-only in `.openscience/runs.jsonl`.
+ */
+export interface RunRecord {
+  /** Short content+time id, e.g. "run_ab12cd34". */
+  runId: string;
+  /** Seconds since the epoch (run start). */
+  ts: number;
+  sessionId?: string;
+  /** Model configured when the run was recorded. */
+  model?: string;
+  /** The exact command that ran, e.g. "python train.py --lr 3e-4". */
+  command: string;
+  /** The compute surface the run targeted. Absent means "local". Remote
+   *  surfaces (hpc/modal) are recorded honestly but their outputs live off-box. */
+  surface?: "local" | "hpc" | "modal" | "jupyter";
+  /** Terminal outcome of the command. */
+  status: "ok" | "failed";
+  /** Wall-clock duration in ms, when start/end timing was available. */
+  wallMs?: number;
+  /** Code version: entry scripts named on the command line, each hashed, so a
+   *  later edit to the script is detectable when reproducing. */
+  code: RunArtifact[];
+  /** Files created or modified during the run's time window — its outputs. */
+  outputs: RunArtifact[];
+  /** Captured stdout/stderr, content-addressed to `.openscience/logs/<hash>.txt`. */
+  logHash?: string;
+  /** Runtime environment (software + hardware) the run executed in. */
+  env?: ProvenanceEnv;
+}
+
+/** A file referenced by a run — its code input or produced output. */
+export interface RunArtifact {
+  /** Workspace-relative path with `/` separators. */
+  path: string;
+  /** Short content hash; absent when the file was too large to hash. */
+  hash?: string;
+  /** Size in bytes. */
+  size: number;
 }
 
 export interface PackageSnapshot {

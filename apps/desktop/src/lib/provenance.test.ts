@@ -31,6 +31,20 @@ describe("provenanceInputFromEvent", () => {
     expect(empty?.log).toBe("write → fig/plot.py");
   });
 
+  it("captures an edit's diff for lineage when full content isn't available", () => {
+    // OpenCode's edit tool carries oldString/newString (not `content`), so the
+    // full file text isn't in the event — but its unified diff is.
+    const edit = provenanceInputFromEvent(
+      write({
+        tool: "edit",
+        input: { filePath: "fig/plot.py", oldString: "print(1)", newString: "print(2)" },
+        diff: "--- a/fig/plot.py\n+++ b/fig/plot.py\n@@ -1 +1 @@\n-print(1)\n+print(2)",
+      }),
+    );
+    expect(edit?.content).toBeUndefined();
+    expect(edit?.diff).toContain("+print(2)");
+  });
+
   it("ignores non-success, non-write, and pathless events", () => {
     expect(provenanceInputFromEvent(write({ status: "running" }))).toBeNull();
     expect(provenanceInputFromEvent(write({ tool: "bash" }))).toBeNull();

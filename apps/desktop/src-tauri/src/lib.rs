@@ -12,6 +12,7 @@ mod modal;
 mod opencode_config;
 mod preview_server;
 mod provenance;
+mod runs;
 mod runtime;
 mod science_mcp;
 mod tools;
@@ -42,6 +43,7 @@ pub fn run() {
         .manage(JupyterState::default())
         .manage(PreviewState::default())
         .manage(ProvenanceState::default())
+        .manage(runs::RunState::default())
         .invoke_handler(tauri::generate_handler![
             runtime::start_runtime,
             runtime::runtime_password,
@@ -76,6 +78,9 @@ pub fn run() {
             provenance::record_provenance,
             provenance::list_provenance,
             provenance::read_env_lockfile,
+            runs::record_run,
+            runs::list_runs,
+            runs::read_run_log,
             science_mcp::science_mcp_python,
             science_mcp::setup_science_mcp,
             examples::install_example,

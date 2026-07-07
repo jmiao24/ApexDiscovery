@@ -10,8 +10,11 @@ import { deriveArtifact } from "./artifacts";
 export interface ProvenanceInput {
   path: string;
   tool: string;
-  /** Text the tool wrote, when it carried it (write/edit). */
+  /** Text the tool wrote, when it carried it (write). */
   content?: string;
+  /** Unified diff of an edit, when the full content wasn't in the event — the
+   *  lineage of an incremental change (edits carry old/newString, not `content`). */
+  diff?: string;
   log: string;
 }
 
@@ -33,7 +36,10 @@ export function provenanceInputFromEvent(event: ToolUpdatedEvent): ProvenanceInp
   const title = event.title?.trim();
   const log =
     title && !title.endsWith(artifact.filename) ? title : `${event.tool} → ${artifact.path}`;
-  return { path: artifact.path, tool: event.tool, content: artifact.content, log };
+  // When the tool didn't carry full content (an edit), keep its diff so the
+  // History still shows what changed, rather than "content not captured".
+  const diff = artifact.content ? undefined : event.diff;
+  return { path: artifact.path, tool: event.tool, content: artifact.content, diff, log };
 }
 
 /** Append a version record (desktop only). Recording must never break the chat flow. */
@@ -49,6 +55,7 @@ export async function recordProvenance(
       path: input.path,
       tool: input.tool,
       content: input.content ?? null,
+      diff: input.diff ?? null,
       log: input.log,
       sessionId: sessionId ?? null,
       model: model ?? null,

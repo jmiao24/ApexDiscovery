@@ -32,6 +32,7 @@ import { kernelReset } from "./kernel";
 import { moveScrollMemory } from "./scrollMemory";
 import { deriveArtifact } from "./artifacts";
 import { provenanceInputFromEvent, recordProvenance } from "./provenance";
+import { recordRun, runInputFromEvent } from "./runs";
 import { splitReview } from "./review";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -175,10 +176,13 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 /** Tool calls already written to provenance — success events can repeat per callId. */
 const recordedProvenance = new Set<string>();
+/** Bash calls already written to the run store — terminal events can repeat per callId. */
+const recordedRuns = new Set<string>();
 
 /** Sessions the user just interrupted: the thread already shows "Interrupted",
- *  so the abort's own trailing events (an "aborted" error, session.idle) must
- *  not add a second line. Consumed by the idle event; a new turn clears it. */
+ *  so the abort's own trailing events (an "aborted" error and one or more
+ *  session.idle events) must not add a second line. Armed before the abort POST
+ *  and held across every trailing event; the next turn clears it (`turn → sid`). */
 const interruptedSessions = new Set<string>();
 
 /** Server-side truth for "is this session's turn over": the last message is an
@@ -599,9 +603,11 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       const sid = event.sessionId;
       if (!sid) return;
       if (event.type === "session.idle") clearLiveFolds(sid);
-      // The idle after a user interrupt: the thread already ends with
-      // "Interrupted" — consume the guard, keep the locks clear, skip the fold.
-      if (event.type === "session.idle" && interruptedSessions.delete(sid)) {
+      // Idle after a user interrupt: the thread already ends with "Interrupted"
+      // — keep the locks clear and skip the fold. An abort can emit MORE than
+      // one idle, so the guard must survive every trailing idle (`.has`, not
+      // `.delete`); it is cleared when the next turn starts (see `turn → sid`).
+      if (event.type === "session.idle" && interruptedSessions.has(sid)) {
         set((s) => {
           const runningSessions = { ...s.runningSessions };
           const shellTurns = { ...s.shellTurns };
@@ -688,6 +694,15 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         if (input) {
           recordedProvenance.add(event.callId);
           void recordProvenance(input, sid, get().defaultModel);
+        }
+      }
+      // A completed experiment execution (bash running code) becomes a run —
+      // its reproducibility recipe (once per call).
+      if (event.type === "tool.updated" && !recordedRuns.has(event.callId)) {
+        const run = runInputFromEvent(event);
+        if (run) {
+          recordedRuns.add(event.callId);
+          void recordRun(run, sid, get().defaultModel);
         }
       }
       if (event.type === "session.idle") void get().refreshSessions();
@@ -897,13 +912,18 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   interrupt: async () => {
     const sid = get().currentId;
     if (!sid || !client || !get().runningSessions[sid]) return;
+    // Arm the guard BEFORE the abort POST: the server answers an abort with its
+    // own SSE burst (an "aborted" error and one or more session.idle events)
+    // that streams back WHILE this POST is still awaited. If we armed it after
+    // the await, those events would race in ahead and litter the thread with
+    // "Aborted" / "done" lines before "Interrupted".
+    interruptedSessions.add(sid);
     try {
       await client.abortSession(sid);
     } catch {
       // The abort POST failing usually means the turn is already dead —
       // fall through: unlock locally either way so the user is never stuck.
     }
-    interruptedSessions.add(sid);
     set((s) => {
       const runningSessions = { ...s.runningSessions };
       const shellTurns = { ...s.shellTurns };

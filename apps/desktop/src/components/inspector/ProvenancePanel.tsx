@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2, MessageSquare, Package, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, MessageSquare, Package, RotateCcw, Terminal } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import type { ProvenanceRecord } from "@ai4s/shared";
+import type { ProvenanceRecord, RunRecord } from "@ai4s/shared";
 import { listProvenance, readEnvLockfile } from "@/lib/provenance";
+import { listRuns, reproduceRunPrompt } from "@/lib/runs";
 import { useUiStore } from "@/lib/store";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
+import { DiffView } from "@/components/code-viewer/DiffView";
 import { cn } from "@/lib/cn";
 
 /** The prompt the Reproduce action drafts — prefilled, reviewed, user-sent. */
@@ -48,6 +50,8 @@ function longestBacktickRun(text: string): number {
 export function ProvenancePanel({ path, language }: { path: string; language?: string }) {
   const [records, setRecords] = useState<ProvenanceRecord[] | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
+  // Runs a version can be produced by, keyed by runId — links a file to its recipe.
+  const [runsById, setRunsById] = useState<Map<string, RunRecord>>(new Map());
   // The package lockfile currently shown, keyed by its content hash.
   const [lockfile, setLockfile] = useState<{ hash: string; text: string | null } | null>(null);
   const navigate = useNavigate();
@@ -65,10 +69,13 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
     );
   };
 
-  // Draft the reproduce prompt into the conversation the version came from —
-  // the user reviews and sends it (human in the loop, never auto-run).
+  // Draft a reproduce prompt into the conversation the version came from — the
+  // user reviews and sends it (human in the loop, never auto-run). For a file
+  // produced by a run, reproduce the RUN (re-run its command, compare outputs);
+  // for an authored file, reproduce its recorded code.
   const reproduce = (r: ProvenanceRecord) => {
-    setComposerDraft(reproducePrompt(r));
+    const run = r.runId ? runsById.get(r.runId) : undefined;
+    setComposerDraft(run ? reproduceRunPrompt(run) : reproducePrompt(r));
     navigate(r.sessionId ? `/live/${r.sessionId}` : "/live");
   };
 
@@ -79,6 +86,13 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
       if (cancelled) return;
       setRecords([...r].reverse()); // newest first
       setExpanded(r.length > 0 ? r[r.length - 1].version : null);
+      // Load the runs any of these versions were produced by, for the recipe.
+      if (r.some((rec) => rec.runId)) {
+        void listRuns().then((runs) => {
+          if (cancelled) return;
+          setRunsById(new Map(runs.map((run) => [run.runId, run])));
+        });
+      }
     });
     return () => {
       cancelled = true;
@@ -157,11 +171,15 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                   )}
                   {r.log && <span className="truncate">{r.log}</span>}
                   <span className="flex-1" />
-                  {r.content && (
+                  {(r.content || (r.runId && runsById.has(r.runId))) && (
                     <button
                       className="flex items-center gap-1 text-link hover:underline"
                       onClick={() => reproduce(r)}
-                      title="Draft a prompt that re-runs this version's code and compares the result"
+                      title={
+                        r.runId
+                          ? "Draft a prompt that re-runs this file's run and compares the outputs"
+                          : "Draft a prompt that re-runs this version's code and compares the result"
+                      }
                     >
                       <RotateCcw size={12} /> Reproduce
                     </button>
@@ -194,9 +212,34 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                 )}
                 {r.content ? (
                   <CodeViewer code={r.content} language={language} />
+                ) : r.diff ? (
+                  <DiffView diff={r.diff} className="max-h-80 overflow-y-auto" />
+                ) : r.runId ? (
+                  <div className="flex items-start gap-2 rounded-input border border-border bg-surface-2 px-2.5 py-2 text-xs text-muted">
+                    <Terminal size={13} className="mt-0.5 shrink-0" />
+                    <span>
+                      Produced by run{" "}
+                      <button
+                        className="font-mono text-link hover:underline"
+                        onClick={() => navigate(`/runs?run=${r.runId}`)}
+                        title="Open this run in the Runs view"
+                      >
+                        {r.runId}
+                      </button>
+                      {runsById.get(r.runId) && (
+                        <>
+                          {" — "}
+                          <span className="font-mono text-text">{runsById.get(r.runId)!.command}</span>
+                        </>
+                      )}
+                      . This file is an output of running code; Reproduce re-runs that command and
+                      compares the result.
+                    </span>
+                  </div>
                 ) : (
                   <div className={cn("text-xs text-muted")}>
-                    Content not captured for this version (binary or produced by running code).
+                    Content not captured for this version (a binary write, or an edit that recorded
+                    only a diff).
                   </div>
                 )}
               </div>

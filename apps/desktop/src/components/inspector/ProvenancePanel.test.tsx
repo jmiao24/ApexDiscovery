@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProvenanceRecord } from "@ai4s/shared";
+import type { ProvenanceRecord, RunRecord } from "@ai4s/shared";
 import { useUiStore } from "@/lib/store";
 import { ProvenancePanel, reproducePrompt } from "./ProvenancePanel";
 
@@ -32,6 +32,12 @@ vi.mock("@/lib/provenance", () => ({
   readEnvLockfile: (hash: string) => readEnvLockfile(hash),
 }));
 
+const listRuns = vi.fn();
+vi.mock("@/lib/runs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/runs")>()),
+  listRuns: () => listRuns(),
+}));
+
 const renderPanel = () =>
   render(
     <MemoryRouter>
@@ -47,6 +53,8 @@ describe("ProvenancePanel", () => {
   beforeEach(() => {
     listProvenance.mockReset();
     readEnvLockfile.mockReset();
+    listRuns.mockReset();
+    listRuns.mockResolvedValue([]);
   });
 
   it("lists versions newest first with the latest expanded", async () => {
@@ -98,6 +106,57 @@ describe("ProvenancePanel", () => {
     expect(readEnvLockfile).toHaveBeenCalledWith("deadbeef");
     expect(await screen.findByText(/numpy==2.0.1/)).toBeInTheDocument();
     expect(screen.getByText(/pip freeze · 3 packages/)).toBeInTheDocument();
+  });
+
+  it("shows a run-produced version as produced by its run, with a recipe reproduce", async () => {
+    const runProduced: ProvenanceRecord[] = [
+      { path: "output/metrics.json", version: 1, ts: 1751500000, tool: "run", runId: "run_abc123", sessionId: "ses_1" },
+    ];
+    const run: RunRecord = {
+      runId: "run_abc123",
+      ts: 1751500000,
+      sessionId: "ses_1",
+      command: "python train.py --lr 3e-4",
+      status: "ok",
+      code: [{ path: "train.py", hash: "aaaa", size: 100 }],
+      outputs: [{ path: "output/metrics.json", hash: "bbbb", size: 64 }],
+      env: { python: "3.11.4", platform: "linux-x86_64", app: "0.1.3" },
+    };
+    listProvenance.mockResolvedValue(runProduced);
+    listRuns.mockResolvedValue([run]);
+    useUiStore.setState({ composerDraft: null });
+    renderPanel();
+
+    // Not the misleading "content not captured" text — it points at the run.
+    expect(await screen.findByText(/Produced by run/)).toBeInTheDocument();
+    expect(screen.queryByText(/Content not captured/)).not.toBeInTheDocument();
+    expect(screen.getByText(/python train.py --lr 3e-4/)).toBeInTheDocument();
+
+    // Reproduce drafts the RUN recipe (re-run the command), not re-authoring.
+    await userEvent.click(screen.getByRole("button", { name: /Reproduce/ }));
+    const draft = useUiStore.getState().composerDraft;
+    expect(draft).toContain("Reproduce run `run_abc123`");
+    expect(draft).toContain("python train.py --lr 3e-4");
+    expect(draft).toContain("output/metrics.json");
+  });
+
+  it("shows an edit's diff as its lineage instead of 'content not captured'", async () => {
+    const edited: ProvenanceRecord[] = [
+      {
+        path: "fig/plot.py",
+        version: 1,
+        ts: 1751500000,
+        tool: "edit",
+        diff: "--- a/fig/plot.py\n+++ b/fig/plot.py\n@@ -1 +1 @@\n-print(1)\n+print(2)",
+        sessionId: "ses_1",
+      },
+    ];
+    listProvenance.mockResolvedValue(edited);
+    renderPanel();
+
+    expect(await screen.findByText("+print(2)")).toBeInTheDocument();
+    expect(screen.getByText("-print(1)")).toBeInTheDocument();
+    expect(screen.queryByText(/Content not captured/)).not.toBeInTheDocument();
   });
 
   it("explains the empty state", async () => {

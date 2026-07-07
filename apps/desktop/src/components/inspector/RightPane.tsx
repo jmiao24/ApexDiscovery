@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
-import { INSPECTOR_MAX, INSPECTOR_MIN, useUiStore } from "@/lib/store";
-import { isTauri } from "@/lib/tauri";
+import { INSPECTOR_MAX, INSPECTOR_MIN, useOverlayTitlebar, useUiStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
 
 /** Dragging the divider below this pane width closes the pane — the same
@@ -105,7 +104,7 @@ export function RightPane({
  *  window. Renders nothing otherwise. */
 export function PaneTitlebarInset() {
   const inspectorMaximized = useUiStore((s) => s.inspectorMaximized);
-  const overlayTitlebar = isTauri && navigator.userAgent.includes("Mac");
+  const overlayTitlebar = useOverlayTitlebar();
   if (!inspectorMaximized || !overlayTitlebar) return null;
   // Headers pad 16px (px-4); the lights need ~78px clear in total.
   return <div data-tauri-drag-region className="w-[62px] shrink-0 self-stretch" />;

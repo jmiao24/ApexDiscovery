@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ChevronRight, Loader2 } from "lucide-react";
 import type { ThreadBlock, ToolCallBlock } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
+import { DiffView } from "@/components/code-viewer/DiffView";
 import { STATUS } from "./ToolCallRow";
 
 // Codex-style tool activity: consecutive quiet tool steps fold into one
@@ -156,26 +157,7 @@ function BashDetail({ block }: { block: ToolCallBlock }) {
 }
 
 function DiffDetail({ diff }: { diff: string }) {
-  return (
-    <div className={cn(PANE, "ml-7 mb-1 mt-0.5 max-h-64 overflow-y-auto rounded-input bg-surface-2")}>
-      {diff.split("\n").map((line, i) => (
-        <div
-          key={i}
-          className={cn(
-            line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")
-              ? "text-muted"
-              : line.startsWith("+")
-                ? "text-ok"
-                : line.startsWith("-")
-                  ? "text-error"
-                  : "text-muted",
-          )}
-        >
-          {line || " "}
-        </div>
-      ))}
-    </div>
-  );
+  return <DiffView diff={diff} className="ml-7 mb-1 mt-0.5 max-h-64 overflow-y-auto" />;
 }
 
 function TextDetail({ text, muted }: { text: string; muted?: boolean }) {
