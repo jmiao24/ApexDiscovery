@@ -44,7 +44,7 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = req.url ?? "";
     requests.push(`${req.method} ${url}`);
-    if (req.method === "POST" && url === "/instance/dispose") {
+    if (req.method === "POST" && url.split("?")[0] === "/instance/dispose") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end("true");
       return;
@@ -53,6 +53,11 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
     if (req.method === "PUT" && url === "/auth/bad") {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ name: "InvalidKey", data: { message: "invalid key format" } }));
+      return;
+    }
+    if (req.method === "POST" && url === "/provider/slow/oauth/callback") {
+      // Never answers — like a real "auto" flow waiting on the browser
+      // redirect. Lets tests exercise cancelling the pending login.
       return;
     }
     if (req.method === "POST" && /^\/provider\/[^/]+\/oauth\/callback$/.test(url)) {

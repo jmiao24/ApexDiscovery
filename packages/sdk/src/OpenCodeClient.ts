@@ -187,7 +187,7 @@ export class OpenCodeClient {
       headers: this.headers(true),
       body: "{}",
     });
-    if (!res.ok) throw new Error(`Failed to create session (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to create session");
     const json = (await res.json()) as { id: string };
     return json.id;
   }
@@ -206,7 +206,7 @@ export class OpenCodeClient {
     if (!res.ok) {
       res = await this.fetchImpl(`${this.baseUrl}/session`, { headers: this.headers() });
     }
-    if (!res.ok) throw new Error(`Failed to list sessions (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to list sessions");
     const arr = (await res.json()) as Array<{
       id: string;
       title?: string;
@@ -229,7 +229,7 @@ export class OpenCodeClient {
       method: "DELETE",
       headers: this.headers(),
     });
-    if (!res.ok) throw new Error(`Failed to delete session (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to delete session");
   }
 
   /** Load a session's message history. */
@@ -238,7 +238,7 @@ export class OpenCodeClient {
       `${this.baseUrl}/session/${encodeURIComponent(sessionId)}/message`,
       { headers: this.headers() },
     );
-    if (!res.ok) throw new Error(`Failed to load messages (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to load messages");
     const arr = (await res.json()) as Array<{
       info: { role: "user" | "assistant"; time?: { completed?: number } };
       parts: HistoryMessage["parts"];
@@ -257,7 +257,7 @@ export class OpenCodeClient {
       `${this.baseUrl}/session/${encodeURIComponent(sessionId)}/abort`,
       { method: "POST", headers: this.headers(true), body: "{}" },
     );
-    if (!res.ok) throw new Error(`Failed to interrupt the session (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to interrupt the session");
   }
 
   /** Real skills loaded by OpenCode (built-in + bundled + user). */
@@ -268,7 +268,7 @@ export class OpenCodeClient {
     const res = await this.fetchImpl(`${this.baseUrl}/api/skill${query}`, {
       headers: this.headers(),
     });
-    if (!res.ok) throw new Error(`Failed to list skills (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to list skills");
     const body = (await res.json()) as { data?: SkillInfo[] };
     return body.data ?? [];
   }
@@ -276,7 +276,7 @@ export class OpenCodeClient {
   /** The configured default model ("provider/model"), or null when unset. */
   async getDefaultModel(): Promise<string | null> {
     const res = await this.fetchImpl(`${this.baseUrl}/config`, { headers: this.headers() });
-    if (!res.ok) throw new Error(`Failed to read config (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to read config");
     const cfg = (await res.json()) as { model?: string };
     return cfg.model ?? null;
   }
@@ -288,7 +288,7 @@ export class OpenCodeClient {
       headers: this.headers(true),
       body: JSON.stringify({ model }),
     });
-    if (!res.ok) throw new Error(`Failed to set model (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to set model");
   }
 
   /** Providers OpenCode can use right now, with their models. */
@@ -296,7 +296,7 @@ export class OpenCodeClient {
     const res = await this.fetchImpl(`${this.baseUrl}/config/providers`, {
       headers: this.headers(),
     });
-    if (!res.ok) throw new Error(`Failed to list providers (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to list providers");
     const body = (await res.json()) as {
       providers?: Array<{ id: string; name?: string; models?: Record<string, { name?: string }> }>;
     };
@@ -329,7 +329,7 @@ export class OpenCodeClient {
       headers: this.headers(true),
       body: JSON.stringify({ provider }),
     });
-    if (!res.ok) throw new Error(`Failed to add the provider (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to add the provider");
   }
 
   /** Ids of custom providers defined in the global config (removable via the app). */
@@ -346,7 +346,7 @@ export class OpenCodeClient {
       this.fetchImpl(`${this.baseUrl}/mcp`, { headers: this.headers() }),
       this.fetchImpl(`${this.baseUrl}/global/config`, { headers: this.headers() }),
     ]);
-    if (!statusRes.ok) throw new Error(`Failed to list MCP servers (${statusRes.status})`);
+    if (!statusRes.ok) throw await this.apiError(statusRes, "Failed to list MCP servers");
     const status = (await statusRes.json()) as Record<string, { status?: string }>;
     const cfg = cfgRes.ok
       ? ((await cfgRes.json()) as { mcp?: Record<string, McpConfig> })
@@ -366,13 +366,13 @@ export class OpenCodeClient {
       headers: this.headers(true),
       body: JSON.stringify({ mcp: { [name]: config } }),
     });
-    if (!res.ok) throw new Error(`Failed to add the MCP server (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to add the MCP server");
   }
 
   /** The full provider catalog (~150 entries) and which ids are connected. */
   async listProviderCatalog(): Promise<{ all: ProviderCatalogEntry[]; connected: string[] }> {
     const res = await this.fetchImpl(`${this.baseUrl}/provider`, { headers: this.headers() });
-    if (!res.ok) throw new Error(`Failed to list the provider catalog (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to list the provider catalog");
     const body = (await res.json()) as {
       all?: Array<{ id: string; name?: string; env?: string[] }>;
       connected?: string[];
@@ -386,7 +386,7 @@ export class OpenCodeClient {
   /** Every provider OpenCode knows how to connect, with its auth methods. */
   async listAuthMethods(): Promise<Record<string, ProviderAuthMethod[]>> {
     const res = await this.fetchImpl(`${this.baseUrl}/provider/auth`, { headers: this.headers() });
-    if (!res.ok) throw new Error(`Failed to list auth methods (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to list auth methods");
     return (await res.json()) as Record<string, ProviderAuthMethod[]>;
   }
 
@@ -426,11 +426,22 @@ export class OpenCodeClient {
   }
 
   /** Complete an OAuth login (pass the pasted code for "code" flows). For
-   *  "auto" flows this call WAITS until the browser redirect finishes. */
-  async oauthCallback(providerID: string, method: number, code?: string): Promise<void> {
+   *  "auto" flows this call WAITS until the browser redirect finishes — pass
+   *  a `signal` so a cancelled login doesn't leak the pending request. */
+  async oauthCallback(
+    providerID: string,
+    method: number,
+    code?: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
     const res = await this.fetchImpl(
       `${this.baseUrl}/provider/${encodeURIComponent(providerID)}/oauth/callback`,
-      { method: "POST", headers: this.headers(true), body: JSON.stringify({ method, code }) },
+      {
+        method: "POST",
+        headers: this.headers(true),
+        body: JSON.stringify({ method, code }),
+        signal,
+      },
     );
     if (!res.ok) throw await this.apiError(res, "Login did not complete");
     await this.disposeInstance();
@@ -438,13 +449,18 @@ export class OpenCodeClient {
 
   /** The server caches its provider list per instance — a credential change
    *  (PUT/DELETE /auth, OAuth) is invisible to /config/providers until the
-   *  instance is disposed. Best-effort: the credential is already stored. */
+   *  instance is disposed. Two instances can hold the stale cache: the default
+   *  one (answering the unscoped /config/providers this client reads) and the
+   *  workspace one (running this folder's sessions) — dispose both.
+   *  Best-effort: the credential is already stored. */
   private async disposeInstance(): Promise<void> {
-    await this.fetchImpl(`${this.baseUrl}/instance/dispose`, {
-      method: "POST",
-      headers: this.headers(true),
-      body: "{}",
-    }).catch(() => undefined);
+    for (const q of new Set(["", this.dirQuery()])) {
+      await this.fetchImpl(`${this.baseUrl}/instance/dispose${q}`, {
+        method: "POST",
+        headers: this.headers(true),
+        body: "{}",
+      }).catch(() => undefined);
+    }
   }
 
   /** Build an Error carrying the server's diagnostic message, when it has one
@@ -463,7 +479,7 @@ export class OpenCodeClient {
   /** Real agents configured in OpenCode. */
   async listAgents(): Promise<AgentInfo[]> {
     const res = await this.fetchImpl(`${this.baseUrl}/agent`, { headers: this.headers() });
-    if (!res.ok) throw new Error(`Failed to list agents (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to list agents");
     return (await res.json()) as AgentInfo[];
   }
 
@@ -473,7 +489,7 @@ export class OpenCodeClient {
     const res = await this.fetchImpl(`${this.baseUrl}/command${this.dirQuery()}`, {
       headers: this.headers(),
     });
-    if (!res.ok) throw new Error(`Failed to list commands (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to list commands");
     const arr = (await res.json()) as Array<{
       name: string;
       description?: string;
@@ -504,7 +520,7 @@ export class OpenCodeClient {
         body: JSON.stringify({ agent, command }),
       },
     );
-    if (!res.ok) throw new Error(`Command failed to run (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Command failed to run");
   }
 
   /** Run a slash command (config command / skill / MCP prompt) in a session.
@@ -519,7 +535,7 @@ export class OpenCodeClient {
         body: JSON.stringify({ command, ...(args ? { arguments: args } : {}) }),
       },
     );
-    if (!res.ok) throw new Error(`Failed to run /${command} (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, `Failed to run /${command}`);
   }
 
   /** Send a prompt into a session; output streams back via onEvent (SSE). */
@@ -532,7 +548,7 @@ export class OpenCodeClient {
         body: JSON.stringify({ parts: [{ type: "text", text }] }),
       },
     );
-    if (!res.ok) throw new Error(`Failed to send prompt (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to send prompt");
   }
 
   // ---- interactive requests (question / permission) ----
@@ -581,7 +597,7 @@ export class OpenCodeClient {
       `${this.baseUrl}/question/${encodeURIComponent(requestId)}/reply${this.dirQuery()}`,
       { method: "POST", headers: this.headers(true), body: JSON.stringify({ answers }) },
     );
-    if (!res.ok) throw new Error(`Failed to answer the question (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to answer the question");
   }
 
   /** Reject/dismiss a question (the agent proceeds without an answer). */
@@ -590,7 +606,7 @@ export class OpenCodeClient {
       `${this.baseUrl}/question/${encodeURIComponent(requestId)}/reject${this.dirQuery()}`,
       { method: "POST", headers: this.headers(true), body: "{}" },
     );
-    if (!res.ok) throw new Error(`Failed to reject the question (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to reject the question");
   }
 
   /** Pending permission requests in the workspace (recovery on open). */
@@ -624,7 +640,7 @@ export class OpenCodeClient {
       `${this.baseUrl}/permission/${encodeURIComponent(requestId)}/reply${this.dirQuery()}`,
       { method: "POST", headers: this.headers(true), body: JSON.stringify({ reply }) },
     );
-    if (!res.ok) throw new Error(`Failed to reply to the permission (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to reply to the permission");
   }
 
   // ---- internals ----

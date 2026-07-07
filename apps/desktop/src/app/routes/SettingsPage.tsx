@@ -87,8 +87,11 @@ export function SettingsPage() {
     (OAuthAuthorization & { providerID: string; methodIndex: number }) | null
   >(null);
   const [codeInput, setCodeInput] = useState("");
-  // Invalidates a pending browser-login wait when the user cancels or restarts.
+  // A pending browser-login wait: `oauthGen` invalidates it (cancel, restart,
+  // or connecting some other way), `oauthAbort` also cancels its in-flight
+  // callback request so retries never stack pending waits on the sidecar.
   const oauthGen = useRef(0);
+  const oauthAbort = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
     const client = getClient();
@@ -132,17 +135,31 @@ export function SettingsPage() {
     }
   };
 
+  // The one post-change sequence — run() and the background OAuth wait must
+  // stay in lockstep, so they share it instead of each keeping a copy.
+  const refreshAll = async () => {
+    await refresh();
+    await loadCatalog();
+  };
+
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(true);
     try {
       await fn();
-      await refresh();
-      await loadCatalog();
+      await refreshAll();
     } catch (e) {
       toast.error(`${label}: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
     }
+  };
+
+  // Any action that cancels, restarts or bypasses the oauth flow must call
+  // this: it invalidates the pending browser wait and aborts its request.
+  const invalidateOauthWait = () => {
+    oauthGen.current++;
+    oauthAbort.current?.abort();
+    oauthAbort.current = null;
   };
 
   const saveModel = (model: string) =>
@@ -154,6 +171,7 @@ export function SettingsPage() {
   const saveKey = (providerID: string) =>
     run("Could not save the key", async () => {
       await getClient()!.setProviderApiKey(providerID, keyInput.trim());
+      cancelOAuth(); // a pending browser login for this panel is now moot
       setKeyInput("");
       setConnectQuery("");
       toast.success(`${providerID} connected`);
@@ -161,32 +179,44 @@ export function SettingsPage() {
 
   const startOAuth = (providerID: string, methodIndex: number, inputs?: Record<string, string>) =>
     run("Could not start the login", async () => {
+      invalidateOauthWait(); // this flow replaces any pending one
+      const gen = oauthGen.current;
       const auth = await getClient()!.oauthAuthorize(providerID, methodIndex, inputs);
+      if (gen !== oauthGen.current) return; // cancelled while starting
       setOauth({ ...auth, providerID, methodIndex });
       await openExternal(auth.url);
       // "auto" flows finish on the browser redirect — the callback call below
       // WAITS for it, so run it in the background (never through `busy`, which
       // would lock the whole page for as long as the browser tab stays open).
-      if (auth.method !== "code") void waitForBrowserLogin(providerID, methodIndex);
+      if (auth.method !== "code" && gen === oauthGen.current)
+        void waitForBrowserLogin(providerID, methodIndex, gen);
     });
 
-  const waitForBrowserLogin = async (providerID: string, methodIndex: number) => {
-    const gen = ++oauthGen.current;
+  const waitForBrowserLogin = async (providerID: string, methodIndex: number, gen: number) => {
+    const abort = new AbortController();
+    oauthAbort.current = abort;
     try {
-      await getClient()!.oauthCallback(providerID, methodIndex);
-      if (gen !== oauthGen.current) return; // cancelled or superseded
+      await getClient()!.oauthCallback(providerID, methodIndex, undefined, abort.signal);
+      if (gen !== oauthGen.current) {
+        // Cancelled in the UI, but the login DID complete — refresh silently
+        // so the now-connected provider still shows up in the list.
+        await refreshAll();
+        return;
+      }
+      setOauth(null);
       toast.success(`${providerID} connected`);
-      await refresh();
-      await loadCatalog();
+      await refreshAll();
     } catch (e) {
-      if (gen !== oauthGen.current) return;
+      if (gen !== oauthGen.current) return; // cancelled — the abort is expected
+      setOauth(null);
       toast.error(`Login did not complete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      if (oauthAbort.current === abort) oauthAbort.current = null;
     }
-    setOauth(null);
   };
 
   const cancelOAuth = () => {
-    oauthGen.current++;
+    invalidateOauthWait();
     setOauth(null);
     setCodeInput("");
   };
@@ -194,12 +224,10 @@ export function SettingsPage() {
   const completeOAuth = () =>
     run("Login did not complete", async () => {
       if (!oauth) return;
-      await getClient()!.oauthCallback(
-        oauth.providerID,
-        oauth.methodIndex,
-        codeInput.trim() || undefined,
-      );
-      toast.success(`${oauth.providerID} connected`);
+      const { providerID, methodIndex } = oauth;
+      invalidateOauthWait(); // the pasted code supersedes any browser wait
+      await getClient()!.oauthCallback(providerID, methodIndex, codeInput.trim() || undefined);
+      toast.success(`${providerID} connected`);
       setOauth(null);
       setCodeInput("");
     });
@@ -274,8 +302,7 @@ export function SettingsPage() {
         environment: { JUPYTER_URL: s.url, JUPYTER_TOKEN: s.token, ALLOW_IMG_OUTPUT: "true" },
       });
       toast.success("Jupyter MCP enabled — the agent can now drive notebooks.");
-      await refresh();
-      await loadCatalog();
+      await refreshAll();
     } catch (e) {
       toast.error(`Jupyter setup failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -295,8 +322,7 @@ export function SettingsPage() {
       await getClient()!.addMcpServer(c.id, connectorConfig(c, python, connectorKeys[c.id]));
       toast.success(`${c.label} enabled — the agent can now use it from chat.`);
       setConnectorKeys((k) => ({ ...k, [c.id]: "" })); // don't keep the key in UI state
-      await refresh();
-      await loadCatalog();
+      await refreshAll();
     } catch (e) {
       toast.error(`${c.label} setup failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {

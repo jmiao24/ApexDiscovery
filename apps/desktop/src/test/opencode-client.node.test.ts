@@ -134,6 +134,36 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
     ]);
   });
 
+  it("disposes the workspace instance too when scoped to a directory", async () => {
+    // Sessions run on the per-directory instance — if only the default one
+    // were disposed, chats would keep a stale provider list until restart.
+    const client = new OpenCodeClient({
+      baseUrl: `http://127.0.0.1:${server.port}`,
+      directory: "/ws/dir",
+    });
+    server.requests.length = 0;
+    await client.setProviderApiKey("mock", "sk-123");
+    expect(server.requests).toEqual([
+      "PUT /auth/mock",
+      "POST /instance/dispose",
+      "POST /instance/dispose?directory=%2Fws%2Fdir",
+    ]);
+  });
+
+  it("cancels a pending browser-login wait via the AbortSignal", async () => {
+    // "auto" OAuth callbacks wait for the browser redirect — cancelling in
+    // the UI must abort the request, not leak it on the sidecar.
+    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    server.requests.length = 0;
+    const abort = new AbortController();
+    const pending = client.oauthCallback("slow", 0, undefined, abort.signal);
+    await waitFor(() => server.requests.includes("POST /provider/slow/oauth/callback"));
+    abort.abort();
+    await expect(pending).rejects.toThrow();
+    // An aborted login must not dispose the instance (nothing changed).
+    expect(server.requests.filter((r) => r.includes("dispose"))).toEqual([]);
+  });
+
   it("surfaces the server's diagnostic message when saving a key fails", async () => {
     const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
     await expect(client.setProviderApiKey("bad", "nope")).rejects.toThrow(/invalid key format/);
