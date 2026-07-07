@@ -3,6 +3,7 @@ import { ArrowLeft, History, Loader2, NotebookPen, Play, Plus, RefreshCw, Square
 import type { NotebookCell } from "@ai4s/shared";
 import { readArtifact, writeWorkspaceFile } from "@/lib/artifactFile";
 import { ProvenancePanel } from "@/components/inspector/ProvenancePanel";
+import { PaneTitlebarInset } from "@/components/inspector/RightPane";
 import { parseIpynb, serializeIpynb, notebookLanguage } from "@/lib/notebook-file";
 import {
   formatExecResult,
@@ -25,6 +26,7 @@ export function NotebookEditor({
   root,
   onBack,
   onClose,
+  controls,
 }: {
   path: string;
   /** Folder tree `path` resolves in (default the active workspace). The
@@ -34,6 +36,8 @@ export function NotebookEditor({
   onBack?: () => void;
   /** Close the pane (inspector use). */
   onClose?: () => void;
+  /** Pane-level header buttons (e.g. maximize), rendered before Close. */
+  controls?: React.ReactNode;
 }) {
   const [cells, setCells] = useState<NotebookCell[] | null>(null);
   const [language, setLanguage] = useState<KernelLanguage>("python");
@@ -176,13 +180,14 @@ export function NotebookEditor({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+        <PaneTitlebarInset />
         {onBack && (
-          <button className="text-muted hover:text-text" aria-label="Back to notebooks" onClick={onBack}>
-            <ArrowLeft size={15} />
+          <button className="text-text hover:opacity-60" aria-label="Back to notebooks" onClick={onBack}>
+            <ArrowLeft size={14} strokeWidth={1.5} />
           </button>
         )}
-        <NotebookPen size={14} className="shrink-0 text-muted" />
+        <NotebookPen size={14} strokeWidth={1.5} className="shrink-0 text-text" />
         <h1 className="truncate text-[13px] font-medium text-text">{path}</h1>
         <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
           {language === "r" ? "R" : "Python"}
@@ -193,25 +198,26 @@ export function NotebookEditor({
           Shift/⌘+Enter runs a cell · shared with the agent
         </span>
         <button
-          className={cn(showHistory ? "text-text" : "text-muted hover:text-text")}
+          className={cn(showHistory ? "text-accent" : "text-text hover:opacity-60")}
           aria-label="History"
           title="History — every recorded version with its code and conversation"
           aria-pressed={showHistory}
           onClick={() => setShowHistory((v) => !v)}
         >
-          <History size={14} />
+          <History size={14} strokeWidth={1.5} />
         </button>
         <button
-          className="text-muted hover:text-text"
+          className="text-text hover:opacity-60"
           aria-label="Reload from disk"
           title="Reload (pick up the agent's changes)"
           onClick={() => void load()}
         >
-          <RefreshCw size={14} />
+          <RefreshCw size={14} strokeWidth={1.5} />
         </button>
+        {controls}
         {onClose && (
-          <button className="text-muted hover:text-text" aria-label="Close inspector" onClick={onClose}>
-            <X size={16} />
+          <button className="text-text hover:opacity-60" aria-label="Close inspector" onClick={onClose}>
+            <X size={14} strokeWidth={1.5} />
           </button>
         )}
       </div>

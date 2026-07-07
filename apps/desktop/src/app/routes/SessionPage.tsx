@@ -3,6 +3,7 @@ import { findSession } from "@/lib/mock";
 import { useUiStore } from "@/lib/store";
 import { ThreadView } from "@/components/thread/ThreadView";
 import { InspectorShell } from "@/components/inspector/InspectorShell";
+import { MaximizePaneButton, RightPane } from "@/components/inspector/RightPane";
 import { EmptyState } from "@/components/cards/EmptyState";
 
 export function SessionPage() {
@@ -23,9 +24,13 @@ export function SessionPage() {
         <ThreadView session={session} />
       </div>
       {showInspector && (
-        <div className="hidden w-[46%] max-w-[720px] shrink-0 lg:block">
-          <InspectorShell inspector={session.inspector!} onClose={() => setInspectorOpen(false)} />
-        </div>
+        <RightPane onClose={() => setInspectorOpen(false)}>
+          <InspectorShell
+            inspector={session.inspector!}
+            onClose={() => setInspectorOpen(false)}
+            controls={<MaximizePaneButton />}
+          />
+        </RightPane>
       )}
     </div>
   );

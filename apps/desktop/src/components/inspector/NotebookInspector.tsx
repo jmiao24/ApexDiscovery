@@ -2,6 +2,7 @@ import { useRef, useState, type KeyboardEvent } from "react";
 import { ChevronDown, CornerDownLeft, NotebookPen, X } from "lucide-react";
 import type { NotebookCell, NotebookInspector as NotebookInspectorT } from "@ai4s/shared";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
+import { PaneTitlebarInset } from "./RightPane";
 import { formatExecResult, kernelExecute } from "@/lib/kernel";
 import { useScrollMemory } from "@/lib/scrollMemory";
 
@@ -9,11 +10,14 @@ export function NotebookInspector({
   data,
   onClose,
   onEvaluate,
+  controls,
 }: {
   data: NotebookInspectorT;
   onClose: () => void;
   /** Forward the expression to the agent's live kernel (live session only). */
   onEvaluate?: (expr: string) => void;
+  /** Pane-level header buttons (e.g. maximize), rendered before Close. */
+  controls?: React.ReactNode;
 }) {
   const [cells, setCells] = useState<NotebookCell[]>(data.cells);
   const [expr, setExpr] = useState("");
@@ -59,12 +63,14 @@ export function NotebookInspector({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <NotebookPen size={15} className="text-muted" />
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+        <PaneTitlebarInset />
+        <NotebookPen size={14} strokeWidth={1.5} className="text-text" />
         <span className="text-sm font-medium text-text">Notebook</span>
         <div className="flex-1" />
-        <button className="text-muted hover:text-text" aria-label="Close inspector" onClick={onClose}>
-          <X size={16} />
+        {controls}
+        <button className="text-text hover:opacity-60" aria-label="Close inspector" onClick={onClose}>
+          <X size={14} strokeWidth={1.5} />
         </button>
       </header>
 

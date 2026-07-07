@@ -1,5 +1,11 @@
 # Progress
 
+2026-07-06 21:45 · Header polish: all header rows (session titlebar, sidebar strip, every pane header) unified at 48px (1.5× the old 32px); macOS traffic lights re-centered for the taller row via trafficLightPosition {x:13, y:22} (measured on screen: lights and icons both center at 23.75px); header icons normalized to 14px / 1.5 stroke / solid text color so they match the 12px lights' height and no longer look washed out — 319 tests green, DMG rebuilt.
+
+2026-07-06 21:20 · Maximized pane header is now a single row with the traffic lights: PaneTitlebarInset (a 62px drag spacer rendered at the start of every pane header, macOS+maximized only) replaced the extra titlebar strip; cross-platform audit of the recent titlebar/pane work found no Windows/Linux issues — every drag region and pl-[78px] inset is gated on isTauri+Mac UA, titleBarStyle/hiddenTitle are macOS-only config keys, and allow-start-dragging is valid on all desktop platforms — 319 tests green, DMG rebuilt.
+
+2026-07-06 21:05 · Right pane (artifacts/Files) is now resizable like the sidebar: left-edge divider drags within 360–960px (persisted, capped at 70% of the window), dragging far right snaps it closed; new maximize/restore button in every pane header covers the whole window with just the artifact; session header separators softened — draft pages have none, open sessions (and examples) use a new faint border token — 319 tests green, DMG rebuilt.
+
 2026-07-06 20:37 · Window-drag root-caused: no capabilities file existed, and core:window:default does not include start-dragging, so every data-tauri-drag-region invoke was silently ACL-denied since day one — fixed with capabilities/default.json (core:default + allow-start-dragging, double-click-zoom now works too); drafts also lost the header title/folder chip (workspace picker now sits in the composer row right of attach) — 319 tests green, DMG rebuilt.
 
 2026-07-06 20:20 · Session header is now a Codex-style single-row titlebar: collapsed = traffic lights → expand button → folder toggle → title in one 32px draggable row (drafts hide the Files toggle until the session folder exists), expanded = collapse button lives in the sidebar's top strip right of the lights so the toggle never moves; non-live routes keep a fallback strip — 319 tests green, DMG rebuilt.

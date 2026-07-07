@@ -19,6 +19,7 @@ import { useRuntimeStore } from "@/lib/runtime";
 import { baseName } from "@/components/thread/WorkspaceChip";
 import { NotebookEditor } from "@/components/notebook/NotebookEditor";
 import { FilePreviewInspector } from "@/components/inspector/FilePreviewInspector";
+import { PaneTitlebarInset } from "@/components/inspector/RightPane";
 import { cn } from "@/lib/cn";
 
 const EXT_LANG: Record<string, string> = {
@@ -163,13 +164,16 @@ function FilePreview({
   entry,
   root,
   onClose,
+  controls,
 }: {
   entry: DirEntry;
   root: "workspace" | "base";
   onClose: () => void;
+  controls?: React.ReactNode;
 }) {
   const ext = extOf(entry.name);
-  if (ext === "ipynb") return <NotebookEditor path={entry.path} root={root} onClose={onClose} />;
+  if (ext === "ipynb")
+    return <NotebookEditor path={entry.path} root={root} onClose={onClose} controls={controls} />;
   const kind: PreviewKind = previewKindForName(entry.name);
   return (
     <FilePreviewInspector
@@ -182,6 +186,7 @@ function FilePreview({
         root,
       }}
       onClose={onClose}
+      controls={controls}
     />
   );
 }
@@ -192,7 +197,14 @@ function FilePreview({
  * the Files page itself is global). Clicking a file swaps the pane to its
  * preview; closing the preview returns to the list.
  */
-export function SessionFilesPane({ onClose }: { onClose: () => void }) {
+export function SessionFilesPane({
+  onClose,
+  controls,
+}: {
+  onClose: () => void;
+  /** Pane-level header buttons (e.g. maximize), rendered before Close. */
+  controls?: React.ReactNode;
+}) {
   const workspace = useRuntimeStore((s) => s.workspace);
   const [dir, setDir] = useState("");
   const [entries, setEntries] = useState<DirEntry[] | null>(null);
@@ -225,21 +237,30 @@ export function SessionFilesPane({ onClose }: { onClose: () => void }) {
   }, [dir, workspace]);
 
   if (selected) {
-    return <FilePreview entry={selected} root="workspace" onClose={() => setSelected(null)} />;
+    return (
+      <FilePreview
+        entry={selected}
+        root="workspace"
+        onClose={() => setSelected(null)}
+        controls={controls}
+      />
+    );
   }
 
   const crumbs = dir ? dir.split("/") : [];
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <Folder size={14} className="shrink-0 text-muted" />
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+        <PaneTitlebarInset />
+        <Folder size={14} strokeWidth={1.5} className="shrink-0 text-text" />
         <span className="truncate text-sm font-medium text-text" title={workspace ?? undefined}>
           {baseName(workspace)}
         </span>
         <span className="text-xs text-muted">this session's folder</span>
         <div className="flex-1" />
-        <button className="text-muted hover:text-text" aria-label="Close files" onClick={onClose}>
-          <X size={16} />
+        {controls}
+        <button className="text-text hover:opacity-60" aria-label="Close files" onClick={onClose}>
+          <X size={14} strokeWidth={1.5} />
         </button>
       </div>
       {crumbs.length > 0 && (

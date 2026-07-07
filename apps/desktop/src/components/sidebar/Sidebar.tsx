@@ -105,14 +105,14 @@ export function Sidebar({ project }: { project: Project }) {
       {/* The strip clears the traffic lights and hosts the collapse button just
           right of them — same spot the expand button lands when collapsed. */}
       {overlayTitlebar && (
-        <div data-tauri-drag-region className="flex h-8 shrink-0 items-center pl-[78px]">
+        <div data-tauri-drag-region className="flex h-12 shrink-0 items-center pl-[78px]">
           <button
             onClick={toggleSidebar}
             aria-label="Collapse sidebar"
             title="Collapse sidebar (⌘B)"
-            className="rounded p-1 text-muted hover:bg-surface-2 hover:text-text"
+            className="rounded p-1 text-text hover:bg-surface-2"
           >
-            <PanelLeft size={16} />
+            <PanelLeft size={14} strokeWidth={1.5} />
           </button>
         </div>
       )}
@@ -128,9 +128,9 @@ export function Sidebar({ project }: { project: Project }) {
               onClick={toggleSidebar}
               aria-label="Collapse sidebar"
               title={`Collapse sidebar (${isMac ? "⌘B" : "Ctrl+B"})`}
-              className="ml-auto self-center rounded p-1 text-muted hover:bg-surface-2 hover:text-text"
+              className="ml-auto self-center rounded p-1 text-text hover:bg-surface-2"
             >
-              <PanelLeft size={16} />
+              <PanelLeft size={14} strokeWidth={1.5} />
             </button>
           )}
         </div>

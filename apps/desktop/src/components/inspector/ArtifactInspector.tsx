@@ -4,6 +4,7 @@ import type { ArtifactInspector as ArtifactInspectorT, ArtifactTab } from "@ai4s
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { cn } from "@/lib/cn";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
+import { PaneTitlebarInset } from "./RightPane";
 import { resolveArtifactContent } from "@/lib/artifacts";
 import { saveTextWithFeedback } from "@/lib/download";
 
@@ -12,9 +13,12 @@ const TABS: ArtifactTab[] = ["Code", "Execution Log", "Messages", "Environment",
 export function ArtifactInspector({
   data,
   onClose,
+  controls,
 }: {
   data: ArtifactInspectorT;
   onClose: () => void;
+  /** Pane-level header buttons (e.g. maximize), rendered before Close. */
+  controls?: React.ReactNode;
 }) {
   const [tab, setTab] = useState<ArtifactTab>("Code");
   const [versionIdx, setVersionIdx] = useState(() =>
@@ -34,37 +38,39 @@ export function ArtifactInspector({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b border-border px-4 py-3">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+        <PaneTitlebarInset />
         <span className="truncate text-sm font-medium text-text">{data.title}</span>
-        <div className="ml-2 flex items-center gap-1 text-muted">
+        <div className="ml-2 flex items-center gap-1 text-text">
           <button
-            className="disabled:opacity-30 hover:text-text"
+            className="disabled:opacity-30 hover:opacity-60"
             aria-label="Previous version"
             onClick={() => step(-1)}
             disabled={versionIdx === 0}
           >
-            <ChevronLeft size={15} />
+            <ChevronLeft size={14} strokeWidth={1.5} />
           </button>
-          <span className="rounded bg-surface-2 px-1.5 text-xs">{activeLabel}</span>
+          <span className="rounded bg-surface-2 px-1.5 text-xs text-muted">{activeLabel}</span>
           <button
-            className="disabled:opacity-30 hover:text-text"
+            className="disabled:opacity-30 hover:opacity-60"
             aria-label="Next version"
             onClick={() => step(1)}
             disabled={versionIdx >= data.versions.length - 1}
           >
-            <ChevronRight size={15} />
+            <ChevronRight size={14} strokeWidth={1.5} />
           </button>
         </div>
         <div className="flex-1" />
         <button
-          className="text-muted hover:text-text"
+          className="text-text hover:opacity-60"
           aria-label="Download"
           onClick={() => void saveTextWithFeedback(scriptName, content.code)}
         >
-          <Download size={16} />
+          <Download size={14} strokeWidth={1.5} />
         </button>
-        <button className="text-muted hover:text-text" aria-label="Close inspector" onClick={onClose}>
-          <X size={16} />
+        {controls}
+        <button className="text-text hover:opacity-60" aria-label="Close inspector" onClick={onClose}>
+          <X size={14} strokeWidth={1.5} />
         </button>
       </header>
 

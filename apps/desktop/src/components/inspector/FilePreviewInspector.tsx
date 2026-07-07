@@ -29,6 +29,7 @@ import { AnomalyMapView } from "./AnomalyMapView";
 import { PhaseView } from "./PhaseView";
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { cn } from "@/lib/cn";
+import { PaneTitlebarInset } from "./RightPane";
 
 /**
  * Right-pane preview for any workspace file. Strategy (no format conversion):
@@ -40,9 +41,12 @@ import { cn } from "@/lib/cn";
 export function FilePreviewInspector({
   data,
   onClose,
+  controls,
 }: {
   data: FilePreviewInspectorT;
   onClose: () => void;
+  /** Pane-level header buttons (e.g. maximize), rendered before Close. */
+  controls?: React.ReactNode;
 }) {
   const kind = previewKindForName(data.filename);
   const needsUrl = kind === "pdf" || kind === "image" || kind === "html";
@@ -125,7 +129,8 @@ export function FilePreviewInspector({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b border-border px-4 py-3">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+        <PaneTitlebarInset />
         <span className="truncate text-sm font-medium text-text">{data.filename}</span>
         <span className="rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted">{data.artifact}</span>
         {canToggle && (
@@ -140,24 +145,25 @@ export function FilePreviewInspector({
         )}
         <div className="flex-1" />
         <button
-          className={cn(showHistory ? "text-text" : "text-muted hover:text-text")}
+          className={cn(showHistory ? "text-accent" : "text-text hover:opacity-60")}
           aria-label="History"
           title="History — every recorded version with its code and conversation"
           aria-pressed={showHistory}
           onClick={() => setShowHistory((v) => !v)}
         >
-          <History size={16} />
+          <History size={14} strokeWidth={1.5} />
         </button>
         <button
-          className="text-muted hover:text-text"
+          className="text-text hover:opacity-60"
           aria-label="Open externally"
           title="Open in the default app"
           onClick={() => void openArtifactExternally(data.path, data.root)}
         >
-          <ExternalLink size={16} />
+          <ExternalLink size={14} strokeWidth={1.5} />
         </button>
-        <button className="text-muted hover:text-text" aria-label="Close inspector" onClick={onClose}>
-          <X size={16} />
+        {controls}
+        <button className="text-text hover:opacity-60" aria-label="Close inspector" onClick={onClose}>
+          <X size={14} strokeWidth={1.5} />
         </button>
       </header>
 

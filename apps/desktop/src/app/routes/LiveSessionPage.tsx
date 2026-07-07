@@ -12,6 +12,7 @@ import { baseName } from "@/components/thread/WorkspaceChip";
 import { WorkflowStarters } from "@/components/thread/WorkflowStarters";
 import { InteractionPrompt } from "@/components/thread/InteractionPrompt";
 import { InspectorShell } from "@/components/inspector/InspectorShell";
+import { MaximizePaneButton, RightPane } from "@/components/inspector/RightPane";
 import { SessionFilesPane } from "./FilesPage";
 import { cn } from "@/lib/cn";
 
@@ -189,7 +190,10 @@ export function LiveSessionPage() {
         <div
           data-tauri-drag-region={overlayTitlebar || undefined}
           className={cn(
-            "flex h-8 shrink-0 items-center gap-2 border-b border-border px-6",
+            "flex h-12 shrink-0 items-center gap-2 px-6",
+            // A draft is a clean page — no separator; an open session gets a
+            // faint one so the title row reads as part of the conversation.
+            sessionId && "border-b border-faint",
             sidebarCollapsed && overlayTitlebar && "pl-[78px]",
           )}
         >
@@ -198,9 +202,9 @@ export function LiveSessionPage() {
               onClick={() => setSidebarCollapsed(false)}
               aria-label="Expand sidebar"
               title={`Expand sidebar (${isMac ? "⌘B" : "Ctrl+B"})`}
-              className="fade-in rounded p-1 text-muted hover:bg-surface-2 hover:text-text"
+              className="fade-in rounded p-1 text-text hover:bg-surface-2"
             >
-              <PanelLeft size={16} />
+              <PanelLeft size={14} strokeWidth={1.5} />
             </button>
           )}
           {/* A draft has no session folder yet, so no Files toggle until the
@@ -337,19 +341,24 @@ export function LiveSessionPage() {
         </div>
       </div>
 
-      {activeArtifact && (
-        <div className="hidden w-[46%] max-w-[720px] shrink-0 lg:block">
-          <InspectorShell
-            inspector={fileInspectorFromBlock(activeArtifact)}
-            onClose={closeArtifact}
-            onEvaluate={onEvaluate}
-          />
-        </div>
-      )}
-      {!activeArtifact && showFiles && (
-        <div className="hidden w-[46%] max-w-[720px] shrink-0 border-l border-border bg-surface lg:block">
-          <SessionFilesPane onClose={() => setShowFiles(false)} />
-        </div>
+      {(activeArtifact || showFiles) && (
+        <RightPane onClose={activeArtifact ? closeArtifact : () => setShowFiles(false)}>
+          {activeArtifact ? (
+            <InspectorShell
+              inspector={fileInspectorFromBlock(activeArtifact)}
+              onClose={closeArtifact}
+              onEvaluate={onEvaluate}
+              controls={<MaximizePaneButton />}
+            />
+          ) : (
+            <div className="h-full border-l border-border bg-surface">
+              <SessionFilesPane
+                onClose={() => setShowFiles(false)}
+                controls={<MaximizePaneButton />}
+              />
+            </div>
+          )}
+        </RightPane>
       )}
     </div>
   );

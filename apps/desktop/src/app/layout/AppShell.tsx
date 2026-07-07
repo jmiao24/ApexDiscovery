@@ -62,7 +62,7 @@ export function AppShell() {
           <div
             data-tauri-drag-region={overlayTitlebar || undefined}
             className={cn(
-              "flex h-8 shrink-0 items-center",
+              "flex h-12 shrink-0 items-center",
               overlayTitlebar ? "pl-[78px]" : "pl-2",
             )}
           >
@@ -70,9 +70,9 @@ export function AppShell() {
               onClick={() => setSidebarCollapsed(false)}
               aria-label="Expand sidebar"
               title={`Expand sidebar (${isMac ? "⌘B" : "Ctrl+B"})`}
-              className="fade-in rounded p-1 text-muted hover:bg-surface-2 hover:text-text"
+              className="fade-in rounded p-1 text-text hover:bg-surface-2"
             >
-              <PanelLeft size={16} />
+              <PanelLeft size={14} strokeWidth={1.5} />
             </button>
           </div>
         )}

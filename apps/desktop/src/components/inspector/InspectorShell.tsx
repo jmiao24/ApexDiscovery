@@ -10,22 +10,31 @@ export function InspectorShell({
   inspector,
   onClose,
   onEvaluate,
+  controls,
 }: {
   inspector: Inspector;
   onClose: () => void;
   /** Forward notebook expressions to the agent's live kernel (live session only). */
   onEvaluate?: (expr: string) => void;
+  /** Pane-level header buttons (e.g. maximize), rendered before Close. */
+  controls?: React.ReactNode;
 }) {
   return (
     <div className="h-full border-l border-border bg-surface" data-variant={inspector.variant}>
-      {inspector.variant === "artifact" && <ArtifactInspector data={inspector} onClose={onClose} />}
-      {inspector.variant === "notebook" && (
-        <NotebookInspector data={inspector} onClose={onClose} onEvaluate={onEvaluate} />
+      {inspector.variant === "artifact" && (
+        <ArtifactInspector data={inspector} onClose={onClose} controls={controls} />
       )}
-      {inspector.variant === "pdf" && <PdfInspector data={inspector} onClose={onClose} />}
-      {inspector.variant === "file" && <FilePreviewInspector data={inspector} onClose={onClose} />}
+      {inspector.variant === "notebook" && (
+        <NotebookInspector data={inspector} onClose={onClose} onEvaluate={onEvaluate} controls={controls} />
+      )}
+      {inspector.variant === "pdf" && (
+        <PdfInspector data={inspector} onClose={onClose} controls={controls} />
+      )}
+      {inspector.variant === "file" && (
+        <FilePreviewInspector data={inspector} onClose={onClose} controls={controls} />
+      )}
       {inspector.variant === "notebook-file" && (
-        <NotebookEditor path={inspector.path} root={inspector.root} onClose={onClose} />
+        <NotebookEditor path={inspector.path} root={inspector.root} onClose={onClose} controls={controls} />
       )}
     </div>
   );

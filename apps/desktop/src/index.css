@@ -16,6 +16,7 @@
   --surface: #ffffff;
   --surface-2: #f2efe7;
   --border: #e7e3da;
+  --border-faint: #efece5;
   --text: #2a2723;
   --muted: #8c877d;
   --accent: #c15f3c;
@@ -44,6 +45,7 @@
   --surface: #1e1d24;
   --surface-2: #26252d;
   --border: #33313c;
+  --border-faint: #25242b;
   --text: #ece9e2;
   --muted: #9a958c;
   --accent: #d0764f;

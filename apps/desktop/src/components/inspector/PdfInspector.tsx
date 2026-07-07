@@ -2,19 +2,31 @@ import { useRef } from "react";
 import { X } from "lucide-react";
 import type { PdfInspector as PdfInspectorT } from "@ai4s/shared";
 import { useScrollMemory } from "@/lib/scrollMemory";
+import { PaneTitlebarInset } from "./RightPane";
 
-export function PdfInspector({ data, onClose }: { data: PdfInspectorT; onClose: () => void }) {
+export function PdfInspector({
+  data,
+  onClose,
+  controls,
+}: {
+  data: PdfInspectorT;
+  onClose: () => void;
+  /** Pane-level header buttons (e.g. maximize), rendered before Close. */
+  controls?: React.ReactNode;
+}) {
   const { doc } = data;
   // Reading position, restored when this document is reopened.
   const scrollRef = useRef<HTMLDivElement>(null);
   const onScroll = useScrollMemory(scrollRef, `pdf:${data.title}`);
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b border-border px-4 py-3">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+        <PaneTitlebarInset />
         <span className="text-sm font-medium text-text">{data.title}</span>
         <div className="flex-1" />
-        <button className="text-muted hover:text-text" aria-label="Close inspector" onClick={onClose}>
-          <X size={16} />
+        {controls}
+        <button className="text-text hover:opacity-60" aria-label="Close inspector" onClick={onClose}>
+          <X size={14} strokeWidth={1.5} />
         </button>
       </header>
 
