@@ -351,7 +351,9 @@ describe("per-session workspace folders", () => {
     const bash = useRuntimeStore
       .getState()
       .threads["ses_new"].blocks.find((b) => b.kind === "tool-call");
-    expect(bash).toMatchObject({ title: "install deps", status: "success" });
+    // A bash step is titled by its (de-noised) command — the honest record —
+    // not the model's free-text description.
+    expect(bash).toMatchObject({ title: "pip install numpy", verb: "Ran", status: "success" });
     expect((bash as { outputSummary?: string }).outputSummary).toBeUndefined();
   });
 

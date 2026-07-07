@@ -7,6 +7,7 @@ import { isTauri } from "@/lib/tauri";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
+import { Elapsed } from "@/components/thread/ToolGroup";
 import { Composer } from "@/components/thread/Composer";
 import { baseName } from "@/components/thread/WorkspaceChip";
 import { WorkflowStarters } from "@/components/thread/WorkflowStarters";
@@ -302,9 +303,17 @@ export function LiveSessionPage() {
                       : "Working…"}
                 </span>
                 {!activeRequest && currentTool && (
-                  <span className="truncate font-mono text-xs" title={currentTool.title}>
-                    {currentTool.title}
-                  </span>
+                  <>
+                    <span
+                      className="truncate font-mono text-xs"
+                      title={currentTool.command ?? currentTool.title}
+                    >
+                      {currentTool.title}
+                    </span>
+                    {currentTool.startedAt !== undefined && (
+                      <Elapsed start={currentTool.startedAt} />
+                    )}
+                  </>
                 )}
               </div>
             )}

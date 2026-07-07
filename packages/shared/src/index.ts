@@ -67,11 +67,31 @@ export type ToolCallStatus =
 
 export interface ToolCallBlock {
   kind: "tool-call";
+  /** What to recognize the step by: a de-noised command, a file path, a
+   *  pattern — never the raw `cd … && …` line (that lives in `command`). */
   title: string;
   status: ToolCallStatus;
   /** Right-aligned meta, e.g. "142 lines of output" or "16m 2s". */
   meta?: string;
-  inputSummary?: string;
+  /** Display verb rendered before the title ("Ran", "Created", "Edited"…). */
+  verb?: string;
+  /** OpenCode tool name ("bash", "write", …) — picks the detail renderer. */
+  tool?: string;
+  /** Full command line as executed (bash) — shown in the expanded detail. */
+  command?: string;
+  filePath?: string;
+  /** Written file content (write tools), for the inline detail view. */
+  content?: string;
+  /** Unified diff (edit tools), for the inline detail view. */
+  diff?: string;
+  /** Live stdout tail while the tool is running (already \r-folded + capped). */
+  partialOutput?: string;
+  /** Final output, for the expanded detail view. */
+  output?: string;
+  /** Epoch ms — drive the elapsed timer (running) and duration meta (done). */
+  startedAt?: number;
+  endedAt?: number;
+  /** Output of a user-typed "!" command — its detail view opens by default. */
   outputSummary?: string;
   /** Subagent session spawned by this task tool — lets the UI show its live activity. */
   childSessionId?: string;

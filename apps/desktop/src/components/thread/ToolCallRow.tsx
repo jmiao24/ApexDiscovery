@@ -2,7 +2,7 @@ import { AlertTriangle, Check, Clock, Loader2, ShieldQuestion, X } from "lucide-
 import type { ToolCallBlock, ToolCallStatus } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 
-const STATUS: Record<
+export const STATUS: Record<
   ToolCallStatus,
   { label: string; icon: React.ReactNode; className: string }
 > = {
@@ -17,8 +17,10 @@ const STATUS: Record<
 // Mechanical steps that succeeded (or are pending/running) are recorded quietly,
 // like a calm activity log — a scientist scans the conversation for results and
 // artifacts, not every shell command. Only things that need attention
-// (waiting for approval, warnings, failures) get a prominent card.
-const PROMINENT = new Set<ToolCallStatus>(["waiting-approval", "warning", "failed"]);
+// (waiting for approval, warnings, failures) get a prominent card. Quiet steps
+// render grouped via ToolGroup; this component keeps the prominent card (and
+// stays the fallback for any quiet row rendered outside a group).
+export const PROMINENT = new Set<ToolCallStatus>(["waiting-approval", "warning", "failed"]);
 
 export function ToolCallRow({ block, activity }: { block: ToolCallBlock; activity?: string }) {
   const s = STATUS[block.status];
@@ -36,11 +38,13 @@ export function ToolCallRow({ block, activity }: { block: ToolCallBlock; activit
         <span className={cn("shrink-0", s.className)} aria-label={s.label} role="img">
           {s.icon}
         </span>
+        {block.verb && <span className="shrink-0 text-muted">{block.verb}</span>}
         <span
           className={cn(
             "flex-1 truncate",
             prominent ? "text-text" : cn("font-mono", block.status === "running" ? "text-text" : "text-muted"),
           )}
+          title={block.command ?? block.title}
         >
           {block.title}
         </span>
@@ -58,11 +62,11 @@ export function ToolCallRow({ block, activity }: { block: ToolCallBlock; activit
           <span className="min-w-0 flex-1 truncate font-mono text-muted">{activity}</span>
         </div>
       )}
-      {/* Output of a user-typed "!" shell command — the result they asked for.
-          (Agent tool steps never carry outputSummary; they stay one quiet line.) */}
-      {block.outputSummary && (
+      {/* Output of a user-typed "!" shell command — the result they asked
+          for — and of a FAILED step, where the error text is the point. */}
+      {(block.outputSummary ?? (block.status === "failed" ? block.output : undefined)) && (
         <pre className="ml-2 mt-0.5 max-h-64 overflow-y-auto whitespace-pre-wrap break-all rounded-input bg-surface-2 px-3 py-2 font-mono text-xs leading-5 text-text">
-          {block.outputSummary}
+          {block.outputSummary ?? block.output}
         </pre>
       )}
     </div>

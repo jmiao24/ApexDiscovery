@@ -29,6 +29,14 @@ export interface ToolUpdatedEvent {
   input?: Record<string, unknown>;
   /** Tool result text, when the tool returned one. */
   output?: string;
+  /** Accumulated stdout tail while the tool is still running (bash streams it
+   *  via `state.metadata.output` on every update — verified on 1.17.13). */
+  partialOutput?: string;
+  /** Unified diff an edit tool reports in `state.metadata.diff`. */
+  diff?: string;
+  /** Epoch ms the tool started / finished (`state.time`). */
+  startedAt?: number;
+  endedAt?: number;
   /** A `task` tool's spawned subagent session — that session's interactive
    *  requests (question/permission) belong to THIS conversation. */
   childSessionId?: string;
@@ -161,6 +169,10 @@ export interface HistoryPart {
     title?: string;
     input?: Record<string, unknown>;
     output?: string;
+    /** Epoch ms the tool started/finished — persisted with the part. */
+    time?: { start?: number; end?: number };
+    /** Tool-specific extras (bash stdout tail, edit diff, task session link). */
+    metadata?: { output?: string; diff?: string };
   };
 }
 

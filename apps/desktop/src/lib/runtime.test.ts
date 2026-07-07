@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type { OpenCodeEvent, HistoryMessage } from "@ai4s/sdk";
-import { datedWorkspaceName, foldEvent, historyToThread, subagentActivity, tidyToolTitle, type FoldState } from "./runtime";
+import {
+  datedWorkspaceName,
+  foldCarriageReturns,
+  foldEvent,
+  historyToThread,
+  humanizeCommand,
+  subagentActivity,
+  tidyToolTitle,
+  toolPresentation,
+  type FoldState,
+} from "./runtime";
 
 const empty: FoldState = { blocks: [], index: {} };
 const S = "ses_1";
-const foldAll = (events: OpenCodeEvent[]): FoldState =>
-  events.reduce((s, e) => foldEvent(s, e), empty);
+const foldAll = (events: OpenCodeEvent[], from: FoldState = empty): FoldState =>
+  events.reduce((s, e) => foldEvent(s, e), from);
 
 describe("tidyToolTitle", () => {
   it("shows workspace files by their relative path", () => {
@@ -21,6 +31,53 @@ describe("tidyToolTitle", () => {
   it("leaves non-workspace titles unchanged", () => {
     expect(tidyToolTitle("search (done)")).toBe("search (done)");
     expect(tidyToolTitle("python3 -c \"import numpy\"")).toBe('python3 -c "import numpy"');
+  });
+});
+
+describe("humanizeCommand", () => {
+  it("strips leading cd hops so the real command leads", () => {
+    expect(
+      humanizeCommand("cd output/experiment-suite/very/long/path && python train.py --mode teacher"),
+    ).toBe("python train.py --mode teacher");
+    expect(humanizeCommand("cd /a/b; cd c && ls -la")).toBe("ls -la");
+    expect(humanizeCommand('cd "dir with spaces" && make test')).toBe("make test");
+  });
+  it("collapses whitespace but leaves cd-less commands intact", () => {
+    expect(humanizeCommand("git  status\n  --short")).toBe("git status --short");
+  });
+  it("a bare cd keeps the command (nothing better to show)", () => {
+    expect(humanizeCommand("cd demo")).toBe("cd demo");
+  });
+});
+
+describe("foldCarriageReturns", () => {
+  it("keeps only what each line last drew (tqdm-style redraws)", () => {
+    expect(foldCarriageReturns("epoch 1:  10%\repoch 1:  50%\repoch 1: 100%\ndone")).toBe(
+      "epoch 1: 100%\ndone",
+    );
+    expect(foldCarriageReturns("plain\ntext")).toBe("plain\ntext");
+  });
+});
+
+describe("toolPresentation", () => {
+  it("bash: verb Ran + de-noised command, over the model's description", () => {
+    expect(toolPresentation("bash", "install deps", { command: "cd x && pip install numpy" })).toEqual({
+      verb: "Ran",
+      title: "pip install numpy",
+    });
+  });
+  it("file tools: verb + relative path", () => {
+    expect(
+      toolPresentation("write", "", { filePath: "/Users/asq/Documents/OpenScience/demo/train.py" }),
+    ).toEqual({ verb: "Created", title: "demo/train.py" });
+    expect(toolPresentation("edit", "", { filePath: "config.yaml" })).toEqual({
+      verb: "Edited",
+      title: "config.yaml",
+    });
+  });
+  it("unknown tools keep the old fallback chain, no verb", () => {
+    expect(toolPresentation("mcp_thing", "did something", {})).toEqual({ title: "did something" });
+    expect(toolPresentation("mcp_thing", "", {})).toEqual({ title: "mcp_thing" });
   });
 });
 
@@ -102,6 +159,33 @@ describe("foldEvent", () => {
     expect(artifacts[0]).toMatchObject({ kind: "artifact", filename: "fig.py", artifact: "script", content: "print(1)" });
     // The tool-call row is still present alongside the artifact.
     expect(s.blocks.some((b) => b.kind === "tool-call")).toBe(true);
+  });
+
+  it("carries a running bash step's live output tail, \\r-folded; completion clears it", () => {
+    const s1 = foldAll([
+      { type: "tool.updated", sessionId: S, callId: "c1", tool: "bash", status: "running", input: { command: "python train.py" }, startedAt: 1000, partialOutput: "epoch 1:  10%\repoch 1:  50%\n" },
+    ]);
+    expect(s1.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      title: "python train.py",
+      verb: "Ran",
+      status: "running",
+      partialOutput: "epoch 1:  50%\n",
+      startedAt: 1000,
+    });
+    const s2 = foldAll(
+      [{ type: "tool.updated", sessionId: S, callId: "c1", tool: "bash", status: "success", input: { command: "python train.py" }, output: "epoch 1: 100%\ndone\n", endedAt: 5000 }],
+      s1,
+    );
+    expect(s2.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      status: "success",
+      output: "epoch 1: 100%\ndone",
+      // startedAt survives from the running event; the tail is gone.
+      startedAt: 1000,
+      endedAt: 5000,
+    });
+    expect(s2.blocks[0]).not.toHaveProperty("partialOutput");
   });
 
   it("keeps distinct parts as separate blocks in arrival order", () => {
@@ -207,7 +291,16 @@ describe("historyToThread", () => {
     const t = historyToThread(msgs);
     expect(t.blocks).toEqual([
       { kind: "user", text: "! pwd" },
-      { kind: "tool-call", title: "pwd", status: "success", outputSummary: "/ws/here" },
+      {
+        kind: "tool-call",
+        title: "pwd",
+        verb: "Ran",
+        tool: "bash",
+        command: "pwd",
+        status: "success",
+        output: "/ws/here",
+        outputSummary: "/ws/here",
+      },
     ]);
   });
 

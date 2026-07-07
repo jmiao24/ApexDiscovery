@@ -196,6 +196,28 @@ export function turnIsOver(messages: HistoryMessage[]): boolean {
 let sseSeq = 0;
 const sseLast = new Map<string, number>();
 
+/** Coalescing for live bash output: a running tool emits an event per stdout
+ *  write (a progress bar redraws dozens of times a second) — fold at most one
+ *  partial-output update per interval per call, latest event wins. */
+const LIVE_FOLD_MS = 250;
+const liveFoldLast = new Map<string, number>();
+const liveFoldPending = new Map<
+  string,
+  { sessionId: string; timer: number; event: Extract<OpenCodeEvent, { type: "tool.updated" }> }
+>();
+
+/** Drop a session's queued partial folds — when its turn ends (idle, error,
+ *  interrupt) a late timer must not fold a stale "running" event into a
+ *  thread the history reload may have rebuilt. */
+function clearLiveFolds(sessionId: string) {
+  for (const [callId, p] of liveFoldPending) {
+    if (p.sessionId !== sessionId) continue;
+    window.clearTimeout(p.timer);
+    liveFoldPending.delete(callId);
+    liveFoldLast.delete(callId);
+  }
+}
+
 /** Resolve a (possibly nested) subagent session to its top-level session —
  *  a subagent's question/permission belongs to the conversation the user sees. */
 export function rootSessionOf(parents: Record<string, string>, sessionId: string): string {
@@ -512,9 +534,13 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       set({ status });
     });
     c.onEvent((event) => {
-      // text.updated now fires per streamed token — logging each one would
-      // flood debug.log with an IPC call per token.
-      if (event.type !== "text.updated")
+      // text.updated fires per streamed token, and a running bash tool fires
+      // per stdout write (tqdm redraws dozens of times a second) — logging
+      // each one would flood debug.log with an IPC call per event.
+      if (
+        event.type !== "text.updated" &&
+        !(event.type === "tool.updated" && event.status === "running")
+      )
         void logDebug(`event ← ${event.type}${"sessionId" in event ? " " + event.sessionId : ""}`);
       if ("sessionId" in event && event.sessionId) sseLast.set(event.sessionId, ++sseSeq);
       if (event.type === "error") {
@@ -524,6 +550,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         const sid = event.sessionId;
         // After a user interrupt the abort's own "aborted" error is expected —
         // the thread already says "Interrupted"; don't add a second red line.
+        if (sid) clearLiveFolds(sid);
         if (sid && interruptedSessions.has(sid)) return;
         if (sid) {
           set((s) => {
@@ -571,6 +598,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       }
       const sid = event.sessionId;
       if (!sid) return;
+      if (event.type === "session.idle") clearLiveFolds(sid);
       // The idle after a user interrupt: the thread already ends with
       // "Interrupted" — consume the guard, keep the locks clear, skip the fold.
       if (event.type === "session.idle" && interruptedSessions.delete(sid)) {
@@ -596,28 +624,64 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         set((s) => ({ sessionParents: { ...s.sessionParents, [child]: sid } }));
         void get().refreshSessions();
       }
-      set((s) => {
-        const cur = s.threads[sid] ?? emptyThread();
-        const folded = foldEvent(
-          { blocks: cur.blocks, index: cur.index },
-          event,
-          { shellTurn: !!s.shellTurns[sid] },
-        );
-        // The turn is over — unlock the composer and drop the "Working…" row.
-        // The shell flag clears HERE (not when the POST settles): within the
-        // SSE stream the bash-output event always precedes session.idle.
-        const runningSessions = { ...s.runningSessions };
-        const shellTurns = { ...s.shellTurns };
-        if (event.type === "session.idle") {
-          delete runningSessions[sid];
-          delete shellTurns[sid];
+      const applyFold = (ev: typeof event) =>
+        set((s) => {
+          const cur = s.threads[sid] ?? emptyThread();
+          const folded = foldEvent(
+            { blocks: cur.blocks, index: cur.index },
+            ev,
+            { shellTurn: !!s.shellTurns[sid] },
+          );
+          // The turn is over — unlock the composer and drop the "Working…" row.
+          // The shell flag clears HERE (not when the POST settles): within the
+          // SSE stream the bash-output event always precedes session.idle.
+          const runningSessions = { ...s.runningSessions };
+          const shellTurns = { ...s.shellTurns };
+          if (ev.type === "session.idle") {
+            delete runningSessions[sid];
+            delete shellTurns[sid];
+          }
+          return {
+            runningSessions,
+            shellTurns,
+            threads: { ...s.threads, [sid]: { ...cur, ...folded, loaded: true } },
+          };
+        });
+      // A running bash tool streams its stdout tail on every write — dozens
+      // of events per second under a progress bar. Fold at most one partial
+      // update per LIVE_FOLD_MS per call (latest wins); everything else
+      // (status changes, completion) folds immediately and supersedes.
+      if (event.type === "tool.updated") {
+        if (event.status === "running" && event.partialOutput !== undefined) {
+          const now = Date.now();
+          const last = liveFoldLast.get(event.callId) ?? 0;
+          if (now - last < LIVE_FOLD_MS) {
+            const pending = liveFoldPending.get(event.callId);
+            if (pending) pending.event = event;
+            else {
+              const callId = event.callId;
+              const timer = window.setTimeout(() => {
+                const p = liveFoldPending.get(callId);
+                liveFoldPending.delete(callId);
+                if (!p) return;
+                liveFoldLast.set(callId, Date.now());
+                applyFold(p.event);
+              }, LIVE_FOLD_MS - (now - last));
+              liveFoldPending.set(event.callId, { sessionId: sid, timer, event });
+            }
+            return;
+          }
+          liveFoldLast.set(event.callId, now);
+        } else {
+          const pending = liveFoldPending.get(event.callId);
+          if (pending) {
+            window.clearTimeout(pending.timer);
+            liveFoldPending.delete(event.callId);
+          }
+          liveFoldLast.delete(event.callId);
         }
-        return {
-          runningSessions,
-          shellTurns,
-          threads: { ...s.threads, [sid]: { ...cur, ...folded, loaded: true } },
-        };
-      });
+      }
+      applyFold(event);
       // A completed live write becomes a provenance version (once per call).
       if (event.type === "tool.updated" && !recordedProvenance.has(event.callId)) {
         const input = provenanceInputFromEvent(event);
@@ -981,6 +1045,82 @@ export function tidyToolTitle(title: string): string {
   return title.replace(/[^\s]*OpenScience\//g, "").trim() || title;
 }
 
+/**
+ * De-noise a bash command for the one-line title: collapse whitespace and
+ * strip leading `cd <dir> &&` / `cd <dir>;` hops (repeatedly), so the step
+ * reads `python train.py --mode teacher`, not `cd output/very/long/path && …`.
+ * The full command stays available in the expanded detail.
+ */
+export function humanizeCommand(command: string): string {
+  let c = command.replace(/\s+/g, " ").trim();
+  for (;;) {
+    const m = /^cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*/.exec(c);
+    if (!m) break;
+    c = c.slice(m[0].length);
+  }
+  return c || command.trim();
+}
+
+/**
+ * Progress bars (tqdm, pip, curl) redraw lines with `\r` — keep only what
+ * each line last drew so live output shows one updating line, not hundreds.
+ */
+export function foldCarriageReturns(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => line.slice(line.lastIndexOf("\r") + 1))
+    .join("\n");
+}
+
+/** Live-tail cap: enough for a handful of lines, tiny in the store. */
+const LIVE_TAIL_MAX = 4_000;
+/** Expanded-detail cap: plenty to read inline, never megabytes in the store. */
+const DETAIL_MAX = 64_000;
+const capTail = (t: string, max: number) => (t.length > max ? "…" + t.slice(-max) : t);
+const capHead = (t: string, max: number) => (t.length > max ? t.slice(0, max) + "\n…" : t);
+
+const str = (v: unknown) => (typeof v === "string" ? v : "");
+const EDIT_TOOLS = new Set(["edit", "str_replace_editor", "apply_patch"]);
+
+/**
+ * Verb + subject for a tool step ("Ran" + `python train.py …`, "Created" +
+ * `demo/analyze.py`) — recognizable at a glance, Codex-style. Tools without
+ * a natural verb keep the old title fallback chain (server title → command →
+ * file path → tool name).
+ */
+export function toolPresentation(
+  tool: string,
+  title: string | undefined,
+  input?: Record<string, unknown>,
+): { verb?: string; title: string } {
+  const command = str(input?.command);
+  const filePath = str(input?.filePath) || str(input?.path);
+  const fallback = tidyToolTitle(title?.trim() || command || filePath || tool || "tool");
+  const file = filePath ? tidyToolTitle(filePath) : "";
+  switch (tool) {
+    case "bash":
+      return { verb: "Ran", title: command ? humanizeCommand(tidyToolTitle(command)) : fallback };
+    case "write":
+    case "create":
+      return { verb: "Created", title: file || fallback };
+    case "edit":
+    case "str_replace_editor":
+    case "apply_patch":
+      return { verb: "Edited", title: file || fallback };
+    case "read":
+      return { verb: "Read", title: file || fallback };
+    case "grep":
+    case "glob":
+      return { verb: "Searched", title: str(input?.pattern) || fallback };
+    case "list":
+      return { verb: "Listed", title: file || fallback };
+    case "webfetch":
+      return { verb: "Fetched", title: str(input?.url) || fallback };
+    default:
+      return { title: fallback };
+  }
+}
+
 export function foldEvent(
   state: FoldState,
   event: OpenCodeEvent,
@@ -1015,25 +1155,51 @@ export function foldEvent(
       // pure noise in the conversation, so drop them.
       if (/question|permission|^ask$|todo/i.test(event.tool)) return { blocks, index };
       const key = `tool:${event.callId}`;
-      // Completed MCP tools (and the shell endpoint) report title as "" — and
-      // file tools (write/edit/read) only get a title on completion. Fall back
-      // to the bash command line, then the file path from the tool's input,
-      // then the tool name; never render a blank row.
-      const command = typeof event.input?.command === "string" ? event.input.command : "";
-      const filePath = typeof event.input?.filePath === "string" ? event.input.filePath : "";
-      // A task tool names its subagent session once — later updates may omit
-      // it, so carry the link over from the previous version of the block.
+      const command = str(event.input?.command);
+      const filePath = str(event.input?.filePath) || str(event.input?.path);
+      const content = str(event.input?.content);
+      // Some updates omit fields earlier ones carried (a task tool names its
+      // subagent session once; time.start only rides the first events) —
+      // carry them over from the previous version of the block.
       const prev = key in index ? blocks[index[key]] : undefined;
-      const childSessionId =
-        event.childSessionId ??
-        (prev?.kind === "tool-call" ? prev.childSessionId : undefined);
+      const prevTool = prev?.kind === "tool-call" ? prev : undefined;
+      const childSessionId = event.childSessionId ?? prevTool?.childSessionId;
+      const startedAt = event.startedAt ?? prevTool?.startedAt;
+      const endedAt = event.endedAt ?? prevTool?.endedAt;
+      // Edit tools report a proper unified diff in metadata on completion;
+      // until (or without) that, synthesize a minimal old→new view.
+      const diff =
+        event.diff ??
+        prevTool?.diff ??
+        (EDIT_TOOLS.has(event.tool) && (str(event.input?.oldString) || str(event.input?.newString))
+          ? [
+              ...str(event.input?.oldString).split("\n").map((l) => `- ${l}`),
+              ...str(event.input?.newString).split("\n").map((l) => `+ ${l}`),
+            ].join("\n")
+          : undefined);
+      const { verb, title } = toolPresentation(event.tool, event.title, event.input);
       const block: ThreadBlock = {
         kind: "tool-call",
-        title: tidyToolTitle(event.title?.trim() || command || filePath || event.tool || "tool"),
+        title,
         status: event.status,
+        tool: event.tool,
+        ...(verb ? { verb } : {}),
+        ...(command ? { command } : {}),
+        ...(filePath ? { filePath: tidyToolTitle(filePath) } : {}),
+        ...(content ? { content: capHead(content, DETAIL_MAX) } : {}),
+        ...(diff ? { diff: capHead(diff, DETAIL_MAX) } : {}),
+        // Live stdout tail while running — the "is it alive?" signal.
+        ...(event.status === "running" && event.partialOutput
+          ? { partialOutput: capTail(foldCarriageReturns(event.partialOutput), LIVE_TAIL_MAX) }
+          : {}),
+        ...(event.output?.trim()
+          ? { output: capTail(foldCarriageReturns(event.output), DETAIL_MAX).replace(/\s+$/, "") }
+          : {}),
+        ...(startedAt ? { startedAt } : {}),
+        ...(endedAt ? { endedAt } : {}),
         ...(childSessionId ? { childSessionId } : {}),
-        // A user-typed "!" command ran for its output — show it inline.
-        // Agent bash steps stay quiet single-line log entries.
+        // A user-typed "!" command ran for its output — its detail opens by
+        // default. Agent bash steps stay quiet one-liners until expanded.
         ...(opts?.shellTurn && event.tool === "bash" && event.output?.trim()
           ? { outputSummary: event.output.replace(/\s+$/, "") }
           : {}),
@@ -1141,16 +1307,36 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
           const status = mapToolStatus(p.state?.status);
           const frozen = status === "running" || status === "pending";
           if (frozen) interrupted = true;
-          const command =
-            typeof p.state?.input?.command === "string" ? p.state.input.command : "";
-          const filePath =
-            typeof p.state?.input?.filePath === "string" ? p.state.input.filePath : "";
+          const command = str(p.state?.input?.command);
+          const filePath = str(p.state?.input?.filePath) || str(p.state?.input?.path);
+          const content = str(p.state?.input?.content);
+          const diff =
+            str(p.state?.metadata?.diff) ||
+            (EDIT_TOOLS.has(p.tool ?? "") &&
+            (str(p.state?.input?.oldString) || str(p.state?.input?.newString))
+              ? [
+                  ...str(p.state?.input?.oldString).split("\n").map((l) => `- ${l}`),
+                  ...str(p.state?.input?.newString).split("\n").map((l) => `+ ${l}`),
+                ].join("\n")
+              : "");
           const userShell = shellTurn && p.tool === "bash";
           if (userShell) blocks.push({ kind: "user", text: `! ${command}` });
+          const { verb, title } = toolPresentation(p.tool ?? "", p.state?.title, p.state?.input);
           blocks.push({
             kind: "tool-call",
-            title: tidyToolTitle(p.state?.title?.trim() || command || filePath || p.tool || "tool"),
+            title,
             status: frozen ? "pending" : status,
+            tool: p.tool,
+            ...(verb ? { verb } : {}),
+            ...(command ? { command } : {}),
+            ...(filePath ? { filePath: tidyToolTitle(filePath) } : {}),
+            ...(content ? { content: capHead(content, DETAIL_MAX) } : {}),
+            ...(diff ? { diff: capHead(diff, DETAIL_MAX) } : {}),
+            ...(p.state?.output?.trim()
+              ? { output: capTail(foldCarriageReturns(p.state.output), DETAIL_MAX).replace(/\s+$/, "") }
+              : {}),
+            ...(typeof p.state?.time?.start === "number" ? { startedAt: p.state.time.start } : {}),
+            ...(typeof p.state?.time?.end === "number" ? { endedAt: p.state.time.end } : {}),
             ...(userShell && p.state?.output?.trim()
               ? { outputSummary: p.state.output.replace(/\s+$/, "") }
               : {}),

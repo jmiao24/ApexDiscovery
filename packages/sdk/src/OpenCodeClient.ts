@@ -713,11 +713,13 @@ export class OpenCodeClient {
               title?: string;
               input?: Record<string, unknown>;
               output?: string;
-              metadata?: { sessionId?: unknown };
+              time?: { start?: number; end?: number };
+              metadata?: { sessionId?: unknown; output?: unknown; diff?: unknown };
             };
           };
           // A task tool's metadata names the subagent session it spawned.
-          const child = tp.state?.metadata?.sessionId;
+          const meta = tp.state?.metadata;
+          const child = meta?.sessionId;
           this.emit({
             type: "tool.updated",
             sessionId,
@@ -727,6 +729,12 @@ export class OpenCodeClient {
             title: tp.state?.title,
             input: tp.state?.input,
             output: typeof tp.state?.output === "string" ? tp.state.output : undefined,
+            // While running, bash accumulates its stdout tail here — the live
+            // output the UI shows so a long command never looks hung.
+            partialOutput: typeof meta?.output === "string" ? meta.output : undefined,
+            diff: typeof meta?.diff === "string" ? meta.diff : undefined,
+            startedAt: typeof tp.state?.time?.start === "number" ? tp.state.time.start : undefined,
+            endedAt: typeof tp.state?.time?.end === "number" ? tp.state.time.end : undefined,
             childSessionId: typeof child === "string" ? child : undefined,
           });
         }

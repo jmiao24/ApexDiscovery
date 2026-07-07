@@ -1,5 +1,11 @@
 # Progress
 
+2026-07-07 00:10 · Failed tool steps no longer break out as prominent cards (they read like generated artifacts and drown the thread): failures/warnings stay quiet rows inside the group — red ✗, error output expandable — with a red "· N failed" count on the collapsed summary; only waiting-approval still renders standalone; 337 tests green, DMG rebuilt.
+
+2026-07-06 23:55 · Session-open jank fixed: collapsed tool details now lazy-mount (closed content stays out of the DOM; opening mounts collapsed and expands next frame, closing unmounts after the 300ms transition) — a history like the training session (16×50KB webfetch outputs, 20 file contents, 12 line-per-div diffs) no longer mounts ~1MB of hidden text on click; 335 tests green, DMG rebuilt.
+
+2026-07-06 23:32 · Codex-style tool-call UI: consecutive quiet steps fold into a one-line summary group with per-step expandable detail (shell panel, colored diff, inline file content); bash titles are de-noised commands (cd-prefix stripped, verb + subject, full command in the detail); running commands show a live stdout tail + elapsed timer — the server already streamed `state.metadata.output`, the SDK just never read it; folds coalesce at 250ms and `\r` progress bars collapse in place — 335 tests green, DMG rebuilt.
+
 2026-07-07 05:35 · v0.1.2 published — collapsible sidebar + single-row titlebar + resizable/maximizable right pane + 48px headers, plus the provider-credential and macOS-13 fixes; CI matrix green, 6 installers attached (https://github.com/ai4s-research/open-science/releases/tag/v0.1.2).
 
 2026-07-06 21:45 · Header polish: all header rows (session titlebar, sidebar strip, every pane header) unified at 48px (1.5× the old 32px); macOS traffic lights re-centered for the taller row via trafficLightPosition {x:13, y:22} (measured on screen: lights and icons both center at 23.75px); header icons normalized to 14px / 1.5 stroke / solid text color so they match the 12px lights' height and no longer look washed out — 319 tests green, DMG rebuilt.

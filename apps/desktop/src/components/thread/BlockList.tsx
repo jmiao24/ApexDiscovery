@@ -1,6 +1,7 @@
 import type { ArtifactBlock, FigureAnnotation, ThreadBlock } from "@ai4s/shared";
 import { AgentMessage, DataTable, RunningJobsOverlay, StatusLine, UserMessage } from "./atoms";
 import { ToolCallRow } from "./ToolCallRow";
+import { ToolGroup, groupToolBlocks } from "./ToolGroup";
 import { ReviewerCard } from "./ReviewerCard";
 import { StepSummaryRow } from "./StepSummaryRow";
 import { FigureBlock } from "./FigureBlock";
@@ -55,5 +56,21 @@ export function BlockList({
   blocks: ThreadBlock[];
   handlers?: BlockHandlers;
 }) {
-  return <>{blocks.map((b, i) => renderBlock(b, i, handlers))}</>;
+  // Runs of quiet tool steps render as one collapsible group (Codex-style);
+  // everything else — text, artifacts, prominent tool cards — on its own.
+  return (
+    <>
+      {groupToolBlocks(blocks).map((item) =>
+        item.kind === "group" ? (
+          <ToolGroup
+            key={`group:${item.start}`}
+            blocks={item.blocks}
+            activityFor={handlers?.subagentActivity}
+          />
+        ) : (
+          renderBlock(item.block, item.index, handlers)
+        ),
+      )}
+    </>
+  );
 }
