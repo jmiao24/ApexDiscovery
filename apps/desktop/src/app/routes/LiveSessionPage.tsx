@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FolderOpen, Loader2, NotebookPen, PanelLeft, PlugZap } from "lucide-react";
+import { FlaskConical, FolderOpen, Loader2, NotebookPen, PanelLeft, PlugZap } from "lucide-react";
 import { DRAFT_KEY, rootSessionOf, subagentActivity, useRuntimeStore } from "@/lib/runtime";
+import { queryRuns } from "@/lib/runs";
 import { useOverlayTitlebar, useUiStore } from "@/lib/store";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { useScrollMemory } from "@/lib/scrollMemory";
@@ -14,6 +15,7 @@ import { InteractionPrompt } from "@/components/thread/InteractionPrompt";
 import { InspectorShell } from "@/components/inspector/InspectorShell";
 import { MaximizePaneButton, RightPane } from "@/components/inspector/RightPane";
 import { SessionFilesPane } from "./FilesPage";
+import { RunsPane } from "./RunsPage";
 import { cn } from "@/lib/cn";
 
 /** Live agent session backed by the OpenCode runtime. `/live` (no id) is a blank draft;
@@ -46,6 +48,7 @@ export function LiveSessionPage() {
     openArtifact,
     closeArtifact,
     setShowFiles,
+    setShowRuns,
     answerQuestion,
     rejectQuestion,
     replyPermission,
@@ -158,6 +161,19 @@ export function LiveSessionPage() {
   const pane = panes[currentId ?? DRAFT_KEY];
   const activeArtifact = pane?.artifact ?? null;
   const showFiles = !activeArtifact && !!pane?.showFiles;
+  const showRuns = !activeArtifact && !showFiles && !!pane?.showRuns;
+
+  // Show the Runs toggle only when this session has runs (like the Files/folder
+  // affordance — present when there's content). Cheap count query on open.
+  const [hasRuns, setHasRuns] = useState(false);
+  useEffect(() => {
+    if (!sessionId) return setHasRuns(false);
+    let cancelled = false;
+    void queryRuns({ sessionId, limit: 1 }).then((p) => !cancelled && setHasRuns(p.total > 0));
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
 
   // Conversation scroll position, per session — restored once history is in.
   const chatRef = useRef<HTMLDivElement>(null);
@@ -233,6 +249,20 @@ export function LiveSessionPage() {
               <span className="max-w-[160px] truncate">
                 {workspace ? baseName(workspace) : "Files"}
               </span>
+            </button>
+          )}
+          {sessionId && hasRuns && (
+            <button
+              onClick={() => setShowRuns(!showRuns)}
+              className={cn(
+                "flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-surface-2",
+                showRuns ? "bg-surface-2 text-text" : "text-muted",
+              )}
+              title="This session's experiment runs — beside the chat"
+              aria-pressed={showRuns}
+            >
+              <FlaskConical size={13} />
+              <span>Runs</span>
             </button>
           )}
           <ConnBadge status={displayStatus} />
@@ -351,13 +381,21 @@ export function LiveSessionPage() {
         </div>
       </div>
 
-      {(activeArtifact || showFiles) && (
-        <RightPane onClose={activeArtifact ? closeArtifact : () => setShowFiles(false)}>
+      {(activeArtifact || showFiles || showRuns) && (
+        <RightPane
+          onClose={activeArtifact ? closeArtifact : showRuns ? () => setShowRuns(false) : () => setShowFiles(false)}
+        >
           {activeArtifact ? (
             <InspectorShell
               inspector={fileInspectorFromBlock(activeArtifact)}
               onClose={closeArtifact}
               onEvaluate={onEvaluate}
+              controls={<MaximizePaneButton />}
+            />
+          ) : showRuns ? (
+            <RunsPane
+              sessionId={sessionId!}
+              onClose={() => setShowRuns(false)}
               controls={<MaximizePaneButton />}
             />
           ) : (

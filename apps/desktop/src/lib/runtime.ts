@@ -59,10 +59,11 @@ export interface Thread {
 }
 
 /** What a session's right pane shows: an artifact inspector, the Files
- *  browser, or nothing. The two are mutually exclusive — one pane. */
+ *  browser, the Runs ledger, or nothing. Mutually exclusive — one pane. */
 export interface PaneState {
   artifact: ArtifactBlock | null;
   showFiles: boolean;
+  showRuns: boolean;
 }
 
 interface RuntimeState {
@@ -99,6 +100,7 @@ interface RuntimeState {
   openArtifact: (a: ArtifactBlock) => void;
   closeArtifact: () => void;
   setShowFiles: (show: boolean) => void;
+  setShowRuns: (show: boolean) => void;
   answerQuestion: (requestId: string, answers: string[][]) => Promise<void>;
   rejectQuestion: (requestId: string) => Promise<void>;
   replyPermission: (requestId: string, reply: PermissionReply) => Promise<void>;
@@ -411,23 +413,40 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   runningSessions: {},
   shellTurns: {},
 
-  // All three write the CURRENT session's pane (DRAFT_KEY on a draft), keeping
-  // the artifact inspector and the Files browser mutually exclusive.
+  // These write the CURRENT session's pane (DRAFT_KEY on a draft), keeping the
+  // artifact inspector, the Files browser, and the Runs pane mutually exclusive
+  // — one pane at a time.
   openArtifact: (artifact) =>
     set((s) => ({
-      panes: { ...s.panes, [s.currentId ?? DRAFT_KEY]: { artifact, showFiles: false } },
+      panes: { ...s.panes, [s.currentId ?? DRAFT_KEY]: { artifact, showFiles: false, showRuns: false } },
     })),
   closeArtifact: () =>
     set((s) => {
       const key = s.currentId ?? DRAFT_KEY;
-      const showFiles = s.panes[key]?.showFiles ?? false;
-      return { panes: { ...s.panes, [key]: { artifact: null, showFiles } } };
+      const p = s.panes[key];
+      return { panes: { ...s.panes, [key]: { artifact: null, showFiles: p?.showFiles ?? false, showRuns: p?.showRuns ?? false } } };
     }),
   setShowFiles: (show) =>
     set((s) => {
       const key = s.currentId ?? DRAFT_KEY;
-      const artifact = show ? null : (s.panes[key]?.artifact ?? null);
-      return { panes: { ...s.panes, [key]: { artifact, showFiles: show } } };
+      const p = s.panes[key];
+      return {
+        panes: {
+          ...s.panes,
+          [key]: { artifact: show ? null : (p?.artifact ?? null), showFiles: show, showRuns: show ? false : (p?.showRuns ?? false) },
+        },
+      };
+    }),
+  setShowRuns: (show) =>
+    set((s) => {
+      const key = s.currentId ?? DRAFT_KEY;
+      const p = s.panes[key];
+      return {
+        panes: {
+          ...s.panes,
+          [key]: { artifact: show ? null : (p?.artifact ?? null), showFiles: show ? false : (p?.showFiles ?? false), showRuns: show },
+        },
+      };
     }),
 
   answerQuestion: async (requestId, answers) => {

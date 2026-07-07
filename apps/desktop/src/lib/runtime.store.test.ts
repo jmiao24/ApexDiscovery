@@ -599,13 +599,18 @@ describe("per-session right pane", () => {
     expect(useRuntimeStore.getState().panes["ses_1"]?.artifact).toBe(null);
   });
 
-  it("the artifact inspector and the Files browser are mutually exclusive", () => {
+  it("the artifact inspector, Files browser, and Runs pane are mutually exclusive", () => {
     useRuntimeStore.setState({ currentId: "ses_1" });
     useRuntimeStore.getState().openArtifact(artifact("report.pdf"));
     useRuntimeStore.getState().setShowFiles(true);
-    expect(useRuntimeStore.getState().panes["ses_1"]).toEqual({ artifact: null, showFiles: true });
+    expect(useRuntimeStore.getState().panes["ses_1"]).toEqual({ artifact: null, showFiles: true, showRuns: false });
+    // Opening Runs closes Files; opening an artifact closes Runs.
+    useRuntimeStore.getState().setShowRuns(true);
+    expect(useRuntimeStore.getState().panes["ses_1"]).toEqual({ artifact: null, showFiles: false, showRuns: true });
     useRuntimeStore.getState().openArtifact(artifact("report.pdf"));
-    expect(useRuntimeStore.getState().panes["ses_1"]?.showFiles).toBe(false);
+    const p = useRuntimeStore.getState().panes["ses_1"];
+    expect(p?.showFiles).toBe(false);
+    expect(p?.showRuns).toBe(false);
   });
 
   it("grafts the draft's pane onto the session created by the first message", async () => {

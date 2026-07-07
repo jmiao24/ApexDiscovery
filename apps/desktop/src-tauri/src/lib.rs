@@ -13,6 +13,7 @@ mod opencode_config;
 mod preview_server;
 mod provenance;
 mod runs;
+mod runs_index;
 mod runtime;
 mod science_mcp;
 mod tools;
@@ -81,6 +82,7 @@ pub fn run() {
             runs::record_run,
             runs::list_runs,
             runs::read_run_log,
+            runs_index::query_runs_cmd,
             science_mcp::science_mcp_python,
             science_mcp::setup_science_mcp,
             examples::install_example,

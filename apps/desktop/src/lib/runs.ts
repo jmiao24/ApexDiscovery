@@ -204,6 +204,47 @@ export async function listRuns(): Promise<RunRecord[]> {
   }
 }
 
+/** A keyset-paginated, faceted query over the runs index. */
+export interface RunQuery {
+  search?: string;
+  status?: string;
+  surface?: string;
+  sessionId?: string;
+  /** Time filter: only runs at or after this epoch-seconds instant. */
+  sinceTs?: number;
+  /** Keyset cursor from a previous page's `next`. */
+  beforeTs?: number;
+  beforeRowid?: number;
+  limit?: number;
+}
+
+export interface RunFacet {
+  value: string;
+  count: number;
+}
+
+export interface RunPage {
+  rows: RunRecord[];
+  /** Total matching the full filter (for the header count). */
+  total: number;
+  facets: { status: RunFacet[]; surface: RunFacet[] };
+  /** Cursor for the next (older) page; absent at the end. */
+  next?: { ts: number; rowid: number };
+}
+
+const EMPTY_PAGE: RunPage = { rows: [], total: 0, facets: { status: [], surface: [] } };
+
+/** Query the runs index (indexed, paginated, faceted). Empty page in browser dev. */
+export async function queryRuns(query: RunQuery): Promise<RunPage> {
+  if (!isTauri) return EMPTY_PAGE;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<RunPage>("query_runs_cmd", { query });
+  } catch {
+    return EMPTY_PAGE;
+  }
+}
+
 /** A run's captured stdout/stderr by its log hash (null if unreadable). */
 export async function readRunLog(hash: string): Promise<string | null> {
   if (!isTauri) return null;
