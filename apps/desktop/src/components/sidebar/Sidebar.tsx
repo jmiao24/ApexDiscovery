@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Files, FolderTree, NotebookPen, Plus, Settings, Trash2 } from "lucide-react";
+import { Files, FolderTree, NotebookPen, PanelLeft, Plus, Settings, Trash2 } from "lucide-react";
 import type { Project } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 import { isTauri } from "@/lib/tauri";
 import { useRuntimeStore } from "@/lib/runtime";
+import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { StatusPills } from "./StatusPills";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import logo from "@/assets/logo.webp";
@@ -16,10 +17,44 @@ interface Row {
   kind: "session" | "example";
 }
 
+/** Dragging the divider below this pointer x collapses the sidebar; dragging
+ *  back past it re-expands. Sits below SIDEBAR_MIN so there is a clear "snap". */
+const COLLAPSE_BELOW = 140;
+
 export function Sidebar({ project }: { project: Project }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { sessions, hiddenExamples, startDraft, deleteSession, hideExample } = useRuntimeStore();
+  const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar } =
+    useUiStore();
+  // While dragging, the live width lives here; the store (and localStorage)
+  // are only written on pointer-up.
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+  const dragging = dragWidth !== null;
+
+  const onDividerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragWidth(sidebarWidth);
+  };
+
+  const onDividerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging) return;
+    // The sidebar starts at the window's left edge, so clientX is the width.
+    const x = e.clientX;
+    if (x < COLLAPSE_BELOW) {
+      if (!sidebarCollapsed) setSidebarCollapsed(true);
+      return;
+    }
+    if (sidebarCollapsed) setSidebarCollapsed(false);
+    setDragWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, x)));
+  };
+
+  const onDividerPointerUp = () => {
+    if (!dragging) return;
+    setSidebarWidth(dragWidth);
+    setDragWidth(null);
+  };
 
   const startNew = () => {
     startDraft();
@@ -50,11 +85,37 @@ export function Sidebar({ project }: { project: Project }) {
 
   // With the overlay titlebar (macOS), reserve a draggable strip at the top so
   // the traffic lights don't overlap the logo and the window stays movable.
-  const overlayTitlebar = isTauri && navigator.userAgent.includes("Mac");
+  const isMac = navigator.userAgent.includes("Mac");
+  const overlayTitlebar = isTauri && isMac;
+
+  const width = dragWidth ?? sidebarWidth;
 
   return (
-    <aside className="flex h-full w-[232px] shrink-0 flex-col border-r border-border bg-surface">
-      {overlayTitlebar && <div data-tauri-drag-region className="h-8 shrink-0" />}
+    <div
+      className={cn(
+        "relative h-full shrink-0 overflow-hidden",
+        !dragging && "transition-[width] duration-200 ease-out",
+      )}
+      style={{ width: sidebarCollapsed ? 0 : width }}
+    >
+      <aside
+        className="flex h-full flex-col border-r border-border bg-surface"
+        style={{ width }}
+      >
+      {/* The strip clears the traffic lights and hosts the collapse button just
+          right of them — same spot the expand button lands when collapsed. */}
+      {overlayTitlebar && (
+        <div data-tauri-drag-region className="flex h-8 shrink-0 items-center pl-[78px]">
+          <button
+            onClick={toggleSidebar}
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar (⌘B)"
+            className="rounded p-1 text-muted hover:bg-surface-2 hover:text-text"
+          >
+            <PanelLeft size={16} />
+          </button>
+        </div>
+      )}
       <div className={cn("px-4 pb-3", overlayTitlebar ? "pt-1" : "pt-4")}>
         <div className="flex items-baseline gap-1.5">
           <img src={logo} alt="" className="h-[18px] w-auto self-center" />
@@ -62,6 +123,16 @@ export function Sidebar({ project }: { project: Project }) {
             Open Science
           </div>
           <span className="text-[10px] uppercase tracking-widest text-muted">Beta</span>
+          {!overlayTitlebar && (
+            <button
+              onClick={toggleSidebar}
+              aria-label="Collapse sidebar"
+              title={`Collapse sidebar (${isMac ? "⌘B" : "Ctrl+B"})`}
+              className="ml-auto self-center rounded p-1 text-muted hover:bg-surface-2 hover:text-text"
+            >
+              <PanelLeft size={16} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -135,7 +206,29 @@ export function Sidebar({ project }: { project: Project }) {
           onCancel={() => setPendingDelete(null)}
         />
       )}
-    </aside>
+      </aside>
+
+      {/* Drag divider: resize within [SIDEBAR_MIN, SIDEBAR_MAX]; dragging far
+          left snaps the sidebar closed. Kept mounted while collapsed so an
+          in-flight drag (pointer capture) can re-open it. */}
+      <div
+        onPointerDown={onDividerPointerDown}
+        onPointerMove={onDividerPointerMove}
+        onPointerUp={onDividerPointerUp}
+        onPointerCancel={onDividerPointerUp}
+        className={cn(
+          "group absolute inset-y-0 right-0 z-10 w-[5px] cursor-col-resize",
+          sidebarCollapsed && !dragging && "pointer-events-none",
+        )}
+      >
+        <div
+          className={cn(
+            "absolute inset-y-0 right-0 w-[2px] transition-colors",
+            dragging ? "bg-accent/60" : "bg-transparent group-hover:bg-accent/40",
+          )}
+        />
+      </div>
+    </div>
   );
 }
 

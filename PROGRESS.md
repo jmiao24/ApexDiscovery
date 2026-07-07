@@ -1,5 +1,15 @@
 # Progress
 
+2026-07-06 20:37 · Window-drag root-caused: no capabilities file existed, and core:window:default does not include start-dragging, so every data-tauri-drag-region invoke was silently ACL-denied since day one — fixed with capabilities/default.json (core:default + allow-start-dragging, double-click-zoom now works too); drafts also lost the header title/folder chip (workspace picker now sits in the composer row right of attach) — 319 tests green, DMG rebuilt.
+
+2026-07-06 20:20 · Session header is now a Codex-style single-row titlebar: collapsed = traffic lights → expand button → folder toggle → title in one 32px draggable row (drafts hide the Files toggle until the session folder exists), expanded = collapse button lives in the sidebar's top strip right of the lights so the toggle never moves; non-live routes keep a fallback strip — 319 tests green, DMG rebuilt.
+
+2026-07-06 20:12 · Collapsed-sidebar titlebar overlap fixed: with the sidebar closed the page header slid under the macOS traffic lights (and the floating expand button sat on top of it) — the main pane now reserves the same h-8 drag strip the sidebar uses, with the expand button in-flow right of the lights, restoring window dragging when collapsed — 319 tests green, DMG rebuilt.
+
+2026-07-06 20:05 · First-boot page flicker root-caused and fixed: every reconnect attempt tore down the old client, which emitted "offline" into the store, so while macOS TCC held the sidecar the page flipped between the offline card and the connecting screen ~1×/s — reconnects now unhook the status listener before close (explicit Disconnect unchanged), regression test added, 319 tests green, DMG rebuilt.
+
+2026-07-06 19:55 · Sidebar is now collapsible (Codex-style): toggle button in the header + ⌘/Ctrl+B, floating expand button next to the traffic lights when closed, divider drags between 184–340px and snaps shut below 140px, width/state persisted — 318 tests green, DMG rebuilt.
+
 2026-07-06 18:30 · Code review of the connector fixes surfaced 4 confirmed bugs, all fixed: instance dispose now also hits the ?directory= workspace instance (chats see new credentials), the OAuth wait captures its generation at flow start and is abortable (cancel/save/retry no longer leak or resurrect waits), a post-cancel completed login still refreshes the provider list, and every SDK error now carries the server diagnostic — 318 tests green, DMG rebuilt.
 
 2026-07-06 17:45 · Model-connector bugs fixed against a live opencode 1.17.13 sidecar (verified E2E): the SDK disposes the server's cached instance after every credential change so new providers appear immediately, "auto" OAuth logins wait for the browser in the background (cancellable, no page-wide busy lock), and SDK errors now carry the server's diagnostic message.

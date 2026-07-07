@@ -150,6 +150,15 @@ interface RuntimeState {
 }
 
 let client: OpenCodeClient | null = null;
+/** Unhook the current client's status listener BEFORE closing it — teardown
+ *  emits "offline", and a reconnect attempt must not flash that at the user. */
+let clientStatusUnsub: (() => void) | null = null;
+function teardownClient() {
+  clientStatusUnsub?.();
+  clientStatusUnsub = null;
+  client?.close();
+  client = null;
+}
 const emptyThread = (): Thread => ({ blocks: [], index: {}, loaded: false });
 /** Threads key for the draft conversation — its blocks move to the real
  *  session id once the session exists, so the page never visibly resets. */
@@ -482,7 +491,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   connect: async () => {
-    get().disconnect();
+    // Quiet teardown of any previous connection: within a (re)connect the
+    // status must never pass through "offline" — on first boot the retry loop
+    // runs for minutes (macOS TCC) and each flip repaints the whole page.
+    teardownClient();
     // Scope skill discovery to the sidecar's workspace (null in browser dev).
     const directory = await workspacePath();
     set({ workspace: directory, approvalMode: await getApprovalMode() });
@@ -495,7 +507,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       password: password ?? undefined,
     });
     client = c;
-    c.onStatus((status) => {
+    clientStatusUnsub = c.onStatus((status) => {
       void logDebug(`status → ${status}`);
       set({ status });
     });
@@ -678,8 +690,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   disconnect: () => {
-    client?.close();
-    client = null;
+    teardownClient();
     set({ status: "offline" });
   },
 

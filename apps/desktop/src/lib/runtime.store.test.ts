@@ -57,13 +57,18 @@ vi.mock("@ai4s/sdk", () => {
     }
     onStatus(cb: (s: string) => void) {
       this.statusCb = cb;
+      return () => {
+        this.statusCb = () => {};
+      };
     }
     onEvent(cb: (e: unknown) => void) {
       mocks.fireEvent = cb;
     }
     async connect() {
+      this.statusCb("connecting");
       if (mocks.failConnects > 0) {
         mocks.failConnects--;
+        this.statusCb("error");
         throw new Error("Could not open OpenCode event stream");
       }
       this.statusCb("ready");
@@ -127,7 +132,11 @@ vi.mock("@ai4s/sdk", () => {
       mocks.getMessages(sid);
       return mocks.messages;
     }
-    close() {}
+    // The real client emits "offline" on teardown — the store must keep that
+    // away from the UI while reconnecting (first-boot flicker regression).
+    close() {
+      this.statusCb("offline");
+    }
   }
   return { OpenCodeClient, DEFAULT_OPENCODE_URL: "http://127.0.0.1:4096" };
 });
@@ -203,6 +212,22 @@ describe("per-session workspace folders", () => {
     await done;
     expect(useRuntimeStore.getState().status).toBe("ready");
     expect(useRuntimeStore.getState().error).toBe(null);
+  });
+
+  it("never passes through 'offline' while retrying (first-boot page flicker)", async () => {
+    // On a fresh install the retry loop runs for minutes (macOS TCC dialog);
+    // each attempt tears down the previous client, whose close() emits
+    // "offline" — if that reaches the store, the page flips between the
+    // offline help card and the connecting screen once per attempt.
+    mocks.failConnects = 1;
+    const seen: string[] = [];
+    const unsub = useRuntimeStore.subscribe((s, prev) => {
+      if (s.status !== prev.status) seen.push(s.status);
+    });
+    await useRuntimeStore.getState().connectRetry(3);
+    unsub();
+    expect(useRuntimeStore.getState().status).toBe("ready");
+    expect(seen).not.toContain("offline");
   });
 
   it("surfaces the last error only when the retry window is exhausted", async () => {

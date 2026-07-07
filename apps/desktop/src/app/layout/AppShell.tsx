@@ -1,13 +1,29 @@
 import { useEffect } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
+import { PanelLeft } from "lucide-react";
+import { cn } from "@/lib/cn";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { Toaster } from "@/components/ui/Toaster";
 import { mockProject } from "@/lib/mock";
 import { useRuntimeStore } from "@/lib/runtime";
-import { ensureJupyter, openExternal } from "@/lib/tauri";
+import { useUiStore } from "@/lib/store";
+import { ensureJupyter, isTauri, openExternal } from "@/lib/tauri";
 
 export function AppShell() {
+  const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
+
+  // Cmd/Ctrl+B toggles the sidebar, matching the button's tooltip.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        useUiStore.getState().toggleSidebar();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // In the packaged desktop app, auto-start the bundled OpenCode and connect,
   // and bring the Jupyter server back up if the user enabled it before.
   useEffect(() => {
@@ -30,11 +46,39 @@ export function AppShell() {
     return () => document.removeEventListener("click", onClick);
   }, []);
 
+  // The live session page's own header doubles as the titlebar when the
+  // sidebar is collapsed; every other route gets this fallback strip so the
+  // macOS traffic lights don't overlap content, the window stays draggable,
+  // and the sidebar can be re-expanded.
+  const isMac = navigator.userAgent.includes("Mac");
+  const overlayTitlebar = isTauri && isMac;
+  const pageOwnsTitlebar = useLocation().pathname.startsWith("/live");
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg text-text">
       <Sidebar project={mockProject} />
-      <main className="min-w-0 flex-1">
-        <Outlet />
+      <main className="flex min-w-0 flex-1 flex-col">
+        {sidebarCollapsed && !pageOwnsTitlebar && (
+          <div
+            data-tauri-drag-region={overlayTitlebar || undefined}
+            className={cn(
+              "flex h-8 shrink-0 items-center",
+              overlayTitlebar ? "pl-[78px]" : "pl-2",
+            )}
+          >
+            <button
+              onClick={() => setSidebarCollapsed(false)}
+              aria-label="Expand sidebar"
+              title={`Expand sidebar (${isMac ? "⌘B" : "Ctrl+B"})`}
+              className="fade-in rounded p-1 text-muted hover:bg-surface-2 hover:text-text"
+            >
+              <PanelLeft size={16} />
+            </button>
+          </div>
+        )}
+        <div className="min-h-0 flex-1">
+          <Outlet />
+        </div>
       </main>
       <CommandPalette />
       <Toaster />

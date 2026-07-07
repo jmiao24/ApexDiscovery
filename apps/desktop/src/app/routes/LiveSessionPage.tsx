@@ -1,12 +1,14 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FolderOpen, Loader2, NotebookPen, PlugZap } from "lucide-react";
+import { FolderOpen, Loader2, NotebookPen, PanelLeft, PlugZap } from "lucide-react";
 import { DRAFT_KEY, rootSessionOf, subagentActivity, useRuntimeStore } from "@/lib/runtime";
+import { useUiStore } from "@/lib/store";
+import { isTauri } from "@/lib/tauri";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { BlockList, type BlockHandlers } from "@/components/thread/BlockList";
 import { Composer } from "@/components/thread/Composer";
-import { baseName, WorkspaceChip } from "@/components/thread/WorkspaceChip";
+import { baseName } from "@/components/thread/WorkspaceChip";
 import { WorkflowStarters } from "@/components/thread/WorkflowStarters";
 import { InteractionPrompt } from "@/components/thread/InteractionPrompt";
 import { InspectorShell } from "@/components/inspector/InspectorShell";
@@ -174,25 +176,66 @@ export function LiveSessionPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uniqueNotebooks.length]);
 
+  // With the sidebar collapsed this header doubles as the titlebar (macOS
+  // overlay): it clears the traffic lights, hosts the sidebar expand button,
+  // and empty stretches drag the window — one row, never two.
+  const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
+  const isMac = navigator.userAgent.includes("Mac");
+  const overlayTitlebar = isTauri && isMac;
+
   return (
     <div className="flex h-full min-w-0">
       <div className="flex h-full min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-border px-6 py-2.5">
-          <h1 className="truncate text-[13px] font-medium text-text">
-            {/* A URL with a session id is never a draft — while its title or
-                history is still loading (cross-folder opens take a moment),
-                stay blank rather than flashing the "New session" empty state. */}
-            {sessionId ? (title ?? "") : "New session"}
-          </h1>
-          <WorkspaceChip />
-          <div className="flex-1" />
+        <div
+          data-tauri-drag-region={overlayTitlebar || undefined}
+          className={cn(
+            "flex h-8 shrink-0 items-center gap-2 border-b border-border px-6",
+            sidebarCollapsed && overlayTitlebar && "pl-[78px]",
+          )}
+        >
+          {sidebarCollapsed && (
+            <button
+              onClick={() => setSidebarCollapsed(false)}
+              aria-label="Expand sidebar"
+              title={`Expand sidebar (${isMac ? "⌘B" : "Ctrl+B"})`}
+              className="fade-in rounded p-1 text-muted hover:bg-surface-2 hover:text-text"
+            >
+              <PanelLeft size={16} />
+            </button>
+          )}
+          {/* A draft has no session folder yet, so no Files toggle until the
+              first message creates the session. */}
+          {sessionId && (
+            <button
+              onClick={() => setShowFiles(!showFiles)}
+              className={cn(
+                "flex items-center gap-1 rounded-input px-2 py-0.5 text-xs ring-1 ring-border hover:bg-surface-2",
+                showFiles ? "bg-surface-2 text-text" : "bg-surface text-muted",
+              )}
+              title={`Browse this session's folder beside the chat${workspace ? ` — ${workspace}` : ""}`}
+              aria-pressed={showFiles}
+            >
+              <FolderOpen size={12} />
+              {/* An open session's folder is a fact — the toggle names it, replacing
+                  a separate folder chip (one element for "this session's files"). */}
+              <span className="max-w-[160px] truncate">
+                {workspace ? baseName(workspace) : "Files"}
+              </span>
+            </button>
+          )}
+          {/* A draft shows no title and no folder — the workspace picker lives
+              in the composer's action row until the session exists. */}
+          {sessionId && (
+            <h1 className="truncate text-[13px] font-medium text-text">{title ?? ""}</h1>
+          )}
+          <div data-tauri-drag-region={overlayTitlebar || undefined} className="flex-1" />
           <ConnBadge status={displayStatus} />
           {uniqueNotebooks.map((nb) => (
             <button
               key={nb.path}
               onClick={() => openArtifact(nb)}
               className={cn(
-                "flex items-center gap-1 rounded-input px-2 py-1 font-mono text-xs ring-1 ring-border hover:bg-surface-2",
+                "flex items-center gap-1 rounded-input px-2 py-0.5 font-mono text-xs ring-1 ring-border hover:bg-surface-2",
                 activeArtifact?.path === nb.path ? "bg-surface-2 text-text" : "bg-surface text-muted",
               )}
               title={`Open ${nb.path} — the agent works on this notebook in this session`}
@@ -201,27 +244,11 @@ export function LiveSessionPage() {
               <span className="max-w-[180px] truncate">{nb.filename}</span>
             </button>
           ))}
-          <button
-            onClick={() => setShowFiles(!showFiles)}
-            className={cn(
-              "flex items-center gap-1 rounded-input px-2 py-1 text-xs ring-1 ring-border hover:bg-surface-2",
-              showFiles ? "bg-surface-2 text-text" : "bg-surface text-muted",
-            )}
-            title={`Browse this session's folder beside the chat${workspace ? ` — ${workspace}` : ""}`}
-            aria-pressed={showFiles}
-          >
-            <FolderOpen size={12} />
-            {/* An open session's folder is a fact — the toggle names it, replacing
-                a separate folder chip (one element for "this session's files"). */}
-            <span className="max-w-[160px] truncate">
-              {sessionId && workspace ? baseName(workspace) : "Files"}
-            </span>
-          </button>
           {!connected && (
             <button
               onClick={connect}
               disabled={connecting}
-              className="flex items-center gap-1.5 rounded-input bg-accent px-2.5 py-1 text-xs font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-input bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
             >
               {connecting ? <Loader2 size={13} className="animate-spin" /> : <PlugZap size={13} />}
               Connect
