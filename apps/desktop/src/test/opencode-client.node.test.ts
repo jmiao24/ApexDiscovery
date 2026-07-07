@@ -112,6 +112,33 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
     expect(client.getStatus()).toBe("error");
   });
 
+  it("disposes the cached instance after credential changes, so providers refresh", async () => {
+    // The server caches its provider list per instance; PUT/DELETE /auth alone
+    // leaves it stale (the new provider never appears in the UI). Verified on
+    // opencode 1.17.13: POST /instance/dispose makes the change visible.
+    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+
+    server.requests.length = 0;
+    await client.setProviderApiKey("mock", "sk-123");
+    expect(server.requests).toEqual(["PUT /auth/mock", "POST /instance/dispose"]);
+
+    server.requests.length = 0;
+    await client.removeProviderAuth("mock");
+    expect(server.requests).toEqual(["DELETE /auth/mock", "POST /instance/dispose"]);
+
+    server.requests.length = 0;
+    await client.oauthCallback("mock", 0);
+    expect(server.requests).toEqual([
+      "POST /provider/mock/oauth/callback",
+      "POST /instance/dispose",
+    ]);
+  });
+
+  it("surfaces the server's diagnostic message when saving a key fails", async () => {
+    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    await expect(client.setProviderApiKey("bad", "nope")).rejects.toThrow(/invalid key format/);
+  });
+
   it("sends Basic auth on API calls when a password is set", async () => {
     // The sidecar now REQUIRES auth (OPENCODE_SERVER_PASSWORD) — every fetch
     // must carry the Authorization header or the server answers 401.

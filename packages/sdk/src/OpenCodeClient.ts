@@ -397,7 +397,8 @@ export class OpenCodeClient {
       headers: this.headers(true),
       body: JSON.stringify({ type: "api", key }),
     });
-    if (!res.ok) throw new Error(`Failed to save the key (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to save the key");
+    await this.disposeInstance();
   }
 
   /** Remove a provider's stored credentials. */
@@ -406,7 +407,8 @@ export class OpenCodeClient {
       method: "DELETE",
       headers: this.headers(),
     });
-    if (!res.ok) throw new Error(`Failed to disconnect (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to disconnect");
+    await this.disposeInstance();
   }
 
   /** Start an OAuth login; returns the URL to open and how it completes. */
@@ -419,17 +421,43 @@ export class OpenCodeClient {
       `${this.baseUrl}/provider/${encodeURIComponent(providerID)}/oauth/authorize`,
       { method: "POST", headers: this.headers(true), body: JSON.stringify({ method, inputs }) },
     );
-    if (!res.ok) throw new Error(`Failed to start the login (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Failed to start the login");
     return (await res.json()) as OAuthAuthorization;
   }
 
-  /** Complete an OAuth login (pass the pasted code for "code" flows). */
+  /** Complete an OAuth login (pass the pasted code for "code" flows). For
+   *  "auto" flows this call WAITS until the browser redirect finishes. */
   async oauthCallback(providerID: string, method: number, code?: string): Promise<void> {
     const res = await this.fetchImpl(
       `${this.baseUrl}/provider/${encodeURIComponent(providerID)}/oauth/callback`,
       { method: "POST", headers: this.headers(true), body: JSON.stringify({ method, code }) },
     );
-    if (!res.ok) throw new Error(`Login did not complete (${res.status})`);
+    if (!res.ok) throw await this.apiError(res, "Login did not complete");
+    await this.disposeInstance();
+  }
+
+  /** The server caches its provider list per instance — a credential change
+   *  (PUT/DELETE /auth, OAuth) is invisible to /config/providers until the
+   *  instance is disposed. Best-effort: the credential is already stored. */
+  private async disposeInstance(): Promise<void> {
+    await this.fetchImpl(`${this.baseUrl}/instance/dispose`, {
+      method: "POST",
+      headers: this.headers(true),
+      body: "{}",
+    }).catch(() => undefined);
+  }
+
+  /** Build an Error carrying the server's diagnostic message, when it has one
+   *  (OpenCode errors look like `{ name, data: { message } }`). */
+  private async apiError(res: Response, what: string): Promise<Error> {
+    let detail = "";
+    try {
+      const body = (await res.json()) as { data?: { message?: string }; message?: string };
+      detail = body.data?.message ?? body.message ?? "";
+    } catch {
+      /* not JSON — keep the status alone */
+    }
+    return new Error(`${what} (${res.status}${detail ? `: ${detail}` : ""})`);
   }
 
   /** Real agents configured in OpenCode. */

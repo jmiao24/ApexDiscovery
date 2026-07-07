@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -87,6 +87,8 @@ export function SettingsPage() {
     (OAuthAuthorization & { providerID: string; methodIndex: number }) | null
   >(null);
   const [codeInput, setCodeInput] = useState("");
+  // Invalidates a pending browser-login wait when the user cancels or restarts.
+  const oauthGen = useRef(0);
 
   const refresh = useCallback(async () => {
     const client = getClient();
@@ -162,7 +164,32 @@ export function SettingsPage() {
       const auth = await getClient()!.oauthAuthorize(providerID, methodIndex, inputs);
       setOauth({ ...auth, providerID, methodIndex });
       await openExternal(auth.url);
+      // "auto" flows finish on the browser redirect — the callback call below
+      // WAITS for it, so run it in the background (never through `busy`, which
+      // would lock the whole page for as long as the browser tab stays open).
+      if (auth.method !== "code") void waitForBrowserLogin(providerID, methodIndex);
     });
+
+  const waitForBrowserLogin = async (providerID: string, methodIndex: number) => {
+    const gen = ++oauthGen.current;
+    try {
+      await getClient()!.oauthCallback(providerID, methodIndex);
+      if (gen !== oauthGen.current) return; // cancelled or superseded
+      toast.success(`${providerID} connected`);
+      await refresh();
+      await loadCatalog();
+    } catch (e) {
+      if (gen !== oauthGen.current) return;
+      toast.error(`Login did not complete: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    setOauth(null);
+  };
+
+  const cancelOAuth = () => {
+    oauthGen.current++;
+    setOauth(null);
+    setCodeInput("");
+  };
 
   const completeOAuth = () =>
     run("Login did not complete", async () => {
@@ -428,7 +455,7 @@ export function SettingsPage() {
                       value={connectQuery}
                       onChange={(e) => {
                         setConnectQuery(e.target.value);
-                        setOauth(null);
+                        cancelOAuth();
                         setPromptInputs({});
                       }}
                       placeholder={`Connect a provider — search ${catalog.length} (anthropic, openrouter, deepseek…)`}
@@ -511,22 +538,39 @@ export function SettingsPage() {
                   {oauth && (
                     <div className="mt-2 space-y-2 rounded-input border border-border bg-surface p-3">
                       <p className="text-xs leading-relaxed text-muted">{oauth.instructions}</p>
-                      {oauth.method === "code" && (
-                        <input
-                          value={codeInput}
-                          onChange={(e) => setCodeInput(e.target.value)}
-                          placeholder="Paste the code from the browser"
-                          className={inputCls("w-full font-mono")}
-                        />
+                      {oauth.method === "code" ? (
+                        <>
+                          <input
+                            value={codeInput}
+                            onChange={(e) => setCodeInput(e.target.value)}
+                            placeholder="Paste the code from the browser"
+                            className={inputCls("w-full font-mono")}
+                          />
+                          <button
+                            className={btnAccent()}
+                            onClick={() => void completeOAuth()}
+                            disabled={busy || !codeInput.trim()}
+                          >
+                            {busy ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              <Check size={13} />
+                            )}
+                            Complete login
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs text-muted">
+                          <Loader2 size={12} className="shrink-0 animate-spin" />
+                          Waiting for you to finish in the browser…
+                          <button
+                            className="text-muted underline transition-colors hover:text-text"
+                            onClick={cancelOAuth}
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       )}
-                      <button
-                        className={btnAccent()}
-                        onClick={() => void completeOAuth()}
-                        disabled={busy || (oauth.method === "code" && !codeInput.trim())}
-                      >
-                        {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={13} />}
-                        Complete login
-                      </button>
                     </div>
                   )}
                 </div>

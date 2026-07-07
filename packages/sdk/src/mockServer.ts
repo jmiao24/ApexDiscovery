@@ -5,11 +5,14 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 
 export interface MockOpenCode {
   port: number;
+  /** Every request seen, as "METHOD /path" — lets tests assert call order. */
+  requests: string[];
   close: () => Promise<void>;
 }
 
 export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
   const clients = new Set<ServerResponse>();
+  const requests: string[] = [];
 
   const send = (res: ServerResponse, obj: unknown) =>
     res.write(`data: ${JSON.stringify(obj)}\n\n`);
@@ -40,6 +43,23 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = req.url ?? "";
+    requests.push(`${req.method} ${url}`);
+    if (req.method === "POST" && url === "/instance/dispose") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end("true");
+      return;
+    }
+    // A provider whose key the server rejects — carries a diagnostic message.
+    if (req.method === "PUT" && url === "/auth/bad") {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ name: "InvalidKey", data: { message: "invalid key format" } }));
+      return;
+    }
+    if (req.method === "POST" && /^\/provider\/[^/]+\/oauth\/callback$/.test(url)) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end("true");
+      return;
+    }
     if (req.method === "GET" && url.startsWith("/event")) {
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -188,6 +208,7 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
       const actualPort = typeof addr === "object" && addr ? addr.port : port;
       resolve({
         port: actualPort,
+        requests,
         close: () =>
           new Promise((r) => {
             for (const c of clients) c.end();
