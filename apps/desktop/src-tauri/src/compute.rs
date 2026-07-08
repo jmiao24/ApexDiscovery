@@ -277,14 +277,18 @@ fn compute_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 /// One SSH round-trip: static identity + a live usage snapshot, one token per
 /// line, tolerant of missing tools (Linux remote assumed).
-const PROBE_SCRIPT: &str = r#"echo "OS $(uname -sr)"
-echo "CORES $(nproc 2>/dev/null)"
-cut -d' ' -f1 /proc/loadavg 2>/dev/null | sed 's/^/LOAD /'
-free -b 2>/dev/null | awk '/^Mem:/{print "MEMTOTAL",$2; print "MEMAVAIL",$7}'
-df -PB1 "$HOME" 2>/dev/null | awk 'NR==2{print "DISKTOTAL",$2; print "DISKFREE",$4}'
-command -v sbatch >/dev/null 2>&1 && echo "SLURM $(sbatch --version 2>/dev/null | head -1)"
-command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu --format=csv,noheader,nounits | sed 's/^/GPU /'
-"#;
+// ONE physical line (statements separated by `;`), NOT multi-line: a newline
+// embedded in the single ssh argument is marshalled inconsistently by the
+// Windows process/`ssh.exe` argument layer, so keep it flat. `;` and newline
+// are equivalent sh separators, and the remote still emits newline-separated
+// OUTPUT (one token per line), which is what `parse_probe` reads.
+const PROBE_SCRIPT: &str = "echo \"OS $(uname -sr)\"; \
+echo \"CORES $(nproc 2>/dev/null)\"; \
+cut -d' ' -f1 /proc/loadavg 2>/dev/null | sed 's/^/LOAD /'; \
+free -b 2>/dev/null | awk '/^Mem:/{print \"MEMTOTAL\",$2; print \"MEMAVAIL\",$7}'; \
+df -PB1 \"$HOME\" 2>/dev/null | awk 'NR==2{print \"DISKTOTAL\",$2; print \"DISKFREE\",$4}'; \
+command -v sbatch >/dev/null 2>&1 && echo \"SLURM $(sbatch --version 2>/dev/null | head -1)\"; \
+command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu --format=csv,noheader,nounits | sed 's/^/GPU /'";
 
 fn load_machines(app: &AppHandle) -> Result<Vec<Machine>, String> {
     let path = compute_path(app)?;
@@ -312,8 +316,16 @@ fn save_machines(app: &AppHandle, machines: &[Machine]) -> Result<(), String> {
     // Write to a sibling temp file then rename, so a probe writeback racing a
     // concurrent write (or a remove) can't corrupt or truncate compute.json.
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, body).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
+    std::fs::write(&tmp, &body).map_err(|e| e.to_string())?;
+    // rename replaces atomically on both Unix and Windows (MoveFileEx). On
+    // Windows it can transiently fail if an AV/indexer holds the target open —
+    // fall back to a direct write so persisting a machine never hard-fails.
+    if std::fs::rename(&tmp, &path).is_err() {
+        let res = std::fs::write(&path, &body).map_err(|e| e.to_string());
+        let _ = std::fs::remove_file(&tmp);
+        return res;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -489,6 +501,15 @@ random junk with no leading token space? nope
         assert_eq!(p.gpus[0].util_pct, 40);
         // reachable/message are set by the command, not the parser.
         assert!(!p.reachable);
+    }
+
+    #[test]
+    fn probe_script_is_single_line() {
+        // Must stay one physical line — an embedded newline in the single ssh
+        // argument is marshalled inconsistently on Windows. `;` separates
+        // statements instead; the remote still emits newline-separated output.
+        assert!(!super::PROBE_SCRIPT.contains('\n'), "PROBE_SCRIPT must be one line");
+        assert!(super::PROBE_SCRIPT.contains("nvidia-smi"), "probe must still query GPUs");
     }
 
     #[test]
