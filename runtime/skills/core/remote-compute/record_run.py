@@ -2,7 +2,7 @@
 """Record a remote (HPC/Modal) experiment run into the Open Science provenance.
 
 Remote runs execute off the laptop, so the app can't capture their environment,
-hardware, or outputs. This helper — called by the hpc-slurm / modal-run skills
+hardware, or outputs. This helper — called by the remote-compute / modal-run skills
 AFTER a job completes and its results are fetched — appends an accurate run
 record to <workspace>/.openscience/remote-runs.jsonl, which the app merges into
 the Runs view. It owns the record schema so the agent never hand-writes JSON.
@@ -41,7 +41,7 @@ def artifact(path):
 def main():
     p = argparse.ArgumentParser(description="Record a remote run into Open Science provenance.")
     p.add_argument("--command", required=True, help="the submit command, e.g. 'sbatch train.slurm'")
-    p.add_argument("--surface", required=True, choices=["hpc", "modal"], help="compute surface")
+    p.add_argument("--surface", required=True, choices=["hpc", "modal", "ssh"], help="compute surface")
     p.add_argument("--status", default="ok", choices=["ok", "failed"], help="terminal outcome")
     p.add_argument("--host", help="cluster host / Modal app the run executed on")
     p.add_argument("--job-id", dest="job_id", help="scheduler job id / Modal call id")

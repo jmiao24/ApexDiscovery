@@ -105,7 +105,7 @@ describe("runInputFromEvent", () => {
     });
   });
 
-  it("skips remote submissions — the hpc-slurm/modal-run skills record those with real remote facts", () => {
+  it("skips remote submissions — the remote-compute/modal-run skills record those with real remote facts", () => {
     // The local passive capture can't see remote env/hardware/outputs, so it
     // stays out of the way rather than stamping the laptop's environment.
     expect(runInputFromEvent(bash({ input: { command: "modal run app.py" } }))).toBeNull();

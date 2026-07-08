@@ -1,0 +1,125 @@
+---
+name: remote-compute
+description: Use when the user asks to run, submit, monitor, or cancel a job on a remote machine over SSH — their own GPU/CPU server, a workstation, or a Slurm cluster ("the cluster", a login node, "my 3090 box", "the compute server"). Picks a saved machine, runs the work directly over SSH (or via Slurm when present), tracks it, and fetches results back into the workspace.
+---
+
+# Remote compute over SSH
+
+Run heavy work on the user's own machines over non-interactive SSH with their
+own keys — you never install anything remote and never handle credentials.
+A machine may be a plain server (CPU or GPU, no scheduler) or a Slurm cluster.
+
+## 1 · Pick the machine
+
+1. `cat .openscience/compute.json` in the workspace. It looks like:
+   `{"machines":[{"host":"home-3090","label":"8x3090",
+     "caps":{"cores":16,"mem_total_bytes":...,"gpus":["RTX 3090",...],"slurm":null}}]}`
+   The directory is hidden — read the file directly.
+2. If the file is missing or has no machines, ask the user to add one in
+   **Settings → Remote compute**, or give you a `user@host`. Do not guess.
+3. Choose by the task's needs and each machine's `caps`: a GPU job → a machine
+   whose `caps.gpus` is non-empty; a CPU job → any reachable machine. If several
+   fit, or none clearly does, ask the user which to use.
+4. Confirm it's reachable and check live headroom before launching:
+   `ssh -o BatchMode=yes -o ConnectTimeout=8 <host> "nproc; free -h; nvidia-smi 2>/dev/null | head -15"`.
+   On "Permission denied", tell the user their key doesn't reach the host — do
+   not retry with passwords.
+
+If the chosen machine's `caps.slurm` is set, use **§2-Slurm**. Otherwise use
+**§2-Direct**.
+
+## 2-Direct · Run on a plain server (no Slurm)
+
+Long jobs must outlive the SSH connection. Use a per-job dir + a fully detached
+process, mirroring how the app tracks runs.
+
+1. Pick a job name and build the remote dir path (remember the literal string —
+   shell variables do not survive between separate ssh calls):
+   `REMOTE=openscience/jobs/<name>-<YYYYmmdd-HHMMSS>`
+2. Create it and copy inputs (confirm with the user before copying > ~100 MB):
+   ```bash
+   ssh -o BatchMode=yes <host> "mkdir -p <remote-dir>"
+   scp -o BatchMode=yes run.sh <input files> <host>:<remote-dir>/
+   ```
+   Write `run.sh` in the workspace first (so it is versioned in provenance);
+   it should `cd` into the job dir and run the actual commands, e.g. use
+   `CUDA_VISIBLE_DEVICES` to select GPUs.
+3. Launch fully detached and capture the PID:
+   ```bash
+   ssh -o BatchMode=yes <host> "cd <remote-dir> && \
+     setsid bash -c 'bash run.sh >log 2>&1; echo \$? > exit_code' </dev/null >/dev/null 2>&1 & \
+     echo \$! > pid; cat pid"
+   ```
+   Report the PID and the remote dir to the user.
+4. **Track:**
+   - Running? `ssh <host> "kill -0 \$(cat <remote-dir>/pid) 2>/dev/null && echo RUNNING || echo DONE"`.
+   - Progress: `ssh <host> "tail -n 30 <remote-dir>/log"`; GPU use:
+     `ssh <host> "nvidia-smi"`.
+   - Finished: `ssh <host> "cat <remote-dir>/exit_code"` — `0` = success, other
+     = failure. Do not assume success from an empty queue.
+   - Long jobs: report the PID + running state and stop; the user can ask you to
+     check again later. Do not poll in a loop for more than ~2 minutes.
+5. **Cancel** (only jobs you launched, or a PID/dir the user names): kill the
+   whole process group so children die too:
+   `ssh <host> "kill -- -\$(cat <remote-dir>/pid) 2>/dev/null || kill \$(cat <remote-dir>/pid)"`.
+
+## 2-Slurm · Run on a Slurm cluster
+
+Use this only when `caps.slurm` is set.
+
+1. Write `slurm/<job-name>.sbatch` in the workspace:
+   ```bash
+   #!/bin/bash
+   #SBATCH --job-name=<job-name>
+   #SBATCH --output=slurm-%j.out
+   #SBATCH --error=slurm-%j.err
+   #SBATCH --time=01:00:00
+
+   set -euo pipefail
+   cd "$SLURM_SUBMIT_DIR"
+   <the actual commands>
+   ```
+   Only add `--partition/--gres/--mem/--cpus-per-task` when the user asks or the
+   cluster rejects the default. Load modules (`module load …`) the user names.
+2. Submit:
+   ```bash
+   REMOTE=openscience/jobs/<job-name>-$(date +%Y%m%d-%H%M%S)
+   ssh -o BatchMode=yes <host> "mkdir -p $REMOTE"
+   scp -o BatchMode=yes slurm/<job-name>.sbatch <input files> <host>:$REMOTE/
+   ssh -o BatchMode=yes <host> "cd $REMOTE && sbatch <job-name>.sbatch"
+   ```
+   Parse `Submitted batch job <id>`; remember the literal remote dir.
+3. Track: `ssh <host> "squeue -j <id> -h -o '%T %M'"`; when it returns nothing,
+   `ssh <host> "sacct -j <id> --format=State,Elapsed,ExitCode -n"` or read
+   `slurm-<id>.out`. Cancel: `ssh <host> "scancel <id>"`.
+
+## 3 · Fetch results back
+
+Copy outputs into the workspace so they become traceable artifacts:
+```bash
+mkdir -p results/<job-name>
+scp -o BatchMode=yes "<host>:<remote-dir>/log" \
+    "<host>:<remote-dir>/<result file>" results/<job-name>/
+```
+`<remote-dir>` is the literal directory you created — name each file explicitly.
+
+## 4 · Record the run (reproducibility)
+
+The app can't see the remote machine, so record the run after results are
+fetched. Get the hardware string from your §1 headroom check (e.g. "8× RTX 3090"
+or "16 cores, 64 GB"). Then, from the workspace root:
+
+```bash
+python "$XDG_CONFIG_HOME/opencode/skills/remote-compute/record_run.py" \
+  --surface ssh --command "bash run.sh" --status <ok|failed> --host <host> \
+  --hardware "<hardware>" --code run.sh --output results/<job-name>/<result file>
+```
+
+For a Slurm run use `--surface hpc`, `--command "sbatch <name>.sbatch"`,
+`--job-id <id>`, and the `sacct` hardware/state. Use `--status failed` on a
+non-success exit code / `sacct` state.
+
+Summarize: the machine, the final state (quote the `exit_code`/`sacct` state —
+do not assume success), elapsed time, and the fetched files. If it failed, show
+the tail of `log` (or `slurm-<id>.err`) and propose a fix instead of silently
+rerunning.

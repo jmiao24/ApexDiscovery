@@ -105,7 +105,7 @@ export function runInputFromEvent(event: ToolUpdatedEvent): RunInput | null {
   if (!command) return null;
   // Remote runs (HPC/Modal) execute off-box — their env, hardware, and outputs
   // live on the cluster/cloud, invisible here. Recording them from the laptop
-  // would stamp the wrong environment, so the hpc-slurm / modal-run skills
+  // would stamp the wrong environment, so the remote-compute / modal-run skills
   // record them instead (into .openscience/remote-runs.jsonl) with real remote
   // facts. The passive capture handles local runs only.
   if (surfaceForCommand(command) !== "local") return null;

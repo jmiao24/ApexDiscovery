@@ -14,7 +14,7 @@ use crate::runtime::workspace_dir;
 
 const STORE_DIR: &str = ".openscience";
 const RUNS_FILE: &str = "runs.jsonl";
-/// Remote runs (HPC/Modal) recorded by the hpc-slurm / modal-run skills, which
+/// Remote runs (HPC/Modal) recorded by the remote-compute / modal-run skills, which
 /// can see the remote side the app can't. Same schema; read_runs merges both.
 const REMOTE_RUNS_FILE: &str = "remote-runs.jsonl";
 const LOGS_DIR: &str = "logs";
