@@ -363,6 +363,91 @@ export async function hpcCancel(host: string, jobId: string): Promise<void> {
   await invoke("hpc_cancel", { host, jobId });
 }
 
+export interface GpuInfo {
+  name: string;
+  mem_total_mib: number;
+  mem_used_mib: number;
+  util_pct: number;
+}
+
+/** One live SSH probe of a remote machine (capabilities + usage snapshot). */
+export interface ComputeProbe {
+  reachable: boolean;
+  message: string | null;
+  os: string | null;
+  cores: number | null;
+  load1: number | null;
+  mem_total_bytes: number | null;
+  mem_avail_bytes: number | null;
+  disk_total_bytes: number | null;
+  disk_free_bytes: number | null;
+  gpus: GpuInfo[];
+  slurm: string | null;
+}
+
+/** Static capability cache the agent reads to pick a machine. */
+export interface MachineCaps {
+  cores: number | null;
+  mem_total_bytes: number | null;
+  gpus: string[];
+  slurm: string | null;
+}
+
+export interface Machine {
+  host: string;
+  label: string | null;
+  caps: MachineCaps | null;
+}
+
+/** A Slurm queue entry (same shape as the old HpcJob). */
+export interface ComputeJob {
+  id: string;
+  state: string;
+  time: string;
+  partition: string;
+  name: string;
+}
+
+/** Saved remote machines (migrates a legacy hpc.json on first read). */
+export async function computeMachines(): Promise<Machine[]> {
+  if (!isTauri) return [];
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<Machine[]>("compute_machines");
+}
+
+/** Save (or update the label of) a remote machine. */
+export async function addComputeMachine(host: string, label?: string): Promise<void> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("add_compute_machine", { host, label: label ?? null });
+}
+
+export async function removeComputeMachine(host: string): Promise<void> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("remove_compute_machine", { host });
+}
+
+/** Probe a machine over SSH; also caches its static caps for the agent. */
+export async function computeProbe(host: string): Promise<ComputeProbe> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ComputeProbe>("compute_probe", { host });
+}
+
+/** A Slurm host's queue. */
+export async function computeJobs(host: string): Promise<ComputeJob[]> {
+  if (!isTauri) return [];
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ComputeJob[]>("compute_jobs", { host });
+}
+
+export async function computeCancel(host: string, jobId: string): Promise<void> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("compute_cancel", { host, jobId });
+}
+
 export interface ModalStatus {
   installed: boolean;
   version: string | null;
