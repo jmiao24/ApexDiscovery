@@ -450,6 +450,10 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
         .env("XDG_CACHE_HOME", cache.to_string_lossy().to_string())
         .env("XDG_STATE_HOME", state.to_string_lossy().to_string())
         .env("HOME", home)
+        // Lets bundled skill helpers (e.g. remote-compute's record_run.py) stamp
+        // the recording app version into provenance — they run outside the app
+        // and can't otherwise know it.
+        .env("OPENSCIENCE_APP_VERSION", app.package_info().version.to_string())
         .current_dir(workspace);
     // GUI-launched apps get a minimal PATH; give the agent the user's real tools.
     let cmd = cmd.env("PATH", enriched_path());
@@ -567,6 +571,29 @@ pub fn set_workspace(
     // every session's agent without reaching outside the workspace.
     crate::compute::materialize_active(&app);
     Ok(canon.to_string_lossy().to_string())
+}
+
+/// Record which session owns the active workspace, so bundled skill helpers
+/// (record_run.py) can stamp remote runs with their `sessionId` — the app knows
+/// the id but the off-app helper only sees the workspace. Written as
+/// `<workspace>/.openscience/session.txt`; best-effort, empty ids are ignored.
+#[tauri::command]
+pub fn mark_session(app: AppHandle, session_id: String) -> Result<(), String> {
+    let id = session_id.trim();
+    if id.is_empty() {
+        return Ok(());
+    }
+    let dir = workspace_dir(&app)?.join(".openscience");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("session.txt");
+    // Write-then-rename so a concurrent read never sees a half-written id.
+    let tmp = path.with_extension("txt.tmp");
+    std::fs::write(&tmp, id).map_err(|e| e.to_string())?;
+    if std::fs::rename(&tmp, &path).is_err() {
+        let _ = std::fs::write(&path, id);
+        let _ = std::fs::remove_file(&tmp);
+    }
+    Ok(())
 }
 
 /// Create a new dated folder `<base>/<name>` and switch to it. `name` is a

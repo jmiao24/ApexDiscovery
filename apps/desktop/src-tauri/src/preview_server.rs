@@ -139,9 +139,103 @@ fn handle<F: Fn(&str) -> Option<PathBuf>>(mut stream: TcpStream, token: &str, ro
     };
     let ext = full.extension().and_then(|s| s.to_str()).unwrap_or("");
     let (mime, _) = mime_for(ext);
-    match std::fs::read(&full) {
-        Ok(body) => write_response(&mut stream, "200 OK", mime, &body, head_only),
-        Err(_) => write_response(&mut stream, "500 Internal Server Error", "text/plain", b"read failed", head_only),
+    // A Range header (video seeking, large media) is answered with 206 Partial
+    // Content; without one we serve the whole file but still advertise ranges.
+    let range = head
+        .lines()
+        .find(|l| l.to_ascii_lowercase().starts_with("range:"))
+        .and_then(|l| l.split_once(':').map(|(_, v)| v.trim()))
+        .and_then(parse_range);
+    serve_file(&mut stream, &full, mime, range, head_only);
+}
+
+/// Parse a single-range `Range` value into (start, end), each optional. Only one
+/// range is supported: a multi-range value (contains ',') returns None so the
+/// caller falls back to a full 200. `bytes=500-` → (Some(500), None);
+/// `bytes=0-99` → (Some(0), Some(99)); `bytes=-500` (suffix) → (None, Some(500)).
+fn parse_range(v: &str) -> Option<(Option<u64>, Option<u64>)> {
+    let spec = v.strip_prefix("bytes=")?;
+    if spec.contains(',') {
+        return None;
+    }
+    let (s, e) = spec.split_once('-')?;
+    let (s, e) = (s.trim(), e.trim());
+    if s.is_empty() && e.is_empty() {
+        return None;
+    }
+    let start = if s.is_empty() { None } else { Some(s.parse().ok()?) };
+    let end = if e.is_empty() { None } else { Some(e.parse().ok()?) };
+    Some((start, end))
+}
+
+/// Serve a file body: 206 for a satisfiable Range, 416 for an unsatisfiable one,
+/// else a full 200. Ranged reads stream only the requested slice, so a large
+/// video never loads whole into memory.
+fn serve_file(
+    stream: &mut TcpStream,
+    path: &Path,
+    mime: &str,
+    range: Option<(Option<u64>, Option<u64>)>,
+    head_only: bool,
+) {
+    use std::io::{Seek, SeekFrom};
+    let total = match std::fs::metadata(path) {
+        Ok(m) => m.len(),
+        Err(_) => {
+            write_response(stream, "500 Internal Server Error", "text/plain", b"read failed", head_only);
+            return;
+        }
+    };
+
+    if let Some((start_opt, end_opt)) = range {
+        // Resolve an inclusive [start, end] within [0, total-1].
+        let (start, end) = match (start_opt, end_opt) {
+            (Some(s), Some(e)) => (s, e.min(total.saturating_sub(1))),
+            (Some(s), None) => (s, total.saturating_sub(1)),
+            // Suffix range `bytes=-N`: the last N bytes.
+            (None, Some(n)) => (total.saturating_sub(n), total.saturating_sub(1)),
+            (None, None) => (0, total.saturating_sub(1)),
+        };
+        if total == 0 || start > end || start >= total {
+            let header = format!(
+                "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */{total}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            let _ = stream.write_all(header.as_bytes());
+            return;
+        }
+        let len = end - start + 1;
+        let mut body = vec![0u8; len as usize];
+        let read_ok = std::fs::File::open(path).and_then(|mut f| {
+            f.seek(SeekFrom::Start(start))?;
+            f.read_exact(&mut body)?;
+            Ok(())
+        });
+        if read_ok.is_err() {
+            write_response(stream, "500 Internal Server Error", "text/plain", b"read failed", head_only);
+            return;
+        }
+        let header = format!(
+            "HTTP/1.1 206 Partial Content\r\nContent-Type: {mime}\r\nContent-Length: {len}\r\nContent-Range: bytes {start}-{end}/{total}\r\nAccept-Ranges: bytes\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n"
+        );
+        let _ = stream.write_all(header.as_bytes());
+        if !head_only {
+            let _ = stream.write_all(&body);
+        }
+        return;
+    }
+
+    match std::fs::read(path) {
+        Ok(body) => {
+            let header = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(header.as_bytes());
+            if !head_only {
+                let _ = stream.write_all(&body);
+            }
+        }
+        Err(_) => write_response(stream, "500 Internal Server Error", "text/plain", b"read failed", head_only),
     }
 }
 
@@ -230,8 +324,13 @@ mod tests {
     use super::*;
 
     fn get(port: u16, path: &str) -> (String, Vec<u8>) {
+        get_with(port, path, None)
+    }
+
+    fn get_with(port: u16, path: &str, range: Option<&str>) -> (String, Vec<u8>) {
         let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
-        s.write_all(format!("GET {path} HTTP/1.1\r\nHost: x\r\n\r\n").as_bytes())
+        let range_line = range.map(|r| format!("Range: {r}\r\n")).unwrap_or_default();
+        s.write_all(format!("GET {path} HTTP/1.1\r\nHost: x\r\n{range_line}\r\n").as_bytes())
             .unwrap();
         let mut resp = Vec::new();
         s.read_to_end(&mut resp).unwrap();
@@ -240,6 +339,51 @@ mod tests {
             String::from_utf8_lossy(&resp[..split]).into_owned(),
             resp[split + 4..].to_vec(),
         )
+    }
+
+    #[test]
+    fn range_requests_get_206_partial_content() {
+        let root = std::env::temp_dir().join(format!("ai4s-preview-range-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("v.mp4"), b"0123456789").unwrap(); // 10 bytes
+
+        let port = serve("tok", {
+            let root = root.clone();
+            move |scope| (scope == "w").then(|| root.clone())
+        })
+        .unwrap();
+
+        // Full file advertises range support.
+        let (h, body) = get(port, "/tok/w/v.mp4");
+        assert!(h.starts_with("HTTP/1.1 200"), "{h}");
+        assert!(h.contains("Content-Type: video/mp4"), "{h}");
+        assert!(h.contains("Accept-Ranges: bytes"), "{h}");
+        assert_eq!(body, b"0123456789");
+
+        // Closed range returns exactly the slice, with Content-Range.
+        let (h, body) = get_with(port, "/tok/w/v.mp4", Some("bytes=2-5"));
+        assert!(h.starts_with("HTTP/1.1 206"), "{h}");
+        assert!(h.contains("Content-Range: bytes 2-5/10"), "{h}");
+        assert_eq!(body, b"2345");
+
+        // Open-ended range (the webview's initial `bytes=0-`) serves to the end.
+        let (h, body) = get_with(port, "/tok/w/v.mp4", Some("bytes=0-"));
+        assert!(h.starts_with("HTTP/1.1 206"), "{h}");
+        assert!(h.contains("Content-Range: bytes 0-9/10"), "{h}");
+        assert_eq!(body, b"0123456789");
+
+        // Suffix range: the last N bytes.
+        let (h, body) = get_with(port, "/tok/w/v.mp4", Some("bytes=-3"));
+        assert!(h.starts_with("HTTP/1.1 206"), "{h}");
+        assert!(h.contains("Content-Range: bytes 7-9/10"), "{h}");
+        assert_eq!(body, b"789");
+
+        // Unsatisfiable range → 416 with the total size.
+        let (h, _) = get_with(port, "/tok/w/v.mp4", Some("bytes=50-60"));
+        assert!(h.starts_with("HTTP/1.1 416"), "{h}");
+        assert!(h.contains("Content-Range: bytes */10"), "{h}");
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

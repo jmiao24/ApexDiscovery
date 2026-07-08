@@ -279,6 +279,14 @@ export async function setWorkspace(path: string): Promise<string> {
   return invoke<string>("set_workspace", { path });
 }
 
+/** Record which session owns the active workspace (written to
+ *  `.openscience/session.txt`) so skill helpers can attribute remote runs. */
+export async function markSession(sessionId: string): Promise<void> {
+  if (!isTauri) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("mark_session", { sessionId });
+}
+
 /** Create a new dated folder under the base workspace and switch to it. */
 export async function newDatedWorkspace(name: string): Promise<string> {
   if (!isTauri) throw new Error("not running in the desktop app");

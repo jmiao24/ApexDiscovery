@@ -49,6 +49,22 @@ export async function openArtifactExternally(path: string, root?: FileRoot): Pro
   await invoke("open_path", { path, root });
 }
 
+/** Reveal a root-relative file/dir in the OS file manager (Finder / Explorer /
+ *  Linux file manager). Desktop only; no-op in the browser. */
+export async function revealArtifact(path: string, root?: FileRoot): Promise<void> {
+  if (!isTauri) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("reveal_path", { path, root });
+}
+
+/** The absolute filesystem path of a root-relative file/dir (for "Copy path").
+ *  Null in the browser. */
+export async function absoluteArtifactPath(path: string, root?: FileRoot): Promise<string | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("absolute_path", { path, root });
+}
+
 /** Introspect a file too big to preview WITHOUT loading it: runs the bundled
  *  large-file probe and returns its compact memory pointer (schema / shape /
  *  sample / key numbers). Returns null outside the desktop app; throws the

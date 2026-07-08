@@ -616,6 +616,30 @@ mod tests {
     }
 
     #[test]
+    fn remote_ssh_record_with_env_parses() {
+        // An SSH run recorded by record_run.py --env-file: the ambient interpreter
+        // + package lockfile are pinned in `env`, and every script/output listed.
+        let root = temp_root("ssh-env");
+        let dir = root.join(".openscience");
+        std::fs::create_dir_all(&dir).unwrap();
+        let remote = r#"{"runId":"run_ssh","ts":300,"command":"bash run.sh","surface":"ssh","status":"ok","code":[{"path":"run.sh","size":36,"hash":"aa"},{"path":"humanoid_sim.py","size":4232,"hash":"bb"}],"outputs":[{"path":"results/x/result.json","size":13,"hash":"cc"},{"path":"results/x/trajectory.npz","size":49616,"hash":"dd"}],"host":"home-3090","remoteHardware":"24 CPU cores, 62 GB (CPU-only)","env":{"platform":"linux-x86_64","app":"0.1.7","python":"3.11.2","packages":{"count":3,"hash":"2e90ca4f3bdace4e"}}}"#;
+        std::fs::write(dir.join("remote-runs.jsonl"), format!("{remote}\n")).unwrap();
+
+        let runs = read_runs(&root);
+        assert_eq!(runs.len(), 1);
+        let r = &runs[0];
+        assert_eq!(r.surface.as_deref(), Some("ssh"));
+        assert_eq!(r.code.len(), 2);
+        assert_eq!(r.outputs.len(), 2);
+        let env = r.env.as_ref().expect("env parsed");
+        assert_eq!(env.platform, "linux-x86_64");
+        assert_eq!(env.python.as_deref(), Some("3.11.2"));
+        assert_eq!(env.packages.as_ref().expect("packages").count, 3);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn run_id_is_deterministic_for_same_command_and_time() {
         assert_eq!(run_id("python x.py", 100), run_id("python x.py", 100));
         assert_ne!(run_id("python x.py", 100), run_id("python x.py", 101));

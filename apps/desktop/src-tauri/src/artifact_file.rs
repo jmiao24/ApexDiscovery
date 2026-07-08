@@ -76,6 +76,12 @@ pub fn mime_for(ext: &str) -> (&'static str, bool) {
         "docx" => ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", false),
         "xlsx" => ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", false),
         "pptx" => ("application/vnd.openxmlformats-officedocument.presentationml.presentation", false),
+        // Video — served over the local file server (with Range support) and
+        // played inline by the webview's native <video> element.
+        "mp4" | "m4v" => ("video/mp4", false),
+        "webm" => ("video/webm", false),
+        "mov" => ("video/quicktime", false),
+        "ogv" => ("video/ogg", false),
         _ => ("application/octet-stream", false),
     }
 }
@@ -242,6 +248,24 @@ pub fn os_open(full: &Path) -> Result<(), String> {
 pub fn open_path(app: AppHandle, path: String, root: Option<String>) -> Result<(), String> {
     let full = resolve_under(&scope_root(&app, root.as_deref())?, &path)?;
     os_open(&full)
+}
+
+/// Reveal a workspace file/dir in the OS file manager (Finder on macOS,
+/// Explorer on Windows, the file-manager portal/DBus with a folder-open
+/// fallback on Linux). Via the `opener` crate's `reveal`, so no shelling out.
+#[tauri::command]
+pub fn reveal_path(app: AppHandle, path: String, root: Option<String>) -> Result<(), String> {
+    let full = resolve_under(&scope_root(&app, root.as_deref())?, &path)?;
+    opener::reveal(&full).map_err(|e| format!("reveal failed: {e}"))
+}
+
+/// The absolute filesystem path of a workspace file/dir, for "Copy path". The
+/// path is resolved under (and sandboxed to) the chosen root, then returned in
+/// the OS-native form (backslashes on Windows).
+#[tauri::command]
+pub fn absolute_path(app: AppHandle, path: String, root: Option<String>) -> Result<String, String> {
+    let full = resolve_under(&scope_root(&app, root.as_deref())?, &path)?;
+    Ok(full.to_string_lossy().into_owned())
 }
 
 #[derive(serde::Serialize)]

@@ -49,7 +49,7 @@ export function FilePreviewInspector({
   controls?: React.ReactNode;
 }) {
   const kind = previewKindForName(data.filename);
-  const needsUrl = kind === "pdf" || kind === "image" || kind === "html";
+  const needsUrl = kind === "pdf" || kind === "image" || kind === "html" || kind === "video";
   const needsText =
     kind === "table" || kind === "text" || kind === "html" || kind === "markdown" ||
     kind === "molecule" || kind === "genome" || kind === "qcode" || kind === "anomaly" ||
@@ -361,6 +361,21 @@ function Body({
     return url ? (
       <div className="flex justify-center p-4">
         <img src={url} alt={filename} className="max-w-full rounded-sm bg-white shadow-card" />
+      </div>
+    ) : (
+      <Note text="Preview is available in the desktop app." />
+    );
+  }
+  if (kind === "video") {
+    // The local file server answers Range requests, so the native <video>
+    // element streams and seeks straight from http://127.0.0.1.
+    return url ? (
+      <div className="flex justify-center p-4">
+        <video
+          src={url}
+          controls
+          className="max-h-[80vh] max-w-full rounded-sm bg-black shadow-card"
+        />
       </div>
     ) : (
       <Note text="Preview is available in the desktop app." />

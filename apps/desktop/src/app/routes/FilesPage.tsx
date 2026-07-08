@@ -3,6 +3,7 @@ import {
   ChevronRight,
   Dna,
   FileText,
+  Film,
   FlaskConical,
   Folder,
   Image as ImageIcon,
@@ -19,6 +20,7 @@ import { useRuntimeStore } from "@/lib/runtime";
 import { baseName } from "@/components/thread/WorkspaceChip";
 import { NotebookEditor } from "@/components/notebook/NotebookEditor";
 import { FilePreviewInspector } from "@/components/inspector/FilePreviewInspector";
+import { FileContextMenu } from "@/components/files/FileContextMenu";
 import { PaneTitlebarInset } from "@/components/inspector/RightPane";
 import { cn } from "@/lib/cn";
 
@@ -32,6 +34,7 @@ function iconFor(entry: DirEntry) {
   const cls = "text-muted";
   if (entry.name.endsWith(".ipynb")) return <NotebookPen size={15} className={cls} />;
   if (kind === "image" || kind === "fits" || kind === "anomaly" || kind === "phase") return <ImageIcon size={15} className={cls} />;
+  if (kind === "video") return <Film size={15} className={cls} />;
   if (kind === "table") return <Sheet size={15} className={cls} />;
   if (kind === "molecule" || kind === "dos" || kind === "bands") return <FlaskConical size={15} className={cls} />;
   if (kind === "genome") return <Dna size={15} className={cls} />;
@@ -130,19 +133,20 @@ export function FilesPage() {
             </div>
           )}
           {entries?.map((entry) => (
-            <button
-              key={entry.path}
-              onClick={() => open(entry)}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-input px-2 py-1.5 text-left text-[13px] hover:bg-surface-2",
-                selected?.path === entry.path ? "bg-surface-2 text-text" : "text-text/90",
-              )}
-            >
-              {iconFor(entry)}
-              <span className="flex-1 truncate">{entry.name}</span>
-              {!entry.isDir && <span className="shrink-0 text-[11px] text-muted">{humanSize(entry.size)}</span>}
-              {entry.isDir && <ChevronRight size={14} className="shrink-0 text-muted" />}
-            </button>
+            <FileContextMenu key={entry.path} entry={entry} root="base">
+              <button
+                onClick={() => open(entry)}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-input px-2 py-1.5 text-left text-[13px] hover:bg-surface-2",
+                  selected?.path === entry.path ? "bg-surface-2 text-text" : "text-text/90",
+                )}
+              >
+                {iconFor(entry)}
+                <span className="flex-1 truncate">{entry.name}</span>
+                {!entry.isDir && <span className="shrink-0 text-[11px] text-muted">{humanSize(entry.size)}</span>}
+                {entry.isDir && <ChevronRight size={14} className="shrink-0 text-muted" />}
+              </button>
+            </FileContextMenu>
           ))}
         </div>
       </div>
@@ -296,16 +300,17 @@ export function SessionFilesPane({
           <div className="p-2 text-sm text-muted">This folder is empty.</div>
         )}
         {entries?.map((entry) => (
-          <button
-            key={entry.path}
-            onClick={() => (entry.isDir ? setDir(entry.path) : setSelected(entry))}
-            className="flex w-full items-center gap-2 rounded-input px-2 py-1.5 text-left text-[13px] text-text/90 hover:bg-surface-2"
-          >
-            {iconFor(entry)}
-            <span className="flex-1 truncate">{entry.name}</span>
-            {!entry.isDir && <span className="shrink-0 text-[11px] text-muted">{humanSize(entry.size)}</span>}
-            {entry.isDir && <ChevronRight size={14} className="shrink-0 text-muted" />}
-          </button>
+          <FileContextMenu key={entry.path} entry={entry} root="workspace">
+            <button
+              onClick={() => (entry.isDir ? setDir(entry.path) : setSelected(entry))}
+              className="flex w-full items-center gap-2 rounded-input px-2 py-1.5 text-left text-[13px] text-text/90 hover:bg-surface-2"
+            >
+              {iconFor(entry)}
+              <span className="flex-1 truncate">{entry.name}</span>
+              {!entry.isDir && <span className="shrink-0 text-[11px] text-muted">{humanSize(entry.size)}</span>}
+              {entry.isDir && <ChevronRight size={14} className="shrink-0 text-muted" />}
+            </button>
+          </FileContextMenu>
         ))}
       </div>
     </div>

@@ -21,6 +21,7 @@ import {
 import type { RunArtifact, RunRecord } from "@ai4s/shared";
 import { queryRuns, readRunLog, reproduceRunPrompt, type RunFacet, type RunPage } from "@/lib/runs";
 import { openArtifactExternally } from "@/lib/artifactFile";
+import { copyText } from "@/lib/clipboard";
 import { PaneTitlebarInset } from "@/components/inspector/RightPane";
 import { useUiStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
@@ -125,7 +126,7 @@ function RunsView({ sessionId }: { sessionId?: string }) {
   };
 
   const copyCommand = (r: RunRecord) => {
-    void navigator.clipboard?.writeText(r.command).then(() => {
+    void copyText(r.command).then(() => {
       setCopied(r.runId);
       setTimeout(() => setCopied((c) => (c === r.runId ? null : c)), 1500);
     });

@@ -14,6 +14,7 @@ import type {
 const EXT_KIND: Record<string, ArtifactKind> = {
   png: "figure", jpg: "figure", jpeg: "figure", gif: "figure", webp: "figure", svg: "figure",
   fits: "figure", fit: "figure", fts: "figure",
+  mp4: "figure", webm: "figure", mov: "figure", m4v: "figure", ogv: "figure",
   py: "script", r: "script", jl: "script", sh: "script",
   ipynb: "notebook",
   pdf: "report", tex: "report", md: "report", docx: "report", pptx: "report",
@@ -46,6 +47,7 @@ const REF_EXTS = [
   "pdf", "html", "htm", "svg", "png", "jpg", "jpeg", "gif", "webp",
   "csv", "tsv", "md", "tex", "json", "py", "ipynb", "r",
   "docx", "xlsx", "pptx",
+  "mp4", "webm", "mov", "m4v",
   "mol", "mol2", "sdf", "smi", "smiles", "cif", "mcif", "mmcif", "pdb", "pqr", "xyz", "cube",
   "bed", "bedgraph", "bdg", "gff", "gff3", "gtf", "vcf",
   "stl", "obj", "ply", "gltf", "glb",
@@ -76,6 +78,7 @@ const MIME: Record<string, string> = {
   html: "text/html", htm: "text/html",
   svg: "image/svg+xml",
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
+  mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", mov: "video/quicktime", ogv: "video/ogg",
   csv: "text/csv", tsv: "text/tab-separated-values",
   md: "text/markdown", tex: "text/x-tex", json: "application/json",
   py: "text/x-python", r: "text/x-r", txt: "text/plain",
@@ -99,6 +102,7 @@ export type PreviewKind =
   | "html"
   | "pdf"
   | "image"
+  | "video"
   | "table"
   | "markdown"
   | "text"
@@ -130,6 +134,7 @@ export function previewKind(ext: string): PreviewKind {
   if (e === "html" || e === "htm") return "html";
   if (e === "pdf") return "pdf";
   if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(e)) return "image";
+  if (["mp4", "webm", "mov", "m4v", "ogv"].includes(e)) return "video";
   if (e === "csv" || e === "tsv") return "table";
   if (e === "md" || e === "markdown") return "markdown";
   if (e === "docx" || e === "xlsx" || e === "pptx") return e;

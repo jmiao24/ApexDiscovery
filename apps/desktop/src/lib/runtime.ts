@@ -19,6 +19,7 @@ import {
   getApprovalMode,
   isTauri,
   logDebug,
+  markSession,
   newDatedWorkspace,
   runtimePassword,
   setApprovalMode as persistApprovalMode,
@@ -863,6 +864,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         set({ switching: false });
       }
     }
+    // Stamp the (now-active) workspace with this session's id so skill-recorded
+    // remote runs attach to the session, not just the global Runs view.
+    if (dir) void markSession(id).catch(() => {});
     if (!client) return;
     // Recover any request the agent is blocked on (asked before connect/reload).
     void (async () => {

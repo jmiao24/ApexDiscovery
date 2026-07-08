@@ -45,7 +45,15 @@ process, mirroring how the app tracks runs.
    ```
    Write `run.sh` in the workspace first (so it is versioned in provenance);
    it should `cd` into the job dir and run the actual commands, e.g. use
-   `CUDA_VISIBLE_DEVICES` to select GPUs.
+   `CUDA_VISIBLE_DEVICES` to select GPUs. On a plain box the software
+   environment is ambient (whatever is installed) — not declared anywhere — so
+   pin it at run time by having `run.sh` write a manifest as its first step (it
+   is fetched and recorded in §3–4). Keep it fail-safe so provenance never
+   aborts the job:
+   ```bash
+   { python3 -V; echo "PLATFORM=$(uname -s)-$(uname -m)"; \
+     echo '--- pip freeze ---'; python3 -m pip freeze; } > env.txt 2>&1 || true
+   ```
 3. Launch fully detached and capture the PID:
    ```bash
    ssh -o BatchMode=yes <host> "cd <remote-dir> && \
@@ -58,7 +66,10 @@ process, mirroring how the app tracks runs.
    - Progress: `ssh <host> "tail -n 30 <remote-dir>/log"`; GPU use:
      `ssh <host> "nvidia-smi"`.
    - Finished: `ssh <host> "cat <remote-dir>/exit_code"` — `0` = success, other
-     = failure. Do not assume success from an empty queue.
+     = failure. Do not assume success from an empty queue. When a run finishes
+     you MUST complete §3 (fetch) **and** §4 (record) — every time, including a
+     quick re-run or re-fetch. A run you don't record is invisible in Runs
+     (neither the global view nor the session), so it may as well not exist.
    - Long jobs: report the PID + running state and stop; the user can ask you to
      check again later. Do not poll in a loop for more than ~2 minutes.
 5. **Cancel** (only jobs you launched, or a PID/dir the user names): kill the
@@ -97,29 +108,54 @@ Use this only when `caps.slurm` is set.
 
 ## 3 · Fetch results back
 
-Copy outputs into the workspace so they become traceable artifacts:
+Copy **every** file the job produced into the workspace so they become
+traceable artifacts — not just a summary. That means `log`, `env.txt`, and each
+result/data/figure file the run wrote (e.g. `result.json` **and**
+`trajectory.npz`, checkpoints, plots). A fetched artifact is the only thing that
+survives; anything left on the box is not provenance.
 ```bash
 mkdir -p results/<job-name>
-scp -o BatchMode=yes "<host>:<remote-dir>/log" \
-    "<host>:<remote-dir>/<result file>" results/<job-name>/
+scp -o BatchMode=yes "<host>:<remote-dir>/log" "<host>:<remote-dir>/env.txt" \
+    "<host>:<remote-dir>/<each output file>" results/<job-name>/
 ```
 `<remote-dir>` is the literal directory you created — name each file explicitly.
+List the job dir first (`ssh <host> "ls -la <remote-dir>"`) so you fetch them all.
 
-## 4 · Record the run (reproducibility)
+## 4 · Record the run (reproducibility) — REQUIRED, every time
 
-The app can't see the remote machine, so record the run after results are
-fetched. Get the hardware string from your §1 headroom check (e.g. "8× RTX 3090"
-or "16 cores, 64 GB"). Then, from the workspace root:
+Recording is not an optional finishing flourish: the app can't see the remote
+machine, so this call is the ONLY thing that makes the run exist in Runs. Do it
+after **every** finished run — first runs, quick re-runs, and re-fetches alike.
+Skipping it (a common mistake on a casual "just run it again") loses the run
+entirely. Record it **completely** — the helper pins whatever you pass:
+
+- `--code` once per script that actually ran — the entry script **and** every
+  helper it calls (e.g. `run.sh` **and** `humanoid_sim.py`), not just the wrapper.
+- `--output` once per file you fetched in §3 — every result/data/figure, not
+  just the summary json.
+- `--env-file` the fetched `env.txt`, so the ambient interpreter + package
+  versions are pinned (this is what makes an SSH run reproducible).
+- `--hardware` = what the job **used**, not what the box has. A CPU-only job on
+  a GPU box is `"24 CPU cores, 62 GB (CPU-only)"`, not `"2× RTX 3090"`.
+- `--session-id` from the workspace marker, so the run attaches to this session
+  (not just the global Runs view). Pass it verbatim as shown; it's empty-safe.
 
 ```bash
 python "$XDG_CONFIG_HOME/opencode/skills/remote-compute/record_run.py" \
   --surface ssh --command "bash run.sh" --status <ok|failed> --host <host> \
-  --hardware "<hardware>" --code run.sh --output results/<job-name>/<result file>
+  --hardware "<hardware the job used>" \
+  --code run.sh --code <each other script> \
+  --output results/<job-name>/<each output file> \
+  --env-file results/<job-name>/env.txt \
+  --session-id "$(cat .openscience/session.txt 2>/dev/null)"
 ```
 
-For a Slurm run use `--surface hpc`, `--command "sbatch <name>.sbatch"`,
-`--job-id <id>`, and the `sacct` hardware/state. Use `--status failed` on a
-non-success exit code / `sacct` state.
+The helper warns if a recorded file is missing or if code/outputs are empty —
+fix those rather than ignoring them. For a Slurm run use `--surface hpc`,
+`--command "sbatch <name>.sbatch"`, `--job-id <id>`, and the `sacct`
+hardware/state; the environment there is pinned by the sbatch `module load`
+lines in the versioned script, so `--env-file` is not needed. Use
+`--status failed` on a non-success exit code / `sacct` state.
 
 Summarize: the machine, the final state (quote the `exit_code`/`sacct` state —
 do not assume success), elapsed time, and the fetched files. If it failed, show

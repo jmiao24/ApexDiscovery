@@ -40,6 +40,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(RuntimeState::default())
         .manage(KernelState::default())
         .manage(JupyterState::default())
@@ -55,6 +56,7 @@ pub fn run() {
             runtime::set_workspace_base,
             runtime::open_workspace_base,
             runtime::set_workspace,
+            runtime::mark_session,
             runtime::new_dated_workspace,
             runtime::pick_folder,
             runtime::import_opencode_login,
@@ -71,6 +73,8 @@ pub fn run() {
             kernel::set_python_path,
             artifact_file::read_artifact,
             artifact_file::open_path,
+            artifact_file::reveal_path,
+            artifact_file::absolute_path,
             artifact_file::resolve_artifact,
             artifact_file::save_text_file,
             artifact_file::open_url,
