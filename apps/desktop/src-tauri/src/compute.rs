@@ -368,9 +368,126 @@ fn caps_from_probe(p: &ComputeProbe) -> Caps {
     }
 }
 
+/// New machine-list config; supersedes the single-host hpc.json.
+const COMPUTE_FILE: &str = "compute.json";
+
+fn compute_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(workspace_dir(app)?.join(".openscience").join(COMPUTE_FILE))
+}
+
+/// One SSH round-trip: static identity + a live usage snapshot, one token per
+/// line, tolerant of missing tools (Linux remote assumed).
+const PROBE_SCRIPT: &str = r#"echo "OS $(uname -sr)"
+echo "CORES $(nproc 2>/dev/null)"
+cut -d' ' -f1 /proc/loadavg 2>/dev/null | sed 's/^/LOAD /'
+free -b 2>/dev/null | awk '/^Mem:/{print "MEMTOTAL",$2; print "MEMAVAIL",$7}'
+df -PB1 "$HOME" 2>/dev/null | awk 'NR==2{print "DISKTOTAL",$2; print "DISKFREE",$4}'
+command -v sbatch >/dev/null 2>&1 && echo "SLURM $(sbatch --version 2>/dev/null | head -1)"
+command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu --format=csv,noheader,nounits | sed 's/^/GPU /'
+"#;
+
+fn load_machines(app: &AppHandle) -> Result<Vec<Machine>, String> {
+    let path = compute_path(app)?;
+    if let Ok(text) = std::fs::read_to_string(&path) {
+        return Ok(parse_machines(&text));
+    }
+    // Migrate a legacy hpc.json exactly once, then remove it.
+    let legacy = workspace_dir(app)?.join(".openscience").join("hpc.json");
+    if let Ok(text) = std::fs::read_to_string(&legacy) {
+        let machines = legacy_to_machines(&text);
+        save_machines(app, &machines)?;
+        let _ = std::fs::remove_file(&legacy);
+        return Ok(machines);
+    }
+    Ok(Vec::new())
+}
+
+fn save_machines(app: &AppHandle, machines: &[Machine]) -> Result<(), String> {
+    let path = compute_path(app)?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let body = serde_json::to_string(&MachinesFile { machines: machines.to_vec() })
+        .map_err(|e| e.to_string())?;
+    std::fs::write(&path, body).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn compute_machines(app: AppHandle) -> Result<Vec<Machine>, String> {
+    load_machines(&app)
+}
+
+#[tauri::command]
+pub fn add_compute_machine(app: AppHandle, host: String, label: Option<String>) -> Result<(), String> {
+    if !is_safe_host(&host) {
+        return Err("invalid host".into());
+    }
+    let mut machines = load_machines(&app)?;
+    upsert_machine(&mut machines, &host, label);
+    save_machines(&app, &machines)
+}
+
+#[tauri::command]
+pub fn remove_compute_machine(app: AppHandle, host: String) -> Result<(), String> {
+    let mut machines = load_machines(&app)?;
+    machines.retain(|m| m.host != host);
+    save_machines(&app, &machines)
+}
+
+/// Probe a host and, when reachable, write its static caps back into
+/// compute.json (only if the host is already saved — probing during add is fine
+/// because add runs first). Live usage in the return value is never cached.
+#[tauri::command]
+pub async fn compute_probe(app: AppHandle, host: String) -> Result<ComputeProbe, String> {
+    let (code, stdout, stderr) = run_ssh(&app, &host, PROBE_SCRIPT).await?;
+    if code == 255 {
+        let mut detail = stderr.lines().last().unwrap_or("connection failed").trim().to_string();
+        if stderr.contains("Host key verification failed") {
+            detail = format!(
+                "host key not verified — run `ssh {host}` once in your terminal to check \
+                 and accept its fingerprint, then retry"
+            );
+        }
+        return Ok(ComputeProbe { reachable: false, message: Some(detail), ..Default::default() });
+    }
+    let mut probe = parse_probe(&stdout);
+    probe.reachable = true;
+    // Cache the static caps for agent selection (best-effort).
+    if let Ok(mut machines) = load_machines(&app) {
+        if let Some(m) = machines.iter_mut().find(|m| m.host == host) {
+            m.caps = Some(caps_from_probe(&probe));
+            let _ = save_machines(&app, &machines);
+        }
+    }
+    Ok(probe)
+}
+
+/// A Slurm host's queue (only meaningful when the machine has Slurm).
+#[tauri::command]
+pub async fn compute_jobs(app: AppHandle, host: String) -> Result<Vec<HpcJob>, String> {
+    let (code, stdout, stderr) =
+        run_ssh(&app, &host, "squeue -u \"$USER\" -h -o '%i|%T|%M|%P|%j'").await?;
+    if code != 0 {
+        return Err(stderr.lines().last().unwrap_or("squeue failed").trim().to_string());
+    }
+    Ok(parse_squeue(&stdout))
+}
+
+#[tauri::command]
+pub async fn compute_cancel(app: AppHandle, host: String, job_id: String) -> Result<(), String> {
+    if !is_safe_job_id(&job_id) {
+        return Err("invalid job id".into());
+    }
+    let (code, _, stderr) = run_ssh(&app, &host, &format!("scancel '{job_id}'")).await?;
+    if code != 0 {
+        return Err(stderr.lines().last().unwrap_or("scancel failed").trim().to_string());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{is_safe_host, is_safe_job_id, parse_squeue, parse_ssh_hosts, parse_machines, legacy_to_machines, upsert_machine, Machine};
+    use super::{is_safe_host, is_safe_job_id, parse_squeue, parse_ssh_hosts};
 
     #[test]
     fn parses_hosts_and_skips_wildcards() {
