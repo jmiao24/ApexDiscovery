@@ -304,9 +304,73 @@ pub async fn hpc_cancel(app: AppHandle, host: String, job_id: String) -> Result<
     Ok(())
 }
 
+/// Static capability snapshot cached in compute.json — the ONLY thing the agent
+/// reads to pick a machine. Never holds time-varying usage.
+#[derive(Clone, serde::Serialize, serde::Deserialize, Default)]
+pub struct Caps {
+    pub cores: Option<u32>,
+    pub mem_total_bytes: Option<u64>,
+    #[serde(default)]
+    pub gpus: Vec<String>,
+    pub slurm: Option<String>,
+}
+
+/// A saved remote machine. `caps` is absent until the first successful probe.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct Machine {
+    pub host: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub caps: Option<Caps>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+struct MachinesFile {
+    #[serde(default)]
+    machines: Vec<Machine>,
+}
+
+/// Parse compute.json; malformed content yields an empty list rather than an
+/// error (a hand-broken file must not brick the settings page).
+fn parse_machines(json: &str) -> Vec<Machine> {
+    serde_json::from_str::<MachinesFile>(json).map(|f| f.machines).unwrap_or_default()
+}
+
+/// Import a legacy `{"host":"…"}` hpc.json as a single machine (no caps yet).
+fn legacy_to_machines(hpc_json: &str) -> Vec<Machine> {
+    serde_json::from_str::<serde_json::Value>(hpc_json)
+        .ok()
+        .and_then(|v| v.get("host").and_then(|h| h.as_str()).map(str::to_string))
+        .map(|host| vec![Machine { host, label: None, caps: None }])
+        .unwrap_or_default()
+}
+
+/// Insert or update a machine by host (dedupe). Updates the label in place;
+/// preserves any existing caps.
+fn upsert_machine(list: &mut Vec<Machine>, host: &str, label: Option<String>) {
+    if let Some(m) = list.iter_mut().find(|m| m.host == host) {
+        if label.is_some() {
+            m.label = label;
+        }
+    } else {
+        list.push(Machine { host: host.to_string(), label, caps: None });
+    }
+}
+
+/// The static slice of a probe worth caching for agent machine-selection.
+fn caps_from_probe(p: &ComputeProbe) -> Caps {
+    Caps {
+        cores: p.cores,
+        mem_total_bytes: p.mem_total_bytes,
+        gpus: p.gpus.iter().map(|g| g.name.clone()).collect(),
+        slurm: p.slurm.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{is_safe_host, is_safe_job_id, parse_squeue, parse_ssh_hosts};
+    use super::{is_safe_host, is_safe_job_id, parse_squeue, parse_ssh_hosts, parse_machines, legacy_to_machines, upsert_machine, Machine};
 
     #[test]
     fn parses_hosts_and_skips_wildcards() {
@@ -414,5 +478,43 @@ random junk with no leading token space? nope
         assert!(p.slurm.is_none());
         assert!(p.gpus.is_empty());
         assert!(p.load1.is_none());
+    }
+
+    #[test]
+    fn parses_machines_with_caps() {
+        let json = r#"{"machines":[{"host":"home-3090","label":"8x3090",
+            "caps":{"cores":16,"mem_total_bytes":67516000000,
+                    "gpus":["RTX 3090","RTX 3090"],"slurm":null}}]}"#;
+        let m = super::parse_machines(json);
+        assert_eq!(m.len(), 1);
+        assert_eq!(m[0].host, "home-3090");
+        assert_eq!(m[0].label.as_deref(), Some("8x3090"));
+        assert_eq!(m[0].caps.as_ref().unwrap().gpus.len(), 2);
+    }
+
+    #[test]
+    fn parse_machines_tolerates_garbage() {
+        assert!(super::parse_machines("not json").is_empty());
+        assert!(super::parse_machines("{}").is_empty());
+    }
+
+    #[test]
+    fn migrates_legacy_single_host() {
+        let m = super::legacy_to_machines(r#"{"host":"login-a"}"#);
+        assert_eq!(m.len(), 1);
+        assert_eq!(m[0].host, "login-a");
+        assert!(m[0].caps.is_none());
+        // A legacy file with no host → nothing to migrate.
+        assert!(super::legacy_to_machines("{}").is_empty());
+    }
+
+    #[test]
+    fn upsert_dedupes_by_host() {
+        let mut list = vec![];
+        super::upsert_machine(&mut list, "a", Some("A".into()));
+        super::upsert_machine(&mut list, "a", Some("A2".into())); // same host
+        super::upsert_machine(&mut list, "b", None);
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].label.as_deref(), Some("A2")); // label updated in place
     }
 }
