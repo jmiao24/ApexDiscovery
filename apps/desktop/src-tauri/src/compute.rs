@@ -1,26 +1,15 @@
-// HPC / Slurm over SSH (P2-2). The app talks to the user's cluster with the
+// Remote compute over SSH. The app talks to the user's machines with the
 // system `ssh` binary and the user's own SSH config/keys — no credentials of
-// our own, no agent on the cluster. Rust side: pick a host, probe it for
-// Slurm, list/cancel the user's queued jobs. Submission itself is agent-driven
-// via the bundled `hpc-slurm` skill; the chosen host is shared with the agent
-// through <workspace>/.openscience/hpc.json.
+// our own, no agent installed remotely. Rust side: pick a host, probe it for
+// capabilities (cores, memory, disk, GPUs, optional Slurm), and list/cancel
+// the user's queued Slurm jobs. Submission itself is agent-driven via the
+// bundled `remote-compute` skill; saved machines live in
+// <workspace>/.openscience/compute.json (see compute_machines below).
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::ShellExt;
 
 use crate::runtime::workspace_dir;
-
-const CONFIG_FILE: &str = "hpc.json";
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-pub struct HpcCheck {
-    /// SSH connection succeeded (regardless of whether Slurm is present).
-    pub reachable: bool,
-    /// First line of `sbatch --version` when Slurm is available.
-    pub slurm: Option<String>,
-    /// Human-readable detail for failures / missing Slurm.
-    pub message: Option<String>,
-}
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct HpcJob {
@@ -165,41 +154,6 @@ pub fn list_ssh_hosts(app: AppHandle) -> Result<Vec<String>, String> {
     }
 }
 
-fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(workspace_dir(app)?.join(".openscience").join(CONFIG_FILE))
-}
-
-/// The configured cluster host, if any (shared with the agent via hpc.json).
-#[tauri::command]
-pub fn hpc_config(app: AppHandle) -> Result<Option<String>, String> {
-    let path = config_path(&app)?;
-    let Ok(text) = std::fs::read_to_string(path) else { return Ok(None) };
-    let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    Ok(v.get("host").and_then(|h| h.as_str()).map(str::to_string))
-}
-
-/// Persist (or clear, with None/empty) the cluster host into
-/// `<workspace>/.openscience/hpc.json`, where the hpc-slurm skill reads it.
-#[tauri::command]
-pub fn set_hpc_config(app: AppHandle, host: Option<String>) -> Result<(), String> {
-    let path = config_path(&app)?;
-    let host = host.unwrap_or_default();
-    if host.is_empty() {
-        if path.exists() {
-            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
-        }
-        return Ok(());
-    }
-    if !is_safe_host(&host) {
-        return Err("invalid host".into());
-    }
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    let body = serde_json::json!({ "host": host }).to_string();
-    std::fs::write(&path, body).map_err(|e| e.to_string())
-}
-
 /// Run one non-interactive command on the host via the system ssh, with the
 /// user's own keys/config. Returns (exit code, stdout, stderr).
 async fn run_ssh(app: &AppHandle, host: &str, command: &str) -> Result<(i32, String, String), String> {
@@ -228,32 +182,6 @@ async fn run_ssh(app: &AppHandle, host: &str, command: &str) -> Result<(i32, Str
     ))
 }
 
-/// Probe the host: is it reachable over SSH, and does it have Slurm?
-#[tauri::command]
-pub async fn hpc_check(app: AppHandle, host: String) -> Result<HpcCheck, String> {
-    let (code, stdout, stderr) = run_ssh(&app, &host, "sbatch --version").await?;
-    if code == 0 {
-        let version = stdout.lines().next().unwrap_or("slurm").trim().to_string();
-        return Ok(HpcCheck { reachable: true, slurm: Some(version), message: None });
-    }
-    // ssh itself reports failures (auth, DNS, timeout) with exit 255.
-    if code == 255 {
-        let mut detail = stderr.lines().last().unwrap_or("connection failed").trim().to_string();
-        if stderr.contains("Host key verification failed") {
-            detail = format!(
-                "host key not verified — run `ssh {host}` once in your terminal to check \
-                 and accept its fingerprint, then retry"
-            );
-        }
-        return Ok(HpcCheck { reachable: false, slurm: None, message: Some(detail) });
-    }
-    Ok(HpcCheck {
-        reachable: true,
-        slurm: None,
-        message: Some(format!("connected, but `sbatch` was not found on {host}")),
-    })
-}
-
 /// Parse `squeue -h -o '%i|%T|%M|%P|%j'` output (name last — it may contain
 /// separators; the tail is swallowed into it).
 fn parse_squeue(stdout: &str) -> Vec<HpcJob> {
@@ -274,34 +202,6 @@ fn parse_squeue(stdout: &str) -> Vec<HpcJob> {
             })
         })
         .collect()
-}
-
-/// The user's queued/running jobs on the host.
-#[tauri::command]
-pub async fn hpc_jobs(app: AppHandle, host: String) -> Result<Vec<HpcJob>, String> {
-    // `-u "$USER"` (expanded on the cluster), not `--me` — the latter needs
-    // Slurm >= 20.02 and errors on older clusters.
-    let (code, stdout, stderr) =
-        run_ssh(&app, &host, "squeue -u \"$USER\" -h -o '%i|%T|%M|%P|%j'").await?;
-    if code != 0 {
-        let detail = stderr.lines().last().unwrap_or("squeue failed").trim();
-        return Err(detail.to_string());
-    }
-    Ok(parse_squeue(&stdout))
-}
-
-/// Cancel one of the user's jobs.
-#[tauri::command]
-pub async fn hpc_cancel(app: AppHandle, host: String, job_id: String) -> Result<(), String> {
-    if !is_safe_job_id(&job_id) {
-        return Err("invalid job id".into());
-    }
-    // Single-quoted for the remote shell: array ids contain glob chars ([ ]).
-    let (code, _, stderr) = run_ssh(&app, &host, &format!("scancel '{job_id}'")).await?;
-    if code != 0 {
-        return Err(stderr.lines().last().unwrap_or("scancel failed").trim().to_string());
-    }
-    Ok(())
 }
 
 /// Static capability snapshot cached in compute.json — the ONLY thing the agent
