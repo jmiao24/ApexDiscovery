@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::ShellExt;
 
-use crate::runtime::workspace_dir;
+use crate::runtime::base_workspace_dir;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct HpcJob {
@@ -272,7 +272,11 @@ fn caps_from_probe(p: &ComputeProbe) -> Caps {
 const COMPUTE_FILE: &str = "compute.json";
 
 fn compute_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(workspace_dir(app)?.join(".openscience").join(COMPUTE_FILE))
+    // Base workspace, NOT the per-session dated folder: a remote machine is a
+    // user-level resource shared across every session. Stored once here; the
+    // agent reaches it from its session folder via `../.openscience/compute.json`
+    // (the seeded harness points at it), so no per-session copies are kept.
+    Ok(base_workspace_dir(app)?.join(".openscience").join(COMPUTE_FILE))
 }
 
 /// One SSH round-trip: static identity + a live usage snapshot, one token per
@@ -295,8 +299,8 @@ fn load_machines(app: &AppHandle) -> Result<Vec<Machine>, String> {
     if let Ok(text) = std::fs::read_to_string(&path) {
         return Ok(parse_machines(&text));
     }
-    // Migrate a legacy hpc.json exactly once, then remove it.
-    let legacy = workspace_dir(app)?.join(".openscience").join("hpc.json");
+    // Migrate a legacy base-workspace hpc.json exactly once, then remove it.
+    let legacy = base_workspace_dir(app)?.join(".openscience").join("hpc.json");
     if let Ok(text) = std::fs::read_to_string(&legacy) {
         let machines = legacy_to_machines(&text);
         save_machines(app, &machines)?;

@@ -11,7 +11,11 @@ A machine may be a plain server (CPU or GPU, no scheduler) or a Slurm cluster.
 
 ## 1 · Pick the machine
 
-1. `cat .openscience/compute.json` in the workspace. It looks like:
+1. Read the machine list. It lives once in the BASE workspace, one level up —
+   read `../.openscience/compute.json`, falling back to `.openscience/compute.json`
+   in case this session IS the base:
+   `cat ../.openscience/compute.json 2>/dev/null || cat .openscience/compute.json`
+   It looks like:
    `{"machines":[{"host":"home-3090","label":"8x3090",
      "caps":{"cores":16,"mem_total_bytes":...,"gpus":["RTX 3090",...],"slurm":null}}]}`
    The directory is hidden — read the file directly.

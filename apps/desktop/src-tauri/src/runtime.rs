@@ -164,26 +164,61 @@ fn deploy_bundled_skills(app: &AppHandle) {
         Ok(cfg) => cfg.join("opencode").join("skills"),
         Err(_) => return,
     };
+    let mut bundled: std::collections::HashSet<std::ffi::OsString> = std::collections::HashSet::new();
+    let mut all_ok = true;
     for resource in ["skills", "skills-office", "skills-core"] {
         let src = match app
             .path()
             .resolve(resource, tauri::path::BaseDirectory::Resource)
         {
             Ok(p) if p.is_dir() => p,
-            _ => continue, // dev run without `fetch-skills.sh` — nothing to deploy
+            _ => {
+                all_ok = false; // dev run without `fetch-skills.sh` — nothing to deploy
+                continue;
+            }
         };
-        if let Err(e) = sync_skill_pack(&src, &dst) {
-            eprintln!("failed to deploy bundled skills ({resource}): {e}");
+        match sync_skill_pack(&src, &dst) {
+            Ok(names) => bundled.extend(names),
+            Err(e) => {
+                all_ok = false;
+                eprintln!("failed to deploy bundled skills ({resource}): {e}");
+            }
+        }
+    }
+    // The global skills dir is exclusively app-managed (the user's own skills
+    // live in the workspace's `.opencode/skills/`), so any skill dir not in the
+    // freshly-bundled set is a stale leftover — e.g. one renamed across an app
+    // upgrade (`hpc-slurm` → `remote-compute`) — and must be removed so the
+    // obsolete duplicate can't shadow or confuse the agent. Prune ONLY when all
+    // three packs deployed cleanly: a partial deploy would make `bundled`
+    // incomplete and wrongly delete valid skills.
+    if all_ok {
+        prune_stale_skills(&dst, &bundled);
+    }
+}
+
+/// Remove every SKILL.md-bearing directory in `dst` whose name is not in
+/// `bundled` (the set just deployed). Non-skill directories are left untouched.
+fn prune_stale_skills(dst: &Path, bundled: &std::collections::HashSet<std::ffi::OsString>) {
+    let Ok(entries) = std::fs::read_dir(dst) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir()
+            && path.join("SKILL.md").is_file()
+            && !bundled.contains(&entry.file_name())
+        {
+            let _ = std::fs::remove_dir_all(&path);
         }
     }
 }
 
 /// Copy every skill directory under `src` into `dst`, replacing same-named
 /// directories (so bundled updates win) and leaving everything else in `dst`
-/// alone (user-installed skills keep their own directories). Directories
-/// without a SKILL.md (placeholders) are skipped.
-fn sync_skill_pack(src: &Path, dst: &Path) -> std::io::Result<()> {
+/// alone. Returns the names of the skill directories it deployed (for stale
+/// pruning). Directories without a SKILL.md (placeholders) are skipped.
+fn sync_skill_pack(src: &Path, dst: &Path) -> std::io::Result<Vec<std::ffi::OsString>> {
     std::fs::create_dir_all(dst)?;
+    let mut deployed = Vec::new();
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
         if !entry.file_type()?.is_dir() || !entry.path().join("SKILL.md").is_file() {
@@ -194,8 +229,9 @@ fn sync_skill_pack(src: &Path, dst: &Path) -> std::io::Result<()> {
             std::fs::remove_dir_all(&target)?;
         }
         copy_dir(&entry.path(), &target)?;
+        deployed.push(entry.file_name());
     }
-    Ok(())
+    Ok(deployed)
 }
 
 fn copy_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
@@ -580,8 +616,29 @@ pub fn kill_child(state: &RuntimeState) {
 
 #[cfg(test)]
 mod tests {
-    use super::{random_hex, remove_key_from_config, sync_skill_pack};
+    use super::{prune_stale_skills, random_hex, remove_key_from_config, sync_skill_pack};
     use std::fs;
+
+    #[test]
+    fn prune_removes_only_stale_skill_dirs() {
+        let dst = std::env::temp_dir().join(format!("os-prune-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dst);
+        for name in ["remote-compute", "hpc-slurm"] {
+            fs::create_dir_all(dst.join(name)).unwrap();
+            fs::write(dst.join(name).join("SKILL.md"), b"---\n").unwrap();
+        }
+        // A directory without a SKILL.md must never be touched.
+        fs::create_dir_all(dst.join("notes")).unwrap();
+
+        let mut bundled = std::collections::HashSet::new();
+        bundled.insert(std::ffi::OsString::from("remote-compute"));
+        prune_stale_skills(&dst, &bundled);
+
+        assert!(dst.join("remote-compute").is_dir(), "bundled skill kept");
+        assert!(!dst.join("hpc-slurm").exists(), "stale renamed skill removed");
+        assert!(dst.join("notes").is_dir(), "non-skill dir left alone");
+        let _ = fs::remove_dir_all(&dst);
+    }
 
     #[cfg(unix)]
     #[test]

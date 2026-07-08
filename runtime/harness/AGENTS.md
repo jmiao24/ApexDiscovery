@@ -14,6 +14,13 @@
 - Code, data, drafts, and results may all live in this repo.
 - Temporary files, generated files, and local noise must be listed in `.gitignore`.
 
+## Remote compute
+- Remote machines the user configured (SSH servers, GPU boxes, Slurm clusters)
+  are listed once in the base workspace, one level up: `../.openscience/compute.json`.
+- Default execution is local, in this workspace. Only run work remotely when the
+  user asks — then use the `remote-compute` skill, which reads that file, picks a
+  machine, and runs the job over SSH.
+
 ## Startup
 - Read `AGENTS.md`.
 - Read `KNOWLEDGE.md`.
