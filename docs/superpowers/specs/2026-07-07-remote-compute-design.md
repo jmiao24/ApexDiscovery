@@ -43,33 +43,44 @@ reachable SSH machine**, with Slurm demoted to an optional capability.
 ### 1. Connection requirement & capability detection
 
 Connecting requires only that SSH succeeds. On connect (and on refresh) the app
-runs **one** non-interactive SSH round-trip that prints machine-readable lines,
-parsed defensively (unrecognized lines — e.g. shell banners — are ignored):
+runs **one** non-interactive SSH round-trip that prints token-labeled lines,
+parsed by first token and defensively (unrecognized/missing lines — e.g. shell
+banners, or `free`/`nvidia-smi` absent — are simply skipped). Target is a Linux
+remote; missing tools degrade gracefully rather than fail. The probe gathers
+both static identity **and** a current-usage snapshot in the one round-trip:
 
-```
-uname -sr
-nproc
-free -b | awk '/^Mem:/{print $2}'
-command -v sbatch >/dev/null 2>&1 && sbatch --version 2>/dev/null | head -1
-command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+```sh
+echo "OS $(uname -sr)"
+echo "CORES $(nproc)"
+cut -d' ' -f1 /proc/loadavg | sed 's/^/LOAD /'                       # 1-min load
+free -b | awk '/^Mem:/{print "MEMTOTAL",$2; print "MEMAVAIL",$7}'
+df -PB1 "$HOME" | awk 'NR==2{print "DISKTOTAL",$2; print "DISKFREE",$4}'
+command -v sbatch  >/dev/null 2>&1 && echo "SLURM $(sbatch --version | head -1)"
+command -v nvidia-smi >/dev/null 2>&1 && \
+  nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu \
+             --format=csv,noheader,nounits | sed 's/^/GPU /'
 ```
 
-Capabilities are detected **live** on every probe, never persisted — GPU/CPU
-availability changes over time.
+Everything is re-read on every probe; nothing time-varying is persisted (see
+§2 for the small static cache used only for agent machine-selection).
 
 Backend probe result:
 
 ```rust
 struct ComputeProbe {
     reachable: bool,
-    message: Option<String>,   // failure/hint detail when not reachable
-    os: Option<String>,        // uname -sr
-    cores: Option<u32>,        // nproc
-    mem_bytes: Option<u64>,    // total RAM in bytes (UI formats it)
-    gpus: Vec<GpuInfo>,        // empty when none
-    slurm: Option<String>,     // sbatch --version line when present
+    message: Option<String>,        // failure/hint detail when not reachable
+    os: Option<String>,             // uname -sr
+    cores: Option<u32>,             // nproc
+    load1: Option<f32>,             // 1-min load average (vs. cores = how busy)
+    mem_total_bytes: Option<u64>,
+    mem_avail_bytes: Option<u64>,   // "available" — used = total - avail
+    disk_total_bytes: Option<u64>,  // $HOME filesystem (where jobs run)
+    disk_free_bytes: Option<u64>,
+    gpus: Vec<GpuInfo>,             // empty when none
+    slurm: Option<String>,          // sbatch --version line when present
 }
-struct GpuInfo { name: String, mem_total: String }
+struct GpuInfo { name: String, mem_total_mib: u64, mem_used_mib: u64, util_pct: u32 }
 ```
 
 Reachability vs. errors follow the current `hpc_check` logic: SSH exit 255 =
@@ -81,12 +92,28 @@ and we report whatever capabilities were found.
 Rename `.openscience/hpc.json` → `.openscience/compute.json`, holding a list:
 
 ```json
-{ "machines": [ { "host": "home-3090", "label": "8×3090" } ] }
+{
+  "machines": [
+    {
+      "host": "home-3090",
+      "label": "8×3090",
+      "caps": { "cores": 16, "mem_total_bytes": 67516000000,
+                "gpus": ["RTX 3090", "RTX 3090"], "slurm": null }
+    }
+  ]
+}
 ```
 
 - `host` — `user@host` or an `~/.ssh/config` alias (validated by the existing
   `is_safe_host`).
 - `label` — optional display name; defaults to `host`.
+- `caps` — a small **static** capability cache (cores, total RAM, GPU model
+  names, Slurm version-or-null) written whenever the app probes the machine.
+  Its sole purpose is to let the agent skill **pick a machine** (GPU task → a
+  box with GPUs; CPU task → any) by reading the file, without SSH-probing every
+  machine itself. Time-varying usage (load, free memory/disk, GPU utilization)
+  is **never** cached — the agent re-probes for that when it matters. `caps` is
+  absent until the first successful probe.
 
 **Migration:** on first read, if `compute.json` is absent but a legacy
 `hpc.json` exists, import its single `{"host":...}` as one machine, write
@@ -124,8 +151,10 @@ Slurm hosts keep the existing `sbatch` flow untouched.
 Rename `hpc-slurm` → unified `remote-compute` skill. One entry point:
 
 1. Read `compute.json`; if empty, point the user at Settings → Remote compute.
-2. Pick the machine by task need (GPU vs CPU-only) and detected capabilities;
-   ask the user when ambiguous or when several fit.
+2. Pick the machine using each entry's `label` + cached `caps` (GPU task → a
+   box with GPUs; CPU task → any). Ask the user when several fit or none is
+   clearly right; never guess silently. Re-probe the chosen machine over SSH to
+   confirm it's reachable and read live headroom before launching.
 3. If the chosen machine has Slurm → existing `sbatch` batch-script flow.
 4. Otherwise → the detached direct-SSH flow in §3.
 
@@ -141,20 +170,27 @@ jobs on your own servers over SSH (CPU or GPU; Slurm optional)."
 - **Machine list**, one row each:
   - status dot (reachable = ok; unreachable = error; checking = muted),
   - label + host,
-  - capability chips: e.g. `16 cores · 64 GB · 8× RTX 3090`, or
-    `8 cores · 32 GB`, or `Slurm 23.11` — or the failure message,
+  - **identity chips** (collapsed): e.g. `16 cores · 64 GB · 8× RTX 3090 ·
+    1.2 TB free`, or `8 cores · 32 GB · 400 GB free`, or the failure message,
   - refresh (re-probe) and remove.
-  - Slurm hosts: an expandable Slurm queue view (the current `squeue` table +
-    cancel), shown only when Slurm is detected.
+  - **Expandable detail**, one per machine (symmetric):
+    - Slurm host → the Slurm **queue** (the current `squeue` table + cancel).
+    - non-Slurm host → a **usage snapshot** from the last probe: CPU load vs.
+      cores (e.g. `1.2 / 16`), memory used/total (`12 / 64 GB`), per-GPU
+      utilization + memory (`RTX 3090 · 40% · 8.1 / 24 GB`), disk free/total.
+      Refreshed on demand via the row's refresh button — **not** polled.
 
 No red "Could not read the queue" error for non-Slurm hosts — there is no queue
-to read; the row simply shows capabilities.
+to read; the machine shows its capabilities and a usage snapshot instead.
 
 ### 6. Backend commands (Tauri)
 
 - `compute_machines() -> Vec<Machine>` — read `compute.json` (with migration).
-- `add_compute_machine(host, label?)` / `remove_compute_machine(host)`.
-- `compute_probe(host) -> ComputeProbe` — replaces `hpc_check`.
+- `add_compute_machine(host, label?)` (dedupes by `host`) /
+  `remove_compute_machine(host)`.
+- `compute_probe(host) -> ComputeProbe` — replaces `hpc_check`. On a reachable
+  result it also writes the machine's static `caps` back into `compute.json`
+  (the cache the agent selects by).
 - `compute_jobs(host)` / `compute_cancel(host, job_id)` — renamed from
   `hpc_jobs` / `hpc_cancel`, keeping the Slurm `squeue`/`scancel` semantics
   (only called for Slurm hosts in v1).
@@ -170,10 +206,13 @@ retained.
 
 ## Scope
 
-**v1:** everything in §§1–6.
+**v1:** everything in §§1–6, including the on-demand usage snapshot for
+non-Slurm machines (§5).
 
-**Deferred:** non-Slurm running-jobs panel in the card, live GPU-utilization
-view, tmux attach.
+**Deferred:** a live *running-jobs* panel in the card for non-Slurm hosts (the
+agent reports job status in chat in v1); *continuous/auto-refreshing*
+utilization (v1's snapshot updates only when the user hits refresh); `tmux`
+attach for a live remote terminal.
 
 ## Affected files (indicative)
 
@@ -189,11 +228,14 @@ view, tmux attach.
 
 ## Testing
 
-- Rust unit tests: probe-output parsing (cores/mem/gpus/slurm from the labeled
-  lines, incl. banner-line noise), `compute.json` read + `hpc.json` migration,
-  retained `is_safe_host`/`is_safe_job_id`/`parse_squeue` tests.
-- Frontend: RemoteComputeCard — capability chips render; a reachable no-Slurm
-  host shows capabilities and no queue error; a Slurm host shows the queue;
-  add/remove/refresh; multiple machines listed.
+- Rust unit tests: probe-output parsing — every token
+  (`OS`/`CORES`/`LOAD`/`MEMTOTAL`/`MEMAVAIL`/`DISKTOTAL`/`DISKFREE`/`SLURM`/`GPU`),
+  multi-GPU lines, and banner/garbage-line noise that must be ignored;
+  `compute.json` read + `caps` round-trip + `hpc.json` migration; retained
+  `is_safe_host`/`is_safe_job_id`/`parse_squeue` tests.
+- Frontend: RemoteComputeCard — identity chips render (incl. disk-free); a
+  reachable no-Slurm host shows chips + an expandable usage snapshot and **no**
+  queue error; a Slurm host shows the queue; add/remove/refresh; multiple
+  machines listed.
 - The existing "skips the queue read for a reachable host without Slurm" test
-  carries over.
+  carries over (renamed for the new component).
