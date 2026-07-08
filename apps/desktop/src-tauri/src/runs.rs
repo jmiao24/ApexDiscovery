@@ -42,7 +42,7 @@ pub struct RunRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     pub command: String,
-    /// Compute surface: "local" | "hpc" | "modal" | "jupyter". Absent = local.
+    /// Compute surface: "local" | "hpc" | "modal" | "jupyter" | "ssh". Absent = local.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface: Option<String>,
     /// Remote runs only: cluster host / Modal app the run executed on.

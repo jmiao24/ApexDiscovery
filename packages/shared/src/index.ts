@@ -384,8 +384,8 @@ export interface RunRecord {
   /** The exact command that ran, e.g. "python train.py --lr 3e-4". */
   command: string;
   /** The compute surface the run targeted. Absent means "local". Remote
-   *  surfaces (hpc/modal) are recorded honestly but their outputs live off-box. */
-  surface?: "local" | "hpc" | "modal" | "jupyter";
+   *  surfaces (hpc/modal/ssh) are recorded honestly but their outputs live off-box. */
+  surface?: "local" | "hpc" | "modal" | "jupyter" | "ssh";
   /** Remote runs only: the cluster host / Modal app the run executed on. */
   host?: string;
   /** Remote runs only: the scheduler job id / Modal call id, for traceability. */

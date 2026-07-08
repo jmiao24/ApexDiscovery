@@ -54,16 +54,19 @@ describe("RemoteComputeCard", () => {
     expect(bridge.computeJobs).not.toHaveBeenCalled();
   });
 
-  it("adds a machine then probes it", async () => {
-    bridge.computeMachines.mockResolvedValue([]);
+  it("adds a machine then probes it via the post-add machine list refetch", async () => {
+    // No separate probe call after add — loadMachines() re-fetches the machine
+    // list (now including the new host) and probes everything it lists.
+    bridge.computeMachines.mockResolvedValueOnce([]); // initial load: none
+    bridge.computeMachines.mockResolvedValueOnce([{ host: "home-3090", label: null, caps: null }]); // post-add
     bridge.addComputeMachine.mockResolvedValue();
     bridge.computeProbe.mockResolvedValue(gpuProbe);
-    bridge.computeMachines.mockResolvedValueOnce([]); // initial load: none
     render(<RemoteComputeCard />);
 
     await userEvent.type(screen.getByRole("combobox"), "home-3090");
     await userEvent.click(screen.getByRole("button", { name: "Add" }));
     await waitFor(() => expect(bridge.addComputeMachine).toHaveBeenCalledWith("home-3090", undefined));
+    expect(bridge.computeMachines).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(bridge.computeProbe).toHaveBeenCalledWith("home-3090"));
   });
 

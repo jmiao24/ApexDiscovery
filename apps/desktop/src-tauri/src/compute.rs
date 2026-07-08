@@ -309,7 +309,11 @@ fn save_machines(app: &AppHandle, machines: &[Machine]) -> Result<(), String> {
     }
     let body = serde_json::to_string(&MachinesFile { machines: machines.to_vec() })
         .map_err(|e| e.to_string())?;
-    std::fs::write(&path, body).map_err(|e| e.to_string())
+    // Write to a sibling temp file then rename, so a probe writeback racing a
+    // concurrent write (or a remove) can't corrupt or truncate compute.json.
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, body).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

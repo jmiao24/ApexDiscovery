@@ -78,8 +78,7 @@ export function RemoteComputeCard() {
     try {
       await addComputeMachine(host, undefined);
       setDraft("");
-      await loadMachines();
-      void probe(host);
+      await loadMachines(); // probes every listed machine, including this new host
     } catch (e) {
       setAddError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -99,11 +98,18 @@ export function RemoteComputeCard() {
   const cancel = async (host: string, id: string) => {
     try {
       await computeCancel(host, id);
-      toast.success(`Job ${id} canceled`);
-      const list = await computeJobs(host);
-      setJobs((j) => ({ ...j, [host]: list }));
     } catch (e) {
       toast.error(`Could not cancel ${id}: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    toast.success(`Job ${id} canceled`);
+    // The cancel itself succeeded; a refetch failure just leaves the queue
+    // stale, same as probe()'s jobs failure — it must not read as a cancel error.
+    try {
+      const list = await computeJobs(host);
+      setJobs((j) => ({ ...j, [host]: list }));
+    } catch {
+      setJobs((j) => ({ ...j, [host]: null }));
     }
   };
 

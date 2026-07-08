@@ -11,7 +11,7 @@ import { isTauri, logDebug } from "./tauri";
 /** The compute surface a run targeted. Only "local" runs produce workspace
  *  files we can hash; remote surfaces are recorded honestly with their command
  *  and the submitting machine's env, but their outputs live elsewhere. */
-export type RunSurface = "local" | "hpc" | "modal" | "jupyter";
+export type RunSurface = "local" | "hpc" | "modal" | "jupyter" | "ssh";
 
 export interface RunInput {
   /** The exact command the agent ran, e.g. "python train.py --lr 3e-4". */
@@ -143,10 +143,12 @@ export function reproduceRunPrompt(r: RunRecord): string {
   }
   const code = fileList(r.code ?? []);
   if (code) parts.push(`The code version is pinned by hash: ${code} — check it hasn't changed since.`);
-  const remote = r.surface === "hpc" || r.surface === "modal";
+  const remote = r.surface === "hpc" || r.surface === "modal" || r.surface === "ssh";
   if (remote)
     parts.push(
-      `This ran on ${r.surface === "hpc" ? "an HPC cluster" : "Modal"}, so its outputs live off this machine and weren't captured locally.`,
+      `This ran on ${
+        r.surface === "hpc" ? "an HPC cluster" : r.surface === "modal" ? "Modal" : "a remote machine over SSH"
+      }, so its outputs live off this machine and weren't captured locally.`,
     );
   const outputs = fileList(r.outputs ?? []);
   const compare = outputs
