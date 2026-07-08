@@ -33,8 +33,11 @@ reachable SSH machine**, with Slurm demoted to an optional capability.
 ## Non-goals (deferred past v1)
 
 - A live "running jobs" panel in the card for non-Slurm hosts (the agent reports
-  job status in chat for v1).
-- Live GPU-utilization view in the card.
+  job status in chat for v1). Note: v1 *does* include an on-demand usage
+  snapshot (CPU/mem/GPU-util/disk) — see §5; what's deferred is a list of the
+  agent-launched jobs and their states.
+- *Continuous / auto-refreshing* utilization — v1's snapshot (incl. GPU
+  utilization) updates only when the user hits refresh; no polling loop.
 - `tmux`/`screen` attach for a live remote terminal.
 - Auto-provisioning / installing anything on the remote machine.
 
