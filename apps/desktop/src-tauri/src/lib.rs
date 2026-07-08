@@ -4,7 +4,7 @@ mod artifact_file;
 mod debug_log;
 mod examples;
 mod harness;
-mod hpc;
+mod compute;
 mod jupyter;
 mod kernel;
 mod large_file;
@@ -89,12 +89,12 @@ pub fn run() {
             science_mcp::science_mcp_python,
             science_mcp::setup_science_mcp,
             examples::install_example,
-            hpc::list_ssh_hosts,
-            hpc::hpc_config,
-            hpc::set_hpc_config,
-            hpc::hpc_check,
-            hpc::hpc_jobs,
-            hpc::hpc_cancel,
+            compute::list_ssh_hosts,
+            compute::hpc_config,
+            compute::set_hpc_config,
+            compute::hpc_check,
+            compute::hpc_jobs,
+            compute::hpc_cancel,
             modal::modal_status,
             preview_server::preview_url,
             large_file::probe_large_file,
