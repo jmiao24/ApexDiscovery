@@ -117,13 +117,22 @@ const SEARCH_MAX_DEPTH: usize = 8;
 /// "canvas-project/index.html"), so a bare name must still resolve.
 /// Returns a root-relative path with `/` separators, or None.
 pub fn locate_under(root: &Path, rel: &str) -> Option<String> {
+    let canon_root = root.canonicalize().ok()?;
     if let Ok(p) = resolve_under(root, rel) {
         if p.is_file() {
-            return Some(rel.trim_start_matches('/').to_string());
+            // `rel` may be absolute (agent prose often prints the full path);
+            // relativize against the root — stripping only the leading slash
+            // would yield a bogus "Users/…" path the preview server 404s on.
+            let r = p.strip_prefix(&canon_root).ok()?;
+            let parts: Vec<String> = r
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect();
+            return Some(parts.join("/"));
         }
     }
     let name = Path::new(rel).file_name()?.to_os_string();
-    let root = root.canonicalize().ok()?;
+    let root = canon_root;
     let mut best: Option<(PathBuf, std::time::SystemTime)> = None;
     let mut stack = vec![(root.clone(), 0usize)];
     let mut seen = 0usize;
@@ -630,6 +639,15 @@ mod tests {
         // A bare filename resolves to the real location in a subdirectory.
         assert_eq!(
             locate_under(&root, "index.html").as_deref(),
+            Some("proj/index.html")
+        );
+        // An absolute path inside the workspace (agent prose often prints the
+        // full path) must come back ROOT-RELATIVE — stripping only the leading
+        // slash used to yield "Users/…/proj/index.html", which then 404'd in
+        // the preview server.
+        let abs = root.join("proj/index.html");
+        assert_eq!(
+            locate_under(&root, &abs.to_string_lossy()).as_deref(),
             Some("proj/index.html")
         );
         // Dependency trees are skipped; missing files and escapes resolve to None.
