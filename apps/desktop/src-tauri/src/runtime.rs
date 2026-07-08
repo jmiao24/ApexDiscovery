@@ -562,6 +562,10 @@ pub fn set_workspace(
     // Jupyter-lab, however, pins its root_dir at spawn time — re-root it (in
     // the background) so agent-created notebooks land in the new folder.
     crate::jupyter::reroot_jupyter(&app);
+    // Refresh this session's local copy of the remote-machine list from the
+    // canonical base file, so a machine configured in Settings is visible to
+    // every session's agent without reaching outside the workspace.
+    crate::compute::materialize_active(&app);
     Ok(canon.to_string_lossy().to_string())
 }
 

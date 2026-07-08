@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::ShellExt;
 
-use crate::runtime::base_workspace_dir;
+use crate::runtime::{base_workspace_dir, workspace_dir};
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct HpcJob {
@@ -310,6 +310,42 @@ fn load_machines(app: &AppHandle) -> Result<Vec<Machine>, String> {
     Ok(Vec::new())
 }
 
+/// Copy the canonical (base-workspace) machine list into the ACTIVE session
+/// workspace's `.openscience/compute.json` so the agent reads it IN-workspace —
+/// no `../` (which the agent mis-resolves) and no out-of-workspace permission
+/// prompt. Derived, never user-edited; best-effort. When base has no config,
+/// clears any stale local copy so removals propagate. No-op when the active
+/// workspace IS the base (the canonical file is already there).
+pub(crate) fn materialize_active(app: &AppHandle) {
+    let (Ok(base), Ok(active)) = (base_workspace_dir(app), workspace_dir(app)) else {
+        return;
+    };
+    if base == active {
+        return;
+    }
+    write_materialized(
+        &base.join(".openscience").join(COMPUTE_FILE),
+        &active.join(".openscience"),
+    );
+}
+
+/// Mirror `src` (the canonical compute.json) into `dst_dir` as compute.json:
+/// copy its contents when present, else remove any stale local copy so machine
+/// removals propagate. Best-effort.
+fn write_materialized(src: &std::path::Path, dst_dir: &std::path::Path) {
+    let dst = dst_dir.join(COMPUTE_FILE);
+    match std::fs::read_to_string(src) {
+        Ok(body) => {
+            if std::fs::create_dir_all(dst_dir).is_ok() {
+                let _ = std::fs::write(&dst, body);
+            }
+        }
+        Err(_) => {
+            let _ = std::fs::remove_file(&dst);
+        }
+    }
+}
+
 fn save_machines(app: &AppHandle, machines: &[Machine]) -> Result<(), String> {
     let path = compute_path(app)?;
     if let Some(dir) = path.parent() {
@@ -344,14 +380,18 @@ pub fn add_compute_machine(app: AppHandle, host: String, label: Option<String>) 
     }
     let mut machines = load_machines(&app)?;
     upsert_machine(&mut machines, &host, label);
-    save_machines(&app, &machines)
+    save_machines(&app, &machines)?;
+    materialize_active(&app);
+    Ok(())
 }
 
 #[tauri::command]
 pub fn remove_compute_machine(app: AppHandle, host: String) -> Result<(), String> {
     let mut machines = load_machines(&app)?;
     machines.retain(|m| m.host != host);
-    save_machines(&app, &machines)
+    save_machines(&app, &machines)?;
+    materialize_active(&app);
+    Ok(())
 }
 
 /// Probe a host and, when reachable, write its static caps back into
@@ -379,6 +419,7 @@ pub async fn compute_probe(app: AppHandle, host: String) -> Result<ComputeProbe,
             let _ = save_machines(&app, &machines);
         }
     }
+    materialize_active(&app); // refresh the active session's local copy
     Ok(probe)
 }
 
@@ -505,6 +546,29 @@ random junk with no leading token space? nope
         assert_eq!(p.gpus[0].util_pct, 40);
         // reachable/message are set by the command, not the parser.
         assert!(!p.reachable);
+    }
+
+    #[test]
+    fn materialize_copies_then_clears() {
+        use std::fs;
+        let root = std::env::temp_dir().join(format!("os-materialize-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let base_os = root.join("base-openscience");
+        let sess_os = root.join("session-openscience");
+        fs::create_dir_all(&base_os).unwrap();
+        let src = base_os.join("compute.json");
+        fs::write(&src, r#"{"machines":[{"host":"h","label":null,"caps":null}]}"#).unwrap();
+
+        // Present source → local copy written with identical contents.
+        super::write_materialized(&src, &sess_os);
+        let dst = sess_os.join("compute.json");
+        assert_eq!(fs::read_to_string(&dst).unwrap(), fs::read_to_string(&src).unwrap());
+
+        // Source removed (all machines deleted) → stale local copy cleared.
+        fs::remove_file(&src).unwrap();
+        super::write_materialized(&src, &sess_os);
+        assert!(!dst.exists(), "stale local copy must be removed when base has none");
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
