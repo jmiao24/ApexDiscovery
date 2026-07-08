@@ -31,6 +31,71 @@ pub struct HpcJob {
     pub name: String,
 }
 
+/// One GPU as `nvidia-smi --query-gpu=... --format=csv,noheader,nounits` prints
+/// it (memory in MiB, utilization in %).
+#[derive(Clone, serde::Serialize)]
+pub struct GpuInfo {
+    pub name: String,
+    pub mem_total_mib: u64,
+    pub mem_used_mib: u64,
+    pub util_pct: u32,
+}
+
+/// One SSH probe of a machine: reachability + static identity + a live usage
+/// snapshot, all from a single round-trip. Absent fields = the tool wasn't
+/// present (a minimal CPU box has no `nvidia-smi`, an old `free` has no
+/// "available" column, etc.).
+#[derive(Clone, serde::Serialize, Default)]
+pub struct ComputeProbe {
+    pub reachable: bool,
+    pub message: Option<String>,
+    pub os: Option<String>,
+    pub cores: Option<u32>,
+    pub load1: Option<f32>,
+    pub mem_total_bytes: Option<u64>,
+    pub mem_avail_bytes: Option<u64>,
+    pub disk_total_bytes: Option<u64>,
+    pub disk_free_bytes: Option<u64>,
+    pub gpus: Vec<GpuInfo>,
+    pub slurm: Option<String>,
+}
+
+/// Parse the token-labeled probe output (see PROBE_SCRIPT). Each recognized
+/// line is `TOKEN value`; unknown lines (shell banners, stray output) are
+/// ignored so a chatty login shell can't corrupt the result. Sets everything
+/// except `reachable`/`message` (the command decides those from the ssh exit).
+fn parse_probe(stdout: &str) -> ComputeProbe {
+    let mut p = ComputeProbe::default();
+    for line in stdout.lines() {
+        let line = line.trim();
+        let Some((tag, rest)) = line.split_once(' ') else { continue };
+        let rest = rest.trim();
+        match tag {
+            "OS" => p.os = Some(rest.to_string()),
+            "CORES" => p.cores = rest.parse().ok(),
+            "LOAD" => p.load1 = rest.parse().ok(),
+            "MEMTOTAL" => p.mem_total_bytes = rest.parse().ok(),
+            "MEMAVAIL" => p.mem_avail_bytes = rest.parse().ok(),
+            "DISKTOTAL" => p.disk_total_bytes = rest.parse().ok(),
+            "DISKFREE" => p.disk_free_bytes = rest.parse().ok(),
+            "SLURM" => p.slurm = Some(rest.to_string()),
+            "GPU" => {
+                let f: Vec<&str> = rest.split(',').map(|s| s.trim()).collect();
+                if f.len() == 4 {
+                    p.gpus.push(GpuInfo {
+                        name: f[0].to_string(),
+                        mem_total_mib: f[1].parse().unwrap_or(0),
+                        mem_used_mib: f[2].parse().unwrap_or(0),
+                        util_pct: f[3].parse().unwrap_or(0),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    p
+}
+
 /// `user@host` or `host` made only of safe characters. Rejects anything that
 /// could smuggle an ssh option (leading `-`) or shell metacharacters.
 fn is_safe_host(host: &str) -> bool {
@@ -305,5 +370,49 @@ Host gpu+login \"quoted alias\"
         assert_eq!(jobs[0].partition, "gpu");
         assert_eq!(jobs[0].name, "fit model|stage 2");
         assert_eq!(jobs[1].state, "PENDING");
+    }
+
+    #[test]
+    fn parses_probe_all_tokens_and_ignores_noise() {
+        let out = "\
+Welcome to Ubuntu 22.04 — banner line, ignore me
+OS Linux 6.5.0-14-generic
+CORES 16
+LOAD 1.23
+MEMTOTAL 67516000000
+MEMAVAIL 51000000000
+DISKTOTAL 2000000000000
+DISKFREE 1200000000000
+SLURM slurm 23.11.4
+GPU NVIDIA GeForce RTX 3090, 24576, 8100, 40
+GPU NVIDIA GeForce RTX 3090, 24576, 512, 0
+random junk with no leading token space? nope
+";
+        let p = super::parse_probe(out);
+        assert_eq!(p.os.as_deref(), Some("Linux 6.5.0-14-generic"));
+        assert_eq!(p.cores, Some(16));
+        assert_eq!(p.load1, Some(1.23));
+        assert_eq!(p.mem_total_bytes, Some(67_516_000_000));
+        assert_eq!(p.mem_avail_bytes, Some(51_000_000_000));
+        assert_eq!(p.disk_total_bytes, Some(2_000_000_000_000));
+        assert_eq!(p.disk_free_bytes, Some(1_200_000_000_000));
+        assert_eq!(p.slurm.as_deref(), Some("slurm 23.11.4"));
+        assert_eq!(p.gpus.len(), 2);
+        assert_eq!(p.gpus[0].name, "NVIDIA GeForce RTX 3090");
+        assert_eq!(p.gpus[0].mem_total_mib, 24576);
+        assert_eq!(p.gpus[0].mem_used_mib, 8100);
+        assert_eq!(p.gpus[0].util_pct, 40);
+        // reachable/message are set by the command, not the parser.
+        assert!(!p.reachable);
+    }
+
+    #[test]
+    fn parses_probe_missing_tools_degrade() {
+        // A minimal CPU box: no SLURM, no GPU, no /proc/loadavg line emitted.
+        let p = super::parse_probe("OS Linux 5.10\nCORES 8\nMEMTOTAL 33000000000\n");
+        assert_eq!(p.cores, Some(8));
+        assert!(p.slurm.is_none());
+        assert!(p.gpus.is_empty());
+        assert!(p.load1.is_none());
     }
 }
