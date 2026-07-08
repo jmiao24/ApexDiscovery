@@ -35,7 +35,7 @@ import {
   type PythonInterpreter,
 } from "@/lib/tauri";
 import { useSetupStore } from "@/lib/setup";
-import { ClusterCard } from "@/components/settings/ClusterCard";
+import { RemoteComputeCard } from "@/components/settings/RemoteComputeCard";
 import { ModalCard } from "@/components/settings/ModalCard";
 import { DataFlowCard } from "@/components/settings/DataFlowCard";
 import { SCIENCE_CONNECTORS } from "@/lib/scienceConnectors";
@@ -970,8 +970,7 @@ export function SettingsPage() {
           </Card>
         )}
 
-        {/* ---- Cluster (HPC) ---- */}
-        <ClusterCard />
+        <RemoteComputeCard />
 
         <ModalCard />
 
