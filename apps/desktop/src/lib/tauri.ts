@@ -121,6 +121,64 @@ export async function startJupyter(): Promise<JupyterStatus> {
   return invoke<JupyterStatus>("start_jupyter");
 }
 
+/** Open the app-managed JupyterLab in the system browser, starting the server
+ *  if needed. Returns false when Jupyter has not been set up yet (the caller
+ *  should point the user at Settings). Same env the agent drives, same files.
+ *
+ *  `notebook` is a path RELATIVE TO THE LAB ROOT (the active workspace) — pass
+ *  it to open that file directly (`/lab/tree/<path>`); omit to land on the lab
+ *  home. Only pass a path you know is under the workspace root. */
+export async function openJupyterLab(notebook?: string): Promise<boolean> {
+  if (!isTauri) return false;
+  const st = await jupyterStatus();
+  if (!st?.installed) return false;
+  const s = await startJupyter(); // idempotent; yields the fixed url + token
+  if (!s.url || !s.token) return false;
+  const rel = notebook?.trim().replace(/^\/+/, "");
+  // Encode each segment but keep the "/" separators so nested paths resolve.
+  const tree = rel ? "/tree/" + rel.split("/").map(encodeURIComponent).join("/") : "";
+  await openExternal(`${s.url}/lab${tree}?token=${encodeURIComponent(s.token)}`);
+  return true;
+}
+
+/** The interpreter local Python kernels resolve to, and where it came from. */
+export interface PythonInterpreter {
+  /** The manual override, if one is set (even when it no longer runs). */
+  configured: string | null;
+  /** What cells would actually run on right now. */
+  resolved: string | null;
+  source: "manual" | "system" | "jupyter-env" | null;
+  error: string | null;
+}
+
+export async function pythonInterpreter(): Promise<PythonInterpreter | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<PythonInterpreter>("python_interpreter");
+}
+
+/** Set (empty clears) the manual Python interpreter override. Validated on save. */
+export async function setPythonPath(path: string): Promise<void> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("set_python_path", { path });
+}
+
+/** One live output line from a uv provisioning run (jupyter / science MCP). */
+export interface SetupProgress {
+  task: "jupyter" | "science";
+  line: string;
+}
+
+/** Subscribe to setup progress lines; returns the unlisten function. */
+export async function watchSetupProgress(
+  cb: (p: SetupProgress) => void,
+): Promise<() => void> {
+  if (!isTauri) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<SetupProgress>("setup-progress", (e) => cb(e.payload));
+}
+
 /** Managed interpreter path for the shared science-MCP env, or null if not yet
  *  provisioned (desktop only). */
 export async function scienceMcpPython(): Promise<string | null> {

@@ -213,24 +213,45 @@ fn copy_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
 }
 
 /// PATH for the sidecar (and everything the agent runs through it). Apps
-/// launched from Finder/Dock get a minimal PATH (`/usr/bin:/bin:…`), so the
-/// agent would not find the user's Python/conda/Homebrew tools. Prepend the
-/// well-known scientific tool locations that actually exist on this machine —
-/// the same order a terminal profile would produce.
+/// launched from Finder/Dock/a desktop entry get a minimal PATH, so the agent
+/// would not find the user's Python/conda/Homebrew tools. Prepend the
+/// well-known locations that actually exist — the platform lists differ
+/// (macOS Homebrew vs. Linux /opt/conda & Linuxbrew), same as python_candidates.
 #[cfg(unix)]
 pub(crate) fn enriched_path() -> String {
     let base = std::env::var("PATH").unwrap_or_default();
     let home = std::env::var("HOME").unwrap_or_default();
+
+    #[cfg(target_os = "macos")]
     let extras = [
+        "/opt/homebrew/bin".to_string(),
+        "/usr/local/bin".to_string(),
         format!("{home}/anaconda3/bin"),
         format!("{home}/miniconda3/bin"),
         "/opt/anaconda3/bin".to_string(),
         "/opt/miniconda3/bin".to_string(),
         format!("{home}/.pyenv/shims"),
-        "/opt/homebrew/bin".to_string(),
+        format!("{home}/.local/bin"),
+    ];
+    #[cfg(target_os = "linux")]
+    let extras = [
+        format!("{home}/anaconda3/bin"),
+        format!("{home}/miniconda3/bin"),
+        "/opt/conda/bin".to_string(),
+        "/opt/anaconda3/bin".to_string(),
+        "/opt/miniconda3/bin".to_string(),
+        format!("{home}/.pyenv/shims"),
+        "/home/linuxbrew/.linuxbrew/bin".to_string(),
         "/usr/local/bin".to_string(),
         format!("{home}/.local/bin"),
     ];
+    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "linux")))]
+    let extras = [
+        format!("{home}/.pyenv/shims"),
+        "/usr/local/bin".to_string(),
+        format!("{home}/.local/bin"),
+    ];
+
     let mut parts: Vec<String> = extras
         .into_iter()
         .filter(|p| !base.split(':').any(|b| b == p) && std::path::Path::new(p).is_dir())
@@ -239,6 +260,38 @@ pub(crate) fn enriched_path() -> String {
         parts.push(base);
     }
     parts.join(":")
+}
+
+/// Windows twin of the unix version above: GUI apps inherit a PATH without the
+/// user's Python/conda, and Anaconda famously does NOT add itself to PATH.
+/// Prepend the conda install roots that exist — including `Library\bin`, which
+/// conda pythons need on PATH for their DLLs (numpy fails to import otherwise).
+#[cfg(windows)]
+pub(crate) fn enriched_path() -> String {
+    let base = std::env::var("PATH").unwrap_or_default();
+    let mut roots: Vec<String> = Vec::new();
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        roots.push(format!("{profile}\\anaconda3"));
+        roots.push(format!("{profile}\\miniconda3"));
+    }
+    roots.push("C:\\ProgramData\\anaconda3".into());
+    roots.push("C:\\ProgramData\\miniconda3".into());
+    let mut extras: Vec<String> = Vec::new();
+    for root in roots {
+        for dir in [root.clone(), format!("{root}\\Scripts"), format!("{root}\\Library\\bin")] {
+            extras.push(dir);
+        }
+    }
+    let mut parts: Vec<String> = extras
+        .into_iter()
+        .filter(|p| {
+            !base.split(';').any(|b| b.eq_ignore_ascii_case(p)) && Path::new(p).is_dir()
+        })
+        .collect();
+    if !base.is_empty() {
+        parts.push(base);
+    }
+    parts.join(";")
 }
 
 /// A `std::process::Command` that never pops a console window on Windows.
@@ -363,7 +416,6 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
         .env("HOME", home)
         .current_dir(workspace);
     // GUI-launched apps get a minimal PATH; give the agent the user's real tools.
-    #[cfg(unix)]
     let cmd = cmd.env("PATH", enriched_path());
 
     let (mut rx, child) = cmd.spawn().map_err(|e| format!("failed to spawn opencode: {e}"))?;

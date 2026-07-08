@@ -7,6 +7,7 @@ import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { Toaster } from "@/components/ui/Toaster";
 import { mockProject } from "@/lib/mock";
 import { useRuntimeStore } from "@/lib/runtime";
+import { ensureSetupProgressListener } from "@/lib/setup";
 import { useOverlayTitlebar, useUiStore } from "@/lib/store";
 import { ensureJupyter, openExternal, watchFullscreen } from "@/lib/tauri";
 
@@ -29,6 +30,9 @@ export function AppShell() {
   useEffect(() => {
     void useRuntimeStore.getState().bootstrap();
     void ensureJupyter();
+    // One app-lifetime listener for uv provisioning progress, so a running
+    // download's live output survives navigating between pages.
+    ensureSetupProgressListener();
   }, []);
 
   // Track native fullscreen: macOS hides the traffic lights there, so headers

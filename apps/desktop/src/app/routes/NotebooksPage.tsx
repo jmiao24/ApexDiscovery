@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, NotebookPen, Plus } from "lucide-react";
-import { addTextToWorkspace, isTauri } from "@/lib/tauri";
+import { ChevronDown, ExternalLink, NotebookPen, Plus } from "lucide-react";
+import { addTextToWorkspace, isTauri, jupyterStatus, openJupyterLab } from "@/lib/tauri";
 import { listNotebooks, type NotebookEntry } from "@/lib/artifactFile";
 import { emptyIpynb } from "@/lib/notebook-file";
 import type { KernelLanguage } from "@/lib/kernel";
@@ -20,6 +20,10 @@ export function NotebooksPage() {
    *  "workspace" = just created in the active session folder). */
   const [open, setOpen] = useState<{ path: string; root: "workspace" | "base" } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Whether the app-managed Jupyter env exists — gates the "Open JupyterLab"
+  // button (no point offering it before setup).
+  const [jupyterInstalled, setJupyterInstalled] = useState(false);
+  const [openingLab, setOpeningLab] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
@@ -27,7 +31,21 @@ export function NotebooksPage() {
   }, []);
   useEffect(() => {
     void refresh();
+    void jupyterStatus().then((s) => setJupyterInstalled(Boolean(s?.installed)));
   }, [refresh]);
+
+  const openLab = async () => {
+    setOpeningLab(true);
+    try {
+      const ok = await openJupyterLab();
+      if (ok) toast.success("Opening JupyterLab in your browser…");
+      else toast.error("Set up Jupyter first — Settings → MCP servers → Jupyter.");
+    } catch (e) {
+      toast.error(`Could not open JupyterLab: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setOpeningLab(false);
+    }
+  };
 
   // Close the kernel menu on any outside click.
   useEffect(() => {
@@ -70,6 +88,17 @@ export function NotebooksPage() {
         <div className="flex items-center gap-3">
           <h1 className="font-serif text-xl text-text">Notebooks</h1>
           <div className="flex-1" />
+          {isTauri && jupyterInstalled && (
+            <button
+              className="flex items-center gap-1.5 rounded-input border border-border bg-surface px-2.5 py-1.5 text-xs text-text transition-colors hover:bg-surface-2 disabled:opacity-50"
+              onClick={() => void openLab()}
+              disabled={openingLab}
+              title="Open the full JupyterLab (same env and files) in your browser"
+            >
+              <ExternalLink size={13} className="text-muted" />
+              Open JupyterLab
+            </button>
+          )}
           <div className="relative" ref={menuRef}>
             <button
               className="flex items-center gap-1.5 rounded-input bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"

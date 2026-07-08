@@ -17,6 +17,7 @@ mod runs_index;
 mod runtime;
 mod science_mcp;
 mod tools;
+mod uv;
 
 use jupyter::JupyterState;
 use kernel::KernelState;
@@ -66,6 +67,8 @@ pub fn run() {
             runtime::set_approval_mode,
             kernel::kernel_execute,
             kernel::kernel_reset,
+            kernel::python_interpreter,
+            kernel::set_python_path,
             artifact_file::read_artifact,
             artifact_file::open_path,
             artifact_file::resolve_artifact,

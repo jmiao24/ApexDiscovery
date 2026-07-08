@@ -12,12 +12,9 @@ pub struct ToolStatus {
 
 fn probe(name: &str, bin: &str, version_arg: &str) -> ToolStatus {
     // Search the SAME enriched PATH the kernel and the agent's shell run
-    // under — a Finder-launched app has a minimal PATH, and probing with it
+    // under — a GUI-launched app has a minimal PATH, and probing with it
     // misreported the user's anaconda/homebrew tools as missing.
-    #[cfg(unix)]
     let path = Some(crate::runtime::enriched_path());
-    #[cfg(not(unix))]
-    let path: Option<String> = None;
     probe_with_path(name, bin, version_arg, path.as_deref())
 }
 

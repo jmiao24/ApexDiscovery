@@ -119,10 +119,46 @@ fn python_candidates() -> Vec<String> {
         c.push(format!("{profile}\\miniconda3\\python.exe"));
         c.push(format!("{profile}\\AppData\\Local\\Programs\\Python\\python.exe"));
     }
+    // "All users" conda installs (Anaconda's default is ProgramData; C:\ is a
+    // common manual choice). Anaconda does NOT add itself to PATH, so a bare
+    // `python` probe never finds these.
+    for base in [
+        "C:\\ProgramData\\anaconda3",
+        "C:\\ProgramData\\miniconda3",
+        "C:\\anaconda3",
+        "C:\\miniconda3",
+    ] {
+        c.push(format!("{base}\\python.exe"));
+    }
+    // python.org installers use versioned dirs (…\Python\Python312\python.exe):
+    // per-user under LOCALAPPDATA, all-users under Program Files. Newest first.
+    let mut roots: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        roots.push(std::path::Path::new(&local).join("Programs").join("Python"));
+    }
+    roots.push(std::path::PathBuf::from("C:\\Program Files"));
+    for root in roots {
+        let Ok(entries) = std::fs::read_dir(&root) else { continue };
+        let mut vers: Vec<std::path::PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .map(|n| n.to_string_lossy().starts_with("Python3"))
+                    .unwrap_or(false)
+            })
+            .collect();
+        vers.sort();
+        for v in vers.into_iter().rev() {
+            c.push(v.join("python.exe").to_string_lossy().to_string());
+        }
+    }
     c
 }
 
-#[cfg(not(windows))]
+// macOS: Homebrew differs by arch (/opt/homebrew on Apple Silicon,
+// /usr/local on Intel), plus the python.org framework build and conda.
+#[cfg(target_os = "macos")]
 fn python_candidates() -> Vec<String> {
     let mut c = vec!["python3".to_string(), "python".to_string()];
     if let Ok(home) = std::env::var("HOME") {
@@ -132,13 +168,53 @@ fn python_candidates() -> Vec<String> {
     }
     c.extend(
         [
-            "/opt/anaconda3/bin/python3",
             "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            "/opt/anaconda3/bin/python3",
+            "/opt/miniconda3/bin/python3",
+            // python.org installer (versioned; newest common ones first).
+            "/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
+            "/usr/bin/python3",
+        ]
+        .map(String::from),
+    );
+    c
+}
+
+// Linux: distro python in /usr/bin, conda in ~ or /opt/conda (Docker/JupyterHub
+// convention), pyenv shims, pipx/user installs in ~/.local, Linuxbrew.
+#[cfg(target_os = "linux")]
+fn python_candidates() -> Vec<String> {
+    let mut c = vec!["python3".to_string(), "python".to_string()];
+    if let Ok(home) = std::env::var("HOME") {
+        c.push(format!("{home}/anaconda3/bin/python3"));
+        c.push(format!("{home}/miniconda3/bin/python3"));
+        c.push(format!("{home}/.pyenv/shims/python3"));
+        c.push(format!("{home}/.local/bin/python3"));
+    }
+    c.extend(
+        [
+            "/opt/conda/bin/python3",
+            "/opt/anaconda3/bin/python3",
+            "/opt/miniconda3/bin/python3",
+            "/home/linuxbrew/.linuxbrew/bin/python3",
             "/usr/local/bin/python3",
             "/usr/bin/python3",
         ]
         .map(String::from),
     );
+    c
+}
+
+// Other unix (BSD): the portable minimum.
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "linux")))]
+fn python_candidates() -> Vec<String> {
+    let mut c = vec!["python3".to_string(), "python".to_string()];
+    if let Ok(home) = std::env::var("HOME") {
+        c.push(format!("{home}/.pyenv/shims/python3"));
+        c.push(format!("{home}/.local/bin/python3"));
+    }
+    c.extend(["/usr/local/bin/python3", "/usr/bin/python3"].map(String::from));
     c
 }
 
@@ -178,6 +254,31 @@ fn rscript_candidates() -> Vec<String> {
     c
 }
 
+/// PATH for a spawned Python kernel: the agent's enriched PATH (so cells see
+/// the user's scientific tools), plus — on Windows — the interpreter's own
+/// home dirs. A conda python launched by absolute path keeps numpy's DLLs in
+/// `Library\bin`; without it on PATH, imports fail even though python runs.
+fn python_path_env(python: &str) -> String {
+    let base = crate::runtime::enriched_path();
+    let _ = &python; // used on Windows only
+    #[cfg(windows)]
+    if let Some(home) = std::path::Path::new(python).parent() {
+        if !home.as_os_str().is_empty() {
+            let extras = [home.to_path_buf(), home.join("Scripts"), home.join("Library").join("bin")];
+            let mut parts: Vec<String> = extras
+                .iter()
+                .filter(|p| p.is_dir())
+                .map(|p| p.to_string_lossy().to_string())
+                .collect();
+            if !parts.is_empty() {
+                parts.push(base);
+                return parts.join(";");
+            }
+        }
+    }
+    base
+}
+
 /// Probe an interpreter with the SAME PATH the kernel will run it under, so
 /// detection and execution resolve to the same binary (e.g. bare `python3` →
 /// the user's anaconda, not a system Python). `--version` must SUCCEED — the
@@ -186,28 +287,135 @@ fn rscript_candidates() -> Vec<String> {
 fn interpreter_ok(bin: &str) -> bool {
     let mut c = crate::runtime::quiet_command(bin);
     c.arg("--version");
-    #[cfg(unix)]
     c.env("PATH", crate::runtime::enriched_path());
     c.output().map(|o| o.status.success()).unwrap_or(false)
 }
 
-pub(crate) fn python_bin() -> Option<String> {
-    python_candidates().into_iter().find(|bin| interpreter_ok(bin))
+/// The persisted manual interpreter override (Settings → Local Python kernel).
+fn python_path_file(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("runtime")
+        .join("python-path.txt"))
+}
+
+fn configured_python(app: &AppHandle) -> Option<String> {
+    let text = std::fs::read_to_string(python_path_file(app).ok()?).ok()?;
+    let t = text.trim().to_string();
+    (!t.is_empty()).then_some(t)
+}
+
+/// Resolve the local kernel's Python. Order:
+///   1. the user's explicit override (Settings) — never falls through
+///      silently: a broken override is an error, not a surprise interpreter;
+///   2. the app-managed Jupyter env, WHEN it exists — so "Run" in the app and
+///      the agent's Jupyter MCP share one Python (same packages, same results);
+///   3. discovered system installs — the fallback when Jupyter isn't set up.
+/// This makes the app-managed Jupyter env the single source of truth once present,
+/// and degrades to auto-detection when it is not.
+fn resolve_python(
+    configured: Option<String>,
+    jupyter_env: Option<String>,
+    candidates: Vec<String>,
+) -> Result<(String, &'static str), String> {
+    if let Some(p) = configured {
+        return if interpreter_ok(&p) {
+            Ok((p, "manual"))
+        } else {
+            Err(format!(
+                "the configured Python ({p}) failed to run — fix or clear the interpreter path in Settings"
+            ))
+        };
+    }
+    if let Some(p) = jupyter_env.filter(|p| interpreter_ok(p)) {
+        return Ok((p, "jupyter-env"));
+    }
+    if let Some(p) = candidates.into_iter().find(|b| interpreter_ok(b)) {
+        return Ok((p, "system"));
+    }
+    Err("no Python found — install Python 3, set an interpreter path in Settings, \
+         or set up Jupyter in Settings (its environment includes one)"
+        .into())
+}
+
+/// The interpreter local Python kernels run on, with where it came from
+/// ("manual" | "jupyter-env" | "system").
+pub(crate) fn python_bin(app: &AppHandle) -> Result<(String, &'static str), String> {
+    resolve_python(
+        configured_python(app),
+        crate::jupyter::env_python(app).map(|p| p.to_string_lossy().to_string()),
+        python_candidates(),
+    )
 }
 
 pub(crate) fn rscript_bin() -> Option<String> {
     rscript_candidates().into_iter().find(|bin| interpreter_ok(bin))
 }
 
+#[derive(serde::Serialize)]
+pub struct PythonInterpreter {
+    /// The manual override, if one is set (even when it no longer runs).
+    configured: Option<String>,
+    /// What cells would actually run on right now.
+    resolved: Option<String>,
+    source: Option<&'static str>,
+    error: Option<String>,
+}
+
+/// Report the interpreter local kernels resolve to (Settings + notebook header).
+#[tauri::command(async)]
+pub fn python_interpreter(app: AppHandle) -> PythonInterpreter {
+    let configured = configured_python(&app);
+    match python_bin(&app) {
+        Ok((resolved, source)) => PythonInterpreter {
+            configured,
+            resolved: Some(resolved),
+            source: Some(source),
+            error: None,
+        },
+        Err(e) => PythonInterpreter { configured, resolved: None, source: None, error: Some(e) },
+    }
+}
+
+/// Set (empty/None clears) the manual interpreter override. Validates the path
+/// actually runs before persisting, and restarts Python kernels so the next
+/// cell runs on the new interpreter instead of a stale one.
+#[tauri::command(async)]
+pub fn set_python_path(
+    app: AppHandle,
+    state: State<'_, KernelState>,
+    path: Option<String>,
+) -> Result<(), String> {
+    let file = python_path_file(&app)?;
+    let trimmed = path.as_deref().map(str::trim).unwrap_or_default();
+    if trimmed.is_empty() {
+        let _ = std::fs::remove_file(&file);
+    } else {
+        if !std::path::Path::new(trimmed).is_absolute() {
+            return Err("enter an absolute path to a Python executable".into());
+        }
+        if !interpreter_ok(trimmed) {
+            return Err(format!("{trimmed} did not run `--version` successfully — check the path"));
+        }
+        if let Some(dir) = file.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&file, trimmed).map_err(|e| e.to_string())?;
+    }
+    remove_kernels(&state, |k| k.starts_with("python:"));
+    Ok(())
+}
+
 fn spawn_kernel(app: &AppHandle, lang: &str, cwd: &std::path::Path, key: &str) -> Result<Kernel, String> {
     let (mut cmd, code_file) = match lang {
         "python" => {
             let script = materialize(app, "kernel_bridge.py", PY_BRIDGE_SRC)?;
-            let python = python_bin().ok_or(
-                "no Python found — install Python 3 to run Python notebooks",
-            )?;
-            let mut c = crate::runtime::quiet_command(python);
+            let (python, _source) = python_bin(app)?;
+            let mut c = crate::runtime::quiet_command(&python);
             c.arg(script);
+            c.env("PATH", python_path_env(&python));
             (c, None)
         }
         "r" => {
@@ -220,6 +428,8 @@ fn spawn_kernel(app: &AppHandle, lang: &str, cwd: &std::path::Path, key: &str) -
             std::fs::write(&code_file, "").map_err(|e| e.to_string())?;
             let mut c = crate::runtime::quiet_command(rscript);
             c.arg(script).arg(&code_file);
+            // Same enriched PATH as the agent so a conda/homebrew R resolves.
+            c.env("PATH", crate::runtime::enriched_path());
             (c, Some(code_file))
         }
         _ => return Err(format!("unsupported kernel language: {lang}")),
@@ -228,12 +438,6 @@ fn spawn_kernel(app: &AppHandle, lang: &str, cwd: &std::path::Path, key: &str) -
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
-    // Give the kernel the SAME PATH as the OpenCode sidecar so it runs the
-    // user's scientific Python (anaconda/homebrew) — the one the agent uses,
-    // with numpy/matplotlib/etc. A Finder-launched app otherwise has a minimal
-    // PATH and `python3` resolves to a bare system Python (no matplotlib).
-    #[cfg(unix)]
-    cmd.env("PATH", crate::runtime::enriched_path());
     let child = cmd
         .spawn()
         .map_err(|e| format!("failed to start {lang} kernel: {e}"))?;
@@ -460,6 +664,48 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    // The resolution contract: a manual override wins; a BROKEN override is a
+    // loud error (never a silent fall-through to some other python); the
+    // app-managed Jupyter env is the default when present (so "Run" and the
+    // agent share one Python); system installs are the fallback when Jupyter
+    // isn't set up; and with nothing at all the error says what to do.
+    #[cfg(unix)]
+    #[test]
+    fn resolve_python_prefers_override_then_jupyter_env_then_system() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("os-resolve-python-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mk = |name: &str, ok: bool| -> String {
+            let path = dir.join(name);
+            let body = if ok { "#!/bin/sh\nexit 0\n" } else { "#!/bin/sh\nexit 9\n" };
+            std::fs::write(&path, body).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            path.to_string_lossy().to_string()
+        };
+        let good_override = mk("override-python", true);
+        let bad_override = mk("broken-python", false);
+        let jupyter_env = mk("jupyter-python", true);
+        let system = mk("system-python", true);
+
+        // Override wins over everything.
+        let r = resolve_python(Some(good_override.clone()), Some(jupyter_env.clone()), vec![system.clone()]);
+        assert_eq!(r.unwrap(), (good_override.clone(), "manual"));
+        // A broken override errors loudly instead of silently using another python.
+        let e = resolve_python(Some(bad_override.clone()), Some(jupyter_env.clone()), vec![system.clone()]);
+        assert!(e.as_ref().unwrap_err().contains("broken-python"), "got: {e:?}");
+        // No override: the Jupyter env is the default, chosen over system installs,
+        // so the app's Run button and the agent's MCP share one Python.
+        let r = resolve_python(None, Some(jupyter_env.clone()), vec![system.clone()]);
+        assert_eq!(r.unwrap(), (jupyter_env, "jupyter-env"));
+        // No Jupyter env: fall back to the first working system candidate.
+        let r = resolve_python(None, None, vec![bad_override.clone(), system.clone()]);
+        assert_eq!(r.unwrap(), (system, "system"));
+        // Nothing anywhere: the error tells the user their options.
+        let e = resolve_python(None, None, vec![]).unwrap_err();
+        assert!(e.contains("Settings"), "error must point at Settings: {e}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn normalizes_languages() {
         assert_eq!(normalize_lang("").unwrap(), "python");
@@ -478,7 +724,7 @@ mod tests {
     fn reset_interrupts_a_hung_cell_without_wedging() {
         use std::sync::Arc;
         use std::time::{Duration, Instant};
-        let Some(python) = python_bin() else {
+        let Ok((python, _)) = resolve_python(None, None, python_candidates()) else {
             eprintln!("skipping: no python found");
             return;
         };
@@ -533,7 +779,7 @@ mod tests {
     // kernel_execute uses, proving the Rust <-> Python round trip and shared state.
     #[test]
     fn python_round_trips_and_keeps_state() {
-        let Some(python) = python_bin() else {
+        let Ok((python, _)) = resolve_python(None, None, python_candidates()) else {
             eprintln!("skipping: no python found");
             return;
         };

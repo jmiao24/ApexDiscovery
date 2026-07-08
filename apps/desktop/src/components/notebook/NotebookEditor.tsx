@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowLeft, History, Loader2, NotebookPen, Play, Plus, RefreshCw, Square, Trash2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ExternalLink,
+  History,
+  Loader2,
+  NotebookPen,
+  Play,
+  Plus,
+  RefreshCw,
+  Square,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { NotebookCell } from "@ai4s/shared";
 import { readArtifact, writeWorkspaceFile } from "@/lib/artifactFile";
 import { ProvenancePanel } from "@/components/inspector/ProvenancePanel";
@@ -13,6 +25,7 @@ import {
   type KernelLanguage,
 } from "@/lib/kernel";
 import { toast } from "@/lib/toast";
+import { isTauri, jupyterStatus, openJupyterLab, pythonInterpreter } from "@/lib/tauri";
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { cn } from "@/lib/cn";
 
@@ -45,6 +58,13 @@ export function NotebookEditor({
   const [running, setRunning] = useState<number | null>(null);
   const [saved, setSaved] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  // Which interpreter cells run on — shown in the header so "no Python found"
+  // is visible before the first run, not after it fails.
+  const [pyInfo, setPyInfo] = useState<{ label: string; title: string; ok: boolean } | null>(null);
+  // Whether the app-managed Jupyter env exists — gates the "Open in JupyterLab"
+  // header button, offered wherever a notebook is viewed.
+  const [jupyterInstalled, setJupyterInstalled] = useState(false);
+  const [openingLab, setOpeningLab] = useState(false);
   const cellsRef = useRef<NotebookCell[] | null>(null);
   cellsRef.current = cells;
   const rawRef = useRef<string | null>(null);
@@ -68,6 +88,49 @@ export function NotebookEditor({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void jupyterStatus().then((s) => setJupyterInstalled(Boolean(s?.installed)));
+  }, []);
+
+  const openLab = async () => {
+    setOpeningLab(true);
+    try {
+      // The lab is rooted at the active workspace, so a "workspace"-rooted
+      // notebook's path IS the lab-relative path — deep-link straight to it.
+      // A "base" path spans session folders outside that root, so just open home.
+      const ok = await openJupyterLab(root === "base" ? undefined : path);
+      if (ok) toast.success("Opening JupyterLab in your browser…");
+      else toast.error("Set up Jupyter first — Settings → MCP servers → Jupyter.");
+    } catch (e) {
+      toast.error(`Could not open JupyterLab: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setOpeningLab(false);
+    }
+  };
+
+  useEffect(() => {
+    if (language !== "python") {
+      setPyInfo(null);
+      return;
+    }
+    let alive = true;
+    void pythonInterpreter().then((info) => {
+      if (!alive || !info) return;
+      setPyInfo(
+        info.resolved
+          ? {
+              label: info.resolved.split(/[\\/]/).pop() ?? info.resolved,
+              title: `${info.resolved} (${info.source})`,
+              ok: true,
+            }
+          : { label: "no Python", title: info.error ?? "no Python found", ok: false },
+      );
+    });
+    return () => {
+      alive = false;
+    };
+  }, [language]);
 
   // Follow the agent live: while the user isn't mid-edit, poll the file and
   // reload when its content changed on disk (the agent writes via Jupyter).
@@ -192,11 +255,33 @@ export function NotebookEditor({
         <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
           {language === "r" ? "R" : "Python"}
         </span>
+        {pyInfo && (
+          <span
+            className={cn(
+              "hidden shrink-0 font-mono text-[11px] md:inline",
+              pyInfo.ok ? "text-muted" : "text-error",
+            )}
+            title={`${pyInfo.title} — change it in Settings → Local Python kernel`}
+          >
+            {pyInfo.label}
+          </span>
+        )}
         <span className="shrink-0 text-xs text-muted">{saved ? "Saved" : "Unsaved"}</span>
         <div className="flex-1" />
         <span className="hidden shrink-0 text-xs text-muted xl:inline">
           Shift/⌘+Enter runs a cell · shared with the agent
         </span>
+        {isTauri && jupyterInstalled && (
+          <button
+            className="flex items-center gap-1 text-text hover:opacity-60 disabled:opacity-40"
+            aria-label="Open in JupyterLab"
+            title="Open the full JupyterLab (same env and files) in your browser"
+            disabled={openingLab}
+            onClick={() => void openLab()}
+          >
+            <ExternalLink size={14} strokeWidth={1.5} />
+          </button>
+        )}
         <button
           className={cn(showHistory ? "text-accent" : "text-text hover:opacity-60")}
           aria-label="History"

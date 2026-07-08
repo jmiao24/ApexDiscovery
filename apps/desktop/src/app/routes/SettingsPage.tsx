@@ -26,18 +26,19 @@ import {
   openExternal,
   openWorkspaceBase,
   pickFolder,
+  pythonInterpreter,
   removeConfigEntry,
-  setupJupyter,
+  setPythonPath,
   setWorkspaceBase,
-  startJupyter,
   workspaceBase,
   type JupyterStatus,
+  type PythonInterpreter,
 } from "@/lib/tauri";
-import { setupScienceMcp } from "@/lib/tauri";
+import { useSetupStore } from "@/lib/setup";
 import { ClusterCard } from "@/components/settings/ClusterCard";
 import { ModalCard } from "@/components/settings/ModalCard";
 import { DataFlowCard } from "@/components/settings/DataFlowCard";
-import { SCIENCE_CONNECTORS, connectorConfig } from "@/lib/scienceConnectors";
+import { SCIENCE_CONNECTORS } from "@/lib/scienceConnectors";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 
@@ -48,9 +49,26 @@ import { cn } from "@/lib/cn";
 export function SettingsPage() {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
-  const { status, serverUrl, setServerUrl, connect, disconnect, defaultModel, loadCatalog } =
-    useRuntimeStore();
+  // Select each field individually. A bare `useRuntimeStore()` subscribed to the
+  // WHOLE store, so every unrelated mutation (session events, streaming, idle
+  // checks) re-rendered this page — in the packaged WKWebView that repaint storm
+  // made the native <select>/<input>/<button> controls flicker and blank out on
+  // scroll. These are the only fields the page actually reads.
+  const status = useRuntimeStore((s) => s.status);
+  const serverUrl = useRuntimeStore((s) => s.serverUrl);
+  const setServerUrl = useRuntimeStore((s) => s.setServerUrl);
+  const connect = useRuntimeStore((s) => s.connect);
+  const disconnect = useRuntimeStore((s) => s.disconnect);
+  const defaultModel = useRuntimeStore((s) => s.defaultModel);
+  const loadCatalog = useRuntimeStore((s) => s.loadCatalog);
   const connected = status === "ready";
+
+  // Long-running uv provisioning lives in a store, not here: navigating away
+  // must not discard the "setting up…" state or sever the progress stream.
+  const jupyterBusy = useSetupStore((s) => s.jupyterBusy);
+  const enablingConnector = useSetupStore((s) => s.connectorId);
+  const setupLine = useSetupStore((s) => s.line);
+  const setupGeneration = useSetupStore((s) => s.generation);
 
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [authMethods, setAuthMethods] = useState<Record<string, ProviderAuthMethod[]>>({});
@@ -58,9 +76,10 @@ export function SettingsPage() {
   const [customIds, setCustomIds] = useState<string[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [jupyter, setJupyter] = useState<JupyterStatus | null>(null);
-  const [settingUpJupyter, setSettingUpJupyter] = useState(false);
-  // Which curated science connector is currently being provisioned, by id.
-  const [enablingConnector, setEnablingConnector] = useState<string | null>(null);
+  // The interpreter local Python kernels resolve to + the manual override input.
+  const [pyInfo, setPyInfo] = useState<PythonInterpreter | null>(null);
+  const [pyPath, setPyPath] = useState("");
+  const [savingPy, setSavingPy] = useState(false);
   // API keys typed for key-requiring connectors, keyed by connector id.
   const [connectorKeys, setConnectorKeys] = useState<Record<string, string>>({});
 
@@ -115,14 +134,36 @@ export function SettingsPage() {
     }
   }, []);
 
+  // Re-refresh when a provisioning run finishes (setupGeneration bumps) so a
+  // newly-enabled MCP shows up even if setup completed while this page was
+  // closed — the flow itself lives in the setup store.
   useEffect(() => {
     if (connected) void refresh();
-  }, [connected, refresh]);
+  }, [connected, refresh, setupGeneration]);
   useEffect(() => {
     // The BASE folder — the parent every session's dated subfolder is created
     // under. (The per-session active folder shows in the conversation header.)
     void workspaceBase().then(setWsPath);
   }, []);
+  const refreshPython = useCallback(() => {
+    void pythonInterpreter().then(setPyInfo);
+  }, []);
+  // Also on setupGeneration: a fresh jupyter-env may now back the local kernel.
+  useEffect(refreshPython, [refreshPython, setupGeneration]);
+
+  const savePythonPath = async (path: string) => {
+    setSavingPy(true);
+    try {
+      await setPythonPath(path);
+      setPyPath("");
+      toast.success(path ? "Interpreter set — notebook cells now run on it." : "Override cleared.");
+      refreshPython();
+    } catch (e) {
+      toast.error(`Could not set the interpreter: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSavingPy(false);
+    }
+  };
 
   const changeWorkspaceBase = async () => {
     const picked = await pickFolder();
@@ -286,48 +327,13 @@ export function SettingsPage() {
       setMTarget("");
     });
 
-  // One click: uv provisions the isolated Jupyter env, the app starts the
-  // server, and the MCP entry (URL + token) is written into OpenCode's config.
-  const enableJupyter = async () => {
-    setSettingUpJupyter(true);
-    try {
-      toast.success("Setting up Jupyter — first run downloads a few hundred MB, please wait…");
-      await setupJupyter();
-      const s = await startJupyter();
-      if (!s.url || !s.token || !s.mcp_command) throw new Error("setup finished incomplete");
-      await getClient()!.addMcpServer("jupyter", {
-        type: "local",
-        command: [s.mcp_command],
-        enabled: true,
-        environment: { JUPYTER_URL: s.url, JUPYTER_TOKEN: s.token, ALLOW_IMG_OUTPUT: "true" },
-      });
-      toast.success("Jupyter MCP enabled — the agent can now drive notebooks.");
-      await refreshAll();
-    } catch (e) {
-      toast.error(`Jupyter setup failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setSettingUpJupyter(false);
-    }
-  };
-
-  // One click: uv provisions the open-source connector into the shared science
-  // env, then its MCP entry is written into OpenCode's config.
-  const enableConnector = async (id: string) => {
-    const c = SCIENCE_CONNECTORS.find((x) => x.id === id);
-    if (!c) return;
-    setEnablingConnector(id);
-    try {
-      toast.success(`Setting up ${c.label} — first run downloads a managed Python, please wait…`);
-      const python = await setupScienceMcp(c.pkg);
-      await getClient()!.addMcpServer(c.id, connectorConfig(c, python, connectorKeys[c.id]));
-      toast.success(`${c.label} enabled — the agent can now use it from chat.`);
-      setConnectorKeys((k) => ({ ...k, [c.id]: "" })); // don't keep the key in UI state
-      await refreshAll();
-    } catch (e) {
-      toast.error(`${c.label} setup failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setEnablingConnector(null);
-    }
+  // The provisioning flows themselves live in the setup store so they outlive
+  // this page. The connector's API key is dropped from UI state up front — the
+  // store already holds the value it needs, so it never lingers here.
+  const enableConnector = (id: string) => {
+    const key = connectorKeys[id];
+    setConnectorKeys((k) => ({ ...k, [id]: "" }));
+    void useSetupStore.getState().enableConnector(id, key);
   };
 
   const removeMcp = (name: string) =>
@@ -431,7 +437,7 @@ export function SettingsPage() {
                 </select>
                 <ChevronDown
                   size={14}
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+                  className="pointer-events-none absolute right-3 top-1/2 -mt-[7px] text-muted"
                 />
               </div>
 
@@ -474,7 +480,7 @@ export function SettingsPage() {
                   <div className="relative">
                     <Search
                       size={13}
-                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+                      className="pointer-events-none absolute left-3 top-1/2 -mt-[6.5px] text-muted"
                     />
                     <input
                       list="provider-catalog"
@@ -762,15 +768,16 @@ export function SettingsPage() {
                   <div className="min-w-0 flex-1">
                     <span className="font-medium text-text">Jupyter</span>
                     <span className="ml-2 text-xs text-muted">
-                      lets the agent drive real notebooks · isolated env, ~300 MB on first run
+                      lets the agent drive real notebooks · isolated env w/ numpy·pandas·matplotlib, ~500 MB on first run ·
+                      once set up, the app's Run button uses it too, so you and the agent share one Python
                     </span>
                   </div>
                   <button
                     className={btnAccent("h-8")}
-                    onClick={() => void enableJupyter()}
-                    disabled={settingUpJupyter || busy}
+                    onClick={() => void useSetupStore.getState().enableJupyter()}
+                    disabled={jupyterBusy || busy}
                   >
-                    {settingUpJupyter ? (
+                    {jupyterBusy ? (
                       <>
                         <Loader2 size={12} className="animate-spin" /> Setting up…
                       </>
@@ -780,6 +787,16 @@ export function SettingsPage() {
                       "Set up & enable"
                     )}
                   </button>
+                </div>
+              )}
+              {/* Live uv output while a provisioning run is in flight — a
+                  300 MB download must never look like a frozen spinner. */}
+              {(jupyterBusy || enablingConnector !== null) && (
+                <div className="flex items-center gap-2 border-b border-border bg-surface-2/50 px-3 py-1.5">
+                  <Loader2 size={11} className="shrink-0 animate-spin text-muted" />
+                  <span className="truncate font-mono text-[11px] text-muted">
+                    {setupLine ?? "starting download…"}
+                  </span>
                 </div>
               )}
               {mcpServers.map((s, i) => (
@@ -890,6 +907,69 @@ export function SettingsPage() {
           </div>
         </Card>
 
+        {/* ---- Local Python kernel ---- */}
+        {isTauri && (
+          <Card
+            title="Local Python kernel"
+            hint="Runs notebook cells in the app. Uses your Jupyter environment when set up (same Python as the agent), else auto-detects — or set an explicit interpreter below"
+          >
+            <div className="flex items-center gap-2 text-[13px]">
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 shrink-0 rounded-full",
+                  pyInfo?.resolved ? "bg-ok" : "bg-error",
+                )}
+              />
+              {pyInfo?.resolved ? (
+                <>
+                  <span className="min-w-0 flex-1 select-all truncate font-mono text-[12px] text-text">
+                    {pyInfo.resolved}
+                  </span>
+                  <span className="shrink-0 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted ring-1 ring-border">
+                    {pyInfo.source === "manual"
+                      ? "manual"
+                      : pyInfo.source === "jupyter-env"
+                        ? "app-managed"
+                        : "auto-detected"}
+                  </span>
+                </>
+              ) : (
+                <span className="min-w-0 flex-1 text-error">
+                  {pyInfo?.error ?? "checking…"}
+                </span>
+              )}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <input
+                value={pyPath}
+                onChange={(e) => setPyPath(e.target.value)}
+                placeholder={
+                  pyInfo?.configured ??
+                  "Interpreter path — e.g. /opt/anaconda3/bin/python3 or C:\\ProgramData\\anaconda3\\python.exe"
+                }
+                className={inputCls("flex-1 font-mono")}
+                spellCheck={false}
+              />
+              <button
+                className={btnAccent()}
+                onClick={() => void savePythonPath(pyPath.trim())}
+                disabled={savingPy || !pyPath.trim()}
+              >
+                {savingPy ? <Loader2 size={12} className="animate-spin" /> : "Use this Python"}
+              </button>
+              {pyInfo?.configured && (
+                <button
+                  className={btnGhost()}
+                  onClick={() => void savePythonPath("")}
+                  disabled={savingPy}
+                >
+                  Clear override
+                </button>
+              )}
+            </div>
+          </Card>
+        )}
+
         {/* ---- Cluster (HPC) ---- */}
         <ClusterCard />
 
@@ -929,17 +1009,24 @@ const inputCls = (extra = "") =>
     extra,
   );
 
+// Hover/disabled states use background + text COLOR, never `opacity`. The CSS
+// `opacity` property promotes an element to its own GPU compositing layer; in
+// the packaged macOS WKWebView, hovering one such button (an opacity
+// transition) forced a recomposite that mis-repainted the neighbouring
+// disabled (`opacity-50`) buttons — they visibly flickered. Alpha backgrounds
+// (`bg-accent/90`) are a plain paint, so no layer is promoted and nothing
+// flickers.
 const btnGhost = (extra = "") =>
   cn(
     "flex h-9 shrink-0 items-center gap-1 rounded-input border border-border bg-surface px-3.5",
-    "text-[13px] text-text transition-colors hover:bg-surface-2 disabled:opacity-50",
+    "text-[13px] text-text transition-colors hover:bg-surface-2 disabled:text-muted",
     extra,
   );
 
 const btnAccent = (extra = "") =>
   cn(
     "flex h-9 shrink-0 items-center gap-1.5 rounded-input bg-accent px-3.5 text-[13px] font-medium",
-    "text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-50",
+    "text-accent-fg transition-colors hover:bg-accent/90 disabled:bg-accent/50",
     extra,
   );
 

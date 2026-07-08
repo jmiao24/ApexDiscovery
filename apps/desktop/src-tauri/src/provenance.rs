@@ -109,11 +109,11 @@ const ENV_DIR: &str = "env";
 
 /// Capture `pip freeze` once per app run — a per-write process spawn would slow
 /// every agent edit. Returns the raw `name==version` list.
-fn pip_freeze() -> Option<String> {
+fn pip_freeze(app: &tauri::AppHandle) -> Option<String> {
     static CACHE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
     CACHE
         .get_or_init(|| {
-            let bin = crate::kernel::python_bin()?;
+            let (bin, _) = crate::kernel::python_bin(app).ok()?;
             let out = crate::runtime::quiet_command(bin)
                 .args(["-m", "pip", "freeze"])
                 .output()
@@ -230,11 +230,11 @@ fn write_lockfile(root: &Path, freeze: &str) -> Result<PackageSnapshot, String> 
 
 /// Detect the local Python version once per app run — `python -V` on every
 /// record would add a process spawn to each agent write.
-fn python_version() -> Option<String> {
+fn python_version(app: &tauri::AppHandle) -> Option<String> {
     static CACHE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
     CACHE
         .get_or_init(|| {
-            let bin = crate::kernel::python_bin()?;
+            let (bin, _) = crate::kernel::python_bin(app).ok()?;
             let out = crate::runtime::quiet_command(bin).arg("--version").output().ok()?;
             let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
             let text = if text.is_empty() {
@@ -247,11 +247,11 @@ fn python_version() -> Option<String> {
         .clone()
 }
 
-pub(crate) fn capture_env(root: &Path, app_version: String) -> EnvInfo {
+pub(crate) fn capture_env(app: &tauri::AppHandle, root: &Path, app_version: String) -> EnvInfo {
     // Package capture is best-effort: no pip / write failure just omits it.
-    let packages = pip_freeze().and_then(|f| write_lockfile(root, &f).ok());
+    let packages = pip_freeze(app).and_then(|f| write_lockfile(root, &f).ok());
     EnvInfo {
-        python: python_version(),
+        python: python_version(app),
         platform: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
         app: app_version,
         packages,
@@ -455,7 +455,7 @@ pub fn record_provenance(
 ) -> Result<ProvenanceRecord, String> {
     let _guard = state.0.lock().map_err(|_| "provenance lock poisoned")?;
     let root = workspace_dir(&app)?;
-    let env = capture_env(&root, app.package_info().version.to_string());
+    let env = capture_env(&app, &root, app.package_info().version.to_string());
     // Writes are authored, not runs — no run_id here (runs.rs sets it for
     // files produced by executing code).
     append_record(&root, &path, &tool, session_id, model, content, diff, log, Some(env), None)

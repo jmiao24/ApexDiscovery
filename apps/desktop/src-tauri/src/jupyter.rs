@@ -10,12 +10,19 @@ use tauri_plugin_shell::ShellExt;
 
 use crate::runtime::{free_port, workspace_dir};
 
-// Pinned per datalayer/jupyter-mcp-server's documented requirements.
+// Pinned per datalayer/jupyter-mcp-server's documented requirements, plus the
+// core scientific stack: this env is now the DEFAULT interpreter for the app's
+// own notebook Run button (kernel::python_bin), so `import numpy/pandas` must
+// work out of the box — an empty jupyter-only env would make the unified kernel
+// useless for real work.
 const PIP_SPEC: &[&str] = &[
     "jupyterlab==4.4.1",
     "jupyter-collaboration==4.0.2",
     "jupyter-mcp-server",
     "ipykernel",
+    "numpy",
+    "pandas",
+    "matplotlib",
 ];
 
 #[derive(Default)]
@@ -90,6 +97,13 @@ fn bin(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
     Ok(dir.join("bin").join(name))
 }
 
+/// The managed env's Python, if provisioned. Doubles as the local kernel's
+/// DEFAULT interpreter (kernel::python_bin), so the app's Run button and the
+/// agent's Jupyter MCP share one Python — same packages, same results.
+pub(crate) fn env_python(app: &AppHandle) -> Option<PathBuf> {
+    bin(app, "python").ok().filter(|p| p.exists())
+}
+
 /// Port + token are chosen once at setup and reused so the MCP config entry
 /// (which carries JUPYTER_URL/JUPYTER_TOKEN) stays valid across app restarts.
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -143,23 +157,26 @@ pub fn jupyter_status(app: AppHandle, state: State<'_, JupyterState>) -> Jupyter
 
 /// Provision the isolated Jupyter environment with the bundled uv. First run
 /// downloads a managed Python + JupyterLab (a few hundred MB into app data);
-/// takes a few minutes. Async so the UI stays responsive.
+/// takes a few minutes. Streams progress as `setup-progress` events and fails
+/// with a readable error when a download stalls (see uv::run_uv).
 #[tauri::command]
 pub async fn setup_jupyter(app: AppHandle) -> Result<(), String> {
     let dir = env_dir(&app)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
-    let venv = app
-        .shell()
-        .sidecar("uv")
-        .map_err(|e| format!("uv sidecar not found: {e}"))?
-        .args(["venv", &dir.to_string_lossy(), "--python", "3.12", "--allow-existing"])
-        .output()
-        .await
-        .map_err(|e| format!("uv venv failed to run: {e}"))?;
-    if !venv.status.success() {
-        return Err(format!("uv venv failed: {}", String::from_utf8_lossy(&venv.stderr)));
-    }
+    crate::uv::run_uv(
+        &app,
+        "jupyter",
+        vec![
+            "venv".into(),
+            dir.to_string_lossy().to_string(),
+            "--python".into(),
+            "3.12".into(),
+            "--allow-existing".into(),
+        ],
+        "uv venv",
+    )
+    .await?;
 
     let py = bin(&app, "python")?;
     let mut args = vec![
@@ -169,20 +186,7 @@ pub async fn setup_jupyter(app: AppHandle) -> Result<(), String> {
         py.to_string_lossy().to_string(),
     ];
     args.extend(PIP_SPEC.iter().map(|s| s.to_string()));
-    let install = app
-        .shell()
-        .sidecar("uv")
-        .map_err(|e| format!("uv sidecar not found: {e}"))?
-        .args(args)
-        .output()
-        .await
-        .map_err(|e| format!("uv pip install failed to run: {e}"))?;
-    if !install.status.success() {
-        return Err(format!(
-            "uv pip install failed: {}",
-            String::from_utf8_lossy(&install.stderr)
-        ));
-    }
+    crate::uv::run_uv(&app, "jupyter", args, "uv pip install").await?;
 
     // Fix port + token once so the MCP config entry stays valid.
     if load_meta(&app).is_none() {

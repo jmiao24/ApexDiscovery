@@ -6,7 +6,6 @@
 // package and report the managed interpreter path.
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
-use tauri_plugin_shell::ShellExt;
 
 fn env_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app
@@ -37,7 +36,8 @@ pub fn science_mcp_python(app: AppHandle) -> Result<Option<String>, String> {
 /// Provision one open-source MCP package into the shared isolated env with the
 /// bundled uv (creating the env on first use), and return the managed Python
 /// path to launch it with. First run downloads a managed Python (~tens of MB);
-/// installing a package is incremental. Async so the UI stays responsive.
+/// installing a package is incremental. Streams progress as `setup-progress`
+/// events and fails with a readable error when a download stalls (uv::run_uv).
 #[tauri::command]
 pub async fn setup_science_mcp(app: AppHandle, package: String) -> Result<String, String> {
     // Guard against a caller sending an arbitrary spec (flags, extra args).
@@ -47,33 +47,34 @@ pub async fn setup_science_mcp(app: AppHandle, package: String) -> Result<String
     let dir = env_dir(&app)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
-    let venv = app
-        .shell()
-        .sidecar("uv")
-        .map_err(|e| format!("uv sidecar not found: {e}"))?
-        .args(["venv", &dir.to_string_lossy(), "--python", "3.12", "--allow-existing"])
-        .output()
-        .await
-        .map_err(|e| format!("uv venv failed to run: {e}"))?;
-    if !venv.status.success() {
-        return Err(format!("uv venv failed: {}", String::from_utf8_lossy(&venv.stderr)));
-    }
+    crate::uv::run_uv(
+        &app,
+        "science",
+        vec![
+            "venv".into(),
+            dir.to_string_lossy().to_string(),
+            "--python".into(),
+            "3.12".into(),
+            "--allow-existing".into(),
+        ],
+        "uv venv",
+    )
+    .await?;
 
     let py = python_bin(&app)?;
-    let install = app
-        .shell()
-        .sidecar("uv")
-        .map_err(|e| format!("uv sidecar not found: {e}"))?
-        .args(["pip", "install", "--python", &py.to_string_lossy(), &package])
-        .output()
-        .await
-        .map_err(|e| format!("uv pip install failed to run: {e}"))?;
-    if !install.status.success() {
-        return Err(format!(
-            "uv pip install failed: {}",
-            String::from_utf8_lossy(&install.stderr)
-        ));
-    }
+    crate::uv::run_uv(
+        &app,
+        "science",
+        vec![
+            "pip".into(),
+            "install".into(),
+            "--python".into(),
+            py.to_string_lossy().to_string(),
+            package,
+        ],
+        "uv pip install",
+    )
+    .await?;
     Ok(py.to_string_lossy().to_string())
 }
 

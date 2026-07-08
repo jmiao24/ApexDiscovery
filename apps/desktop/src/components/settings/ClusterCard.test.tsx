@@ -84,15 +84,21 @@ describe("ClusterCard", () => {
     expect(bridge.hpcJobs.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("shows an empty-queue message and can disconnect", async () => {
+  it("skips the queue read for a reachable host without Slurm, and can disconnect", async () => {
     bridge.hpcConfig.mockResolvedValue("login-b");
     bridge.hpcCheck.mockResolvedValue({ reachable: true, slurm: null, message: "no sbatch" });
     bridge.hpcJobs.mockResolvedValue([]);
     bridge.setHpcConfig.mockResolvedValue();
     render(<ClusterCard />);
 
-    expect(await screen.findByText("No jobs in the queue.")).toBeInTheDocument();
-    expect(screen.getByText("no sbatch")).toBeInTheDocument();
+    // The warning shows, an explanatory note replaces the queue table, and we
+    // never call squeue on a host that can't have a queue (the reported bug:
+    // that call failed and surfaced "Could not read the queue").
+    expect(await screen.findByText("no sbatch")).toBeInTheDocument();
+    expect(screen.getByText("sbatch")).toBeInTheDocument(); // the note's <code>
+    expect(bridge.hpcJobs).not.toHaveBeenCalled();
+    expect(screen.queryByText("No jobs in the queue.")).not.toBeInTheDocument();
+
     await userEvent.click(screen.getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(bridge.setHpcConfig).toHaveBeenCalledWith(null));
     expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();

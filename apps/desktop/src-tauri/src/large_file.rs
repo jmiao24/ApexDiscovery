@@ -44,14 +44,12 @@ pub fn probe_large_file(
     if !full.is_file() {
         return Err("no such file".into());
     }
-    let python = crate::kernel::python_bin()
-        .ok_or("no Python found — install Python 3 to introspect large files")?;
+    let (python, _) = crate::kernel::python_bin(&app)?;
     let script = probe_script(&app).ok_or("large-file probe not found")?;
 
     let mut cmd = crate::runtime::quiet_command(&python);
     cmd.arg(&script).arg(&full);
     // Same enriched PATH as the kernel/agent so a conda/homebrew python resolves.
-    #[cfg(unix)]
     cmd.env("PATH", crate::runtime::enriched_path());
     let out = cmd.output().map_err(|e| format!("probe failed to run: {e}"))?;
     if !out.status.success() {

@@ -37,7 +37,9 @@ export function ClusterCard() {
       setJobs(await hpcJobs(h));
     } catch (e) {
       setJobs(null);
-      toast.error(`Could not read the queue: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(
+        `Could not read the queue: ${e instanceof Error ? e.message : String(e)}`,
+      );
     } finally {
       setLoadingJobs(false);
     }
@@ -45,13 +47,22 @@ export function ClusterCard() {
 
   useEffect(() => {
     if (!isTauri) return;
-    void listSshHosts().then(setHosts).catch(() => undefined);
+    void listSshHosts()
+      .then(setHosts)
+      .catch(() => undefined);
     void hpcConfig()
       .then((h) => {
         if (!h) return;
         setHost(h);
-        void hpcCheck(h).then(setCheck).catch(() => undefined);
-        void loadJobs(h);
+        // Only read the queue once Slurm is confirmed present — a host without
+        // `squeue` (e.g. a plain workstation) would otherwise fail the read and
+        // surface a "Could not read the queue" error for a non-cluster host.
+        void hpcCheck(h)
+          .then((c) => {
+            setCheck(c);
+            if (c.slurm) void loadJobs(h);
+          })
+          .catch(() => undefined);
       })
       .catch((e: unknown) => {
         // A corrupt hand-edited hpc.json must not look like "no cluster".
@@ -78,7 +89,9 @@ export function ClusterCard() {
       setHost(h);
       setCheck(c);
       setDraft("");
-      void loadJobs(h);
+      // Reading the queue only makes sense on a Slurm host; skip it otherwise so
+      // a non-cluster host doesn't fire a "Could not read the queue" error.
+      if (c.slurm) void loadJobs(h);
     } catch (e) {
       setConnectError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -93,7 +106,9 @@ export function ClusterCard() {
       setCheck(null);
       setJobs(null);
     } catch (e) {
-      toast.error(`Could not remove: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(
+        `Could not remove: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   };
 
@@ -104,7 +119,9 @@ export function ClusterCard() {
       toast.success(`Job ${id} canceled`);
       void loadJobs(host);
     } catch (e) {
-      toast.error(`Could not cancel ${id}: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(
+        `Could not cancel ${id}: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   };
 
@@ -113,12 +130,15 @@ export function ClusterCard() {
       <header className="border-b border-border px-5 py-3">
         <h2 className="font-serif text-[15px] text-text">Cluster (HPC)</h2>
         <p className="mt-0.5 text-xs text-muted">
-          Run heavy jobs on your Slurm cluster over SSH — connect once, then just ask the agent.
+          Run heavy jobs on your Slurm cluster over SSH — connect once, then
+          just ask the agent.
         </p>
       </header>
       <div className="px-5 py-4">
         {!isTauri ? (
-          <p className="text-[13px] text-muted">Available in the desktop app.</p>
+          <p className="text-[13px] text-muted">
+            Available in the desktop app.
+          </p>
         ) : !host ? (
           <>
             <div className="flex items-center gap-2">
@@ -144,15 +164,19 @@ export function ClusterCard() {
                 onClick={() => void connect()}
                 disabled={checking || !draft.trim()}
               >
-                {checking ? <Loader2 size={12} className="animate-spin" /> : null}
+                {checking ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : null}
                 {checking ? "Checking…" : "Connect"}
               </button>
             </div>
-            {connectError && <p className="mt-2 text-xs text-error">{connectError}</p>}
+            {connectError && (
+              <p className="mt-2 text-xs text-error">{connectError}</p>
+            )}
             <p className="mt-2.5 text-xs leading-relaxed text-muted">
-              Uses your own SSH keys — nothing is installed on the cluster. Once connected, the
-              agent can write and submit Slurm batch scripts for you and fetch the results back
-              into the workspace.
+              Uses your own SSH keys — nothing is installed on the cluster. Once
+              connected, the agent can write and submit Slurm batch scripts for
+              you and fetch the results back into the workspace.
             </p>
           </>
         ) : (
@@ -169,15 +193,20 @@ export function ClusterCard() {
                 {check?.slurm ?? check?.message ?? "checking…"}
               </span>
               <div className="flex-1" />
-              <button
-                className="flex h-7 w-7 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-50"
-                onClick={() => void loadJobs(host)}
-                disabled={loadingJobs}
-                title="Refresh the job queue"
-                aria-label="Refresh the job queue"
-              >
-                <RefreshCw size={13} className={cn(loadingJobs && "animate-spin")} />
-              </button>
+              {check?.slurm && (
+                <button
+                  className="flex h-7 w-7 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:text-muted"
+                  onClick={() => void loadJobs(host)}
+                  disabled={loadingJobs}
+                  title="Refresh the job queue"
+                  aria-label="Refresh the job queue"
+                >
+                  <RefreshCw
+                    size={13}
+                    className={cn(loadingJobs && "animate-spin")}
+                  />
+                </button>
+              )}
               <button
                 className="text-xs text-muted transition-colors hover:text-error"
                 onClick={() => void remove()}
@@ -187,55 +216,73 @@ export function ClusterCard() {
               </button>
             </div>
 
-            <div className="mt-3 overflow-hidden rounded-input border border-border">
-              {jobs === null ? (
-                <p className="bg-surface px-3 py-2.5 text-[13px] text-muted">
-                  {loadingJobs ? "Reading the queue…" : "Queue unavailable."}
-                </p>
-              ) : jobs.length === 0 ? (
-                <p className="bg-surface px-3 py-2.5 text-[13px] text-muted">
-                  No jobs in the queue.
-                </p>
-              ) : (
-                jobs.map((j, i) => (
-                  <div
-                    key={j.id}
-                    className={cn(
-                      "flex h-9 items-center gap-2.5 bg-surface px-3 text-[13px]",
-                      i > 0 && "border-t border-border",
-                    )}
-                  >
-                    <span className="font-mono text-xs text-muted">{j.id}</span>
-                    <span
+            {check && !check.slurm ? (
+              // Reachable over SSH but no Slurm — not a cluster we can drive.
+              // Show why, and don't pretend there's a queue to read.
+              <p className="mt-3 rounded-input border border-border bg-surface px-3 py-2.5 text-[13px] leading-relaxed text-muted">
+                This host doesn't have Slurm (
+                <span className="font-mono">sbatch</span>), so there's no batch
+                queue to show. Point this at a Slurm cluster to submit and track
+                jobs — or, if your cluster loads Slurm through an environment
+                module, the agent can load it when it submits.
+              </p>
+            ) : (
+              <div className="mt-3 overflow-hidden rounded-input border border-border">
+                {jobs === null ? (
+                  <p className="bg-surface px-3 py-2.5 text-[13px] text-muted">
+                    {loadingJobs ? "Reading the queue…" : "Queue unavailable."}
+                  </p>
+                ) : jobs.length === 0 ? (
+                  <p className="bg-surface px-3 py-2.5 text-[13px] text-muted">
+                    No jobs in the queue.
+                  </p>
+                ) : (
+                  jobs.map((j, i) => (
+                    <div
+                      key={j.id}
                       className={cn(
-                        "rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ring-1 ring-border",
-                        j.state === "RUNNING"
-                          ? "text-ok"
-                          : j.state === "PENDING"
-                            ? "text-warn"
-                            : "text-muted",
+                        "flex h-9 items-center gap-2.5 bg-surface px-3 text-[13px]",
+                        i > 0 && "border-t border-border",
                       )}
                     >
-                      {j.state}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-text">{j.name}</span>
-                    <span className="font-mono text-xs text-muted">{j.time}</span>
-                    <span className="text-xs text-muted">{j.partition}</span>
-                    <button
-                      className="flex h-6 w-6 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-error"
-                      onClick={() => void cancel(j.id)}
-                      title={`Cancel job ${j.id}`}
-                      aria-label={`Cancel job ${j.id}`}
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
+                      <span className="font-mono text-xs text-muted">
+                        {j.id}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ring-1 ring-border",
+                          j.state === "RUNNING"
+                            ? "text-ok"
+                            : j.state === "PENDING"
+                              ? "text-warn"
+                              : "text-muted",
+                        )}
+                      >
+                        {j.state}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-text">
+                        {j.name}
+                      </span>
+                      <span className="font-mono text-xs text-muted">
+                        {j.time}
+                      </span>
+                      <span className="text-xs text-muted">{j.partition}</span>
+                      <button
+                        className="flex h-6 w-6 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-error"
+                        onClick={() => void cancel(j.id)}
+                        title={`Cancel job ${j.id}`}
+                        aria-label={`Cancel job ${j.id}`}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
             <p className="mt-2.5 text-xs text-muted">
-              Ask the agent to run an analysis on the cluster — it submits batch scripts here and
-              pulls results back into the workspace.
+              Ask the agent to run an analysis on the cluster — it submits batch
+              scripts here and pulls results back into the workspace.
             </p>
           </>
         )}
@@ -251,9 +298,11 @@ const inputCls = (extra = "") =>
     extra,
   );
 
+// Color-based hover/disabled, never `opacity` — the CSS opacity property
+// promotes a GPU compositing layer that flickers in the packaged WKWebView.
 const btnAccent = (extra = "") =>
   cn(
     "flex h-9 shrink-0 items-center gap-1.5 rounded-input bg-accent px-3.5 text-[13px] font-medium",
-    "text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-50",
+    "text-accent-fg transition-colors hover:bg-accent/90 disabled:bg-accent/50",
     extra,
   );
