@@ -6,19 +6,29 @@
 
 **An open AI workbench for scientists.** Your research partner for rigorous science.
 
-An open-source, **local-first**, **model-agnostic**, **reproducible** AI research
-workbench — an open alternative to Claude Science and similar AI-for-science products.
-Not a chat box: a workbench that ties literature, code, figures, reports, and review
-into one auditable, reproducible workflow.
+Open Science is an open-source, **local-first**, **model-agnostic**, and
+**reproducible** AI research workbench. It is not just a chat box: it connects
+agents, notebooks, files, figures, reports, runs, and review into one auditable
+desktop workflow. The desktop UI currently ships in seven selectable languages.
 
-<p><b>English</b> · <a href="./README.zh.md">中文</a></p>
+<p>
+  <b>English</b> ·
+  <a href="./README.zh.md">简体中文</a> ·
+  <a href="./README.ja.md">日本語</a> ·
+  <a href="./README.es.md">Español</a> ·
+  <a href="./README.de.md">Deutsch</a> ·
+  <a href="./README.fr.md">Français</a> ·
+  <a href="./README.ko.md">한국어</a>
+</p>
 
 <p>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/version-v0.1-orange" alt="v0.1">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey" alt="Platforms">
+  <img src="https://img.shields.io/badge/version-v0.1.7-orange" alt="v0.1.7">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platforms">
+  <img src="https://img.shields.io/badge/i18n-7%20languages-5B8DEF" alt="7 interface languages">
   <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20React-24C8DB" alt="Built with Tauri + React">
   <img src="https://img.shields.io/badge/runtime-OpenCode-success" alt="OpenCode runtime">
+  <a href="https://discord.gg/fWNMDKcd5P"><img src="https://img.shields.io/badge/Join-Discord-5865F2" alt="Join Discord"></a>
   <a href="http://makeapullrequest.com"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome"></a>
   <a href="https://linux.do"><img src="https://img.shields.io/badge/Join-linux.do-orange" alt="linux.do"></a>
 </p>
@@ -29,262 +39,212 @@ into one auditable, reproducible workflow.
 
 ## Contents
 
-- [✨ Why it is different](#-why-it-is-different)
-- [🎬 See it in action](#-see-it-in-action)
-- [🧭 How it works](#-how-it-works)
-- [🧪 What's inside](#-whats-inside)
-- [🔌 Skills & connectors](#-skills--connectors)
-- [📦 Download & install](#-download--install)
-- [🚀 Getting started](#-getting-started)
-- [💬 Using it](#-using-it)
-- [🔒 Safety & privacy](#-safety--privacy)
-- [🗂️ Repository layout](#️-repository-layout)
-- [📌 Status & roadmap](#-status--roadmap)
-- [🤝 Contributing](#-contributing)
-- [⚖️ License](#-license)
-- [🙏 Acknowledgments](#-acknowledgments)
+- [✨ What it does](#what-it-does)
+- [🎬 See it in action](#see-it-in-action)
+- [🧪 Current capabilities](#current-capabilities)
+- [🔌 Skills and connectors](#skills-and-connectors)
+- [📦 Install](#install)
+- [🚀 Build from source](#build-from-source)
+- [🔒 Safety and privacy](#safety-and-privacy)
+- [🗂️ Repository layout](#repository-layout)
+- [📌 Status](#status)
+- [🤝 Contributing](#contributing)
+- [⚖️ License](#license)
 
-## ✨ Why it is different
+## What it does
 
-- **A workbench, not a chat box** — plan → approve → execute → artifacts → review.
-- **Traceable artifacts, not just text** — every figure, table, and report links
-  back to its code, data, environment, and the conversation that produced it.
-- **Local-first** — your data and compute stay on your machine; the app states
-  plainly what (if anything) leaves it.
-- **Model-agnostic** — BYOK via OpenRouter, OpenAI-compatible, Anthropic, or local
-  models; a free out-of-the-box model works with zero setup.
-- **Reproducible** — code, data, figures, reports, logs, and `provenance.jsonl` are
-  kept, and every artifact version is recoverable.
-- **Multi-domain** — starting with AI4S, expanding to materials, chemistry, biology,
-  medicine, and engineering.
+- **Workbench, not chat only** — plan, approve, execute, inspect artifacts, review,
+  and reproduce work from one desktop app.
+- **Traceable artifacts** — figures, tables, reports, notebooks, and run outputs can
+  link back to code, inputs, environment, model output, and conversation context.
+- **Local-first workspace** — sessions live in local folders under your workspace;
+  files, provenance, notebooks, previews, and run records stay on your machine.
+- **Model-agnostic runtime** — the UI talks through `packages/sdk` to a bundled,
+  pinned OpenCode sidecar. Providers, skills, and MCP servers remain pluggable.
+- **Reproducibility-first** — local, SSH/Slurm, Modal, and notebook-batch runs can be
+  recorded as reproducible run records instead of loose terminal output.
 
-## 🎬 See it in action
+## See it in action
 
-**One prompt → a complete, traceable analysis.** Simulate data, fit a model, save a
+**One prompt -> a complete, traceable analysis.** Simulate data, fit a model, save a
 publication-grade figure, and write a report where every number traces to the code.
 
-![End-to-end dose–response analysis: the agent runs code and produces a fitted figure and a report](./docs/assets/showcase-workflow.webp)
+![End-to-end dose-response analysis: the agent runs code and produces a fitted figure and a report](./docs/assets/showcase-workflow.webp)
 
-**Every artifact traces back to its code, inputs, and conversation** — one click on a
-figure reveals the script that made it and the versions behind it.
+**Every artifact traces back to its code, inputs, and conversation.**
 
 ![Artifact inspector showing a figure's generating code, inputs, and provenance](./docs/assets/showcase-provenance.webp)
 
-**Literature → verifiable report.** Search papers, draft a manuscript rendered as a
-PDF, and audit it for citations, unsourced numbers, and figure↔code consistency.
+**Literature -> verifiable report.** Search papers, draft a manuscript rendered as a
+PDF, and audit citations, unsourced numbers, and figure/code consistency.
 
 ![Literature survey producing a rendered PDF manuscript with a traceability review](./docs/assets/showcase-literature.webp)
 
 <details>
-<summary><b>More screenshots</b> — notebooks, experiment sweeps, and the skills library</summary>
+<summary><b>More screenshots</b></summary>
 
 <br>
 
-**Conversation-first notebooks.** The agent drives a real Jupyter kernel; cells and
-figures appear live beside the chat.
-
 ![The agent driving a Jupyter notebook with a live matplotlib figure](./docs/assets/showcase-notebook.webp)
 
-**Run and track experiments.** Sweep parameters, keep a persistent kernel, and surface
-results as traceable artifacts.
-
 ![An experiment sweep table alongside a live analysis notebook](./docs/assets/showcase-experiment.webp)
-
-**Pluggable scientific skills.** Bundled skills for literature, experiments, figures,
-and integrity — plus one-click open-source connectors and bring-your-own.
 
 ![The skills library listing bundled scientific skills](./docs/assets/showcase-skills.webp)
 
 </details>
 
-## 🧭 How it works
+## Current capabilities
 
-```
-your prompt
-   │
-   ▼
-[ plan ] ──▶ [ approve ] ──▶ [ execute ]           local Python / Jupyter kernel,
-   ▲              ▲              │                  shell, MCP tools — on your machine
-   │              │              ▼
-   │         you answer     [ artifacts ]  ──▶  figures · tables · notebooks · reports
-   │        questions /          │                  each linked to code + data + env
-   │        permissions          ▼
-   └──────────────────────  [ review ]        citation audit · untraceable-number
-                                               flags · figure ↔ code consistency
-```
+| Area | Current state |
+| --- | --- |
+| Desktop shell | Tauri 2 + React + TypeScript + Vite, with macOS, Windows, and Linux build targets. |
+| Runtime | Bundled OpenCode sidecar, auto-started by the app, isolated from the user's own OpenCode config/data. |
+| Sessions | Multi-session chat/history, dated workspace folders, global history across workspaces, `/` commands, and `!` shell mode. |
+| Files | Global and per-session file browsing, context menu actions, external open/reveal, copy path, and local preview server. |
+| Notebooks | Real `.ipynb` files, Python and R notebook creation, local kernel execution, managed Jupyter environment via bundled `uv`, and an Open JupyterLab action. |
+| Runs | Append-only run logs, global SQLite run index, search/facets/pagination, local/remote surfaces, output links, logs, and reproduce prompts. |
+| Provenance | `.openscience/provenance.jsonl` tracks file versions and links produced artifacts back to the run or edit that created them. |
+| Review | Traceability, statistics-integrity, domain-check, large-file, publication-figure, remote-compute, and Modal run skills are bundled as first-party skills. |
+| Viewers | PDF, image, video, HTML, Markdown, code, CSV/TSV tables with charts, DOCX, XLSX, PPTX, molecules, 3D meshes, genome tracks, FITS, DOS/DOSCAR, EIGENVAL bands, qcode, anomaly maps, and phase files. |
+| Models | OpenCode provider catalog, OAuth/API-key provider flows, custom OpenAI-compatible endpoints, and local/provider-specific options supported by OpenCode. |
+| Interface languages | English, Simplified Chinese, Japanese, Spanish, German, French, and Korean. Portuguese (Brazil) and Arabic are registered but not selectable yet. |
 
-Everything runs through the bundled [OpenCode](https://opencode.ai) agent runtime
-(a single-binary sidecar, pinned and managed by the app). The UI never talks to a
-model directly — it goes through a thin SDK, so skills, MCP servers, and model
-providers stay pluggable.
+## Skills and connectors
 
-## 🧪 What's inside
+Bundled skills are fetched for builds and releases instead of being committed into
+git history:
 
-| Capability | What it does |
-|---|---|
-| **Full workflow** | One prompt drives data → code → figure → report → a reproducible record. One-click starters get you going. |
-| **Local compute** | A persistent local Python kernel and an optional isolated Jupyter environment (provisioned with a bundled `uv` — your system Python is untouched). |
-| **Artifact provenance** | Every agent write appends a version record to `.openscience/provenance.jsonl`; a History panel shows each version's code, model, and originating conversation. |
-| **Traceability reviewer** | Resolves citations (Crossref / arXiv / PubMed), flags numbers with no traceable source, and checks figures against the code that made them. |
-| **Native viewers** | Inline PDF, tables, images, HTML, and Office documents; matplotlib/plotly figures render publication-grade by default. |
-| **One design system** | A single validated chart palette shared by native UI and agent-generated matplotlib figures — correct in light and dark. |
-| **Keyboard-first** | A command palette (⌘K) reaches every primary action. |
-| **Model choice** | ~150 providers via OpenCode; BYOK, OpenAI/Anthropic-compatible endpoints, local Ollama, or the free built-in model. |
+- `ai4s-skills` pack from `ai4s-research/ai4s-skills`.
+- Office/document skills from the Apache-2.0 `anthropics/skills` repository:
+  `docx`, `pdf`, `pptx`, and `xlsx`.
+- First-party core skills in `runtime/skills/core/`:
+  `traceability-review`, `stats-integrity`, `domain-check`, `large-file`,
+  `publication-figures`, `remote-compute`, and `modal-run`.
 
-## 🔌 Skills & connectors
+One-click science MCP connectors currently include:
 
-**Bundled scientific skills** (agent playbooks the app ships and keeps in sync):
+- Literature search: arXiv, PubMed, Crossref, Semantic Scholar, bioRxiv/medRxiv.
+- Biomedical databases: PubMed, ClinicalTrials.gov, MyVariant/ClinVar.
+- Materials Project.
+- FRED economic data.
+- Space weather.
+- Open-Meteo weather and climate.
+- USGS water data.
 
-- `research-explorer`, `literature-survey`, `experiment-suite`, `paper-writer`,
-  `mindmap-render`, `integrity-auditor`, `ai4s-agent` — the
-  [ai4s-skills](https://github.com/ai4s-research/ai4s-skills) pack.
-- `traceability-review` and `publication-figures` — first-party skills for verifiable
-  review and on-system figures.
-
-**One-click open-source connectors** (provisioned into an isolated env via the bundled `uv`):
-
-- **Literature** — arXiv, PubMed, Crossref, Semantic Scholar, bioRxiv/medRxiv
-  ([paper-search-mcp](https://github.com/openags/paper-search-mcp)).
-- **Biomedical** — PubMed, ClinicalTrials.gov, genomic variants
-  ([biomcp](https://github.com/genomoncology/biomcp)).
-
-**Bring your own** — any MCP server (local command or remote URL) or skill; see
+You can also add any local or remote MCP server from Settings. See
 [`docs/CONNECT_YOUR_TOOLS.md`](./docs/CONNECT_YOUR_TOOLS.md).
 
-## 📦 Download & install
+## Install
 
-Grab the latest installer from the
-[**Releases** page](https://github.com/ai4s-research/open-science/releases/latest):
-macOS `.dmg` (Apple Silicon / Intel), Windows `.exe` / `.msi`, Linux `.deb` / `.rpm`.
+Download the latest installer from the
+[Releases page](https://github.com/ai4s-research/open-science/releases/latest).
 
-> **System requirements:** macOS **13 Ventura or later** · Windows 10/11 (x64).
-> The bundled OpenCode agent runtime does not run on macOS 12 or older — the app
-> window would open but never connect.
+- **macOS**: `.dmg` / `.app`, Apple Silicon and Intel, macOS 13 Ventura or later.
+- **Windows**: NSIS `.exe` and `.msi`, Windows 10/11 x64.
+- **Linux**: `.deb` and `.rpm` on x86_64 Linux.
 
-> The builds are **not code-signed yet**, so macOS and Windows warn on first launch.
-> This is a one-time step per install.
+Builds are not code-signed or notarized yet.
 
-**macOS** — Gatekeeper reports a downloaded unsigned app as
-*"Open Science" is damaged and can't be opened* (and right-click → Open does **not**
-bypass it). To fix:
+**macOS**: if Gatekeeper says the app is damaged or from an unidentified developer,
+install it into Applications and run:
 
-1. Open the `.dmg` and drag **Open Science** into **Applications**.
-2. Open **Terminal** (Spotlight → type "Terminal") and run:
+```bash
+xattr -cr "/Applications/Open Science.app"
+```
 
-   ```bash
-   xattr -cr "/Applications/Open Science.app"
-   ```
+**Windows**: if SmartScreen appears, choose **More info -> Run anyway**.
 
-   This removes the quarantine flag macOS puts on files downloaded from the
-   internet — nothing else is changed.
-3. Launch **Open Science** from Applications as usual.
+**Linux**:
 
-**Windows** — if SmartScreen shows "Windows protected your PC", click
-**More info → Run anyway**.
+```bash
+sudo apt install ./OpenScience_*.deb
+# or
+sudo rpm -i OpenScience_*.rpm
+```
 
-## 🚀 Getting started
+## Build from source
 
-> **Prerequisites:** [Node.js](https://nodejs.org) ≥ 20, [pnpm](https://pnpm.io) 9,
-> and the [Rust toolchain](https://rustup.rs) (for Tauri). macOS or Windows.
+Prerequisites:
 
-Build the desktop app from source:
+- Node.js >= 20
+- pnpm 9
+- Rust toolchain
+- macOS, Windows, or Linux system dependencies required by Tauri
 
 ```bash
 git clone https://github.com/ai4s-research/open-science
 cd open-science
 pnpm install
 
-# Fetch the pinned sidecars and bundled skills (kept out of git):
-bash scripts/dev/fetch-opencode.sh   # the OpenCode agent runtime
-bash scripts/dev/fetch-uv.sh         # uv, for isolated Python/Jupyter envs
-bash scripts/dev/fetch-skills.sh     # the ai4s-skills pack
+# Fetch pinned sidecars and bundled skills. These are git-ignored.
+bash scripts/dev/fetch-opencode.sh
+bash scripts/dev/fetch-uv.sh
+bash scripts/dev/fetch-skills.sh
 
-# Develop, or build an installer (.dmg / .app / NSIS / .msi):
+# Run in development or build installers.
 pnpm --filter @ai4s/desktop tauri dev
 pnpm --filter @ai4s/desktop tauri build
 ```
 
-On first launch the app starts the bundled runtime automatically and works out of the
-box with a free model — pick your own provider anytime in **Settings**.
-
-Common checks:
+Useful checks:
 
 ```bash
-pnpm test        # unit tests (Vitest)
-pnpm typecheck   # TypeScript
-pnpm lint        # ESLint
+pnpm test
+pnpm typecheck
+pnpm lint
 ```
 
-## 💬 Using it
+## Safety and privacy
 
-- **Start from a workflow** — the empty session offers one-click starters (run a demo
-  analysis, analyze your data, audit a report), or just type what you want.
-- **Answer when asked** — when the agent needs a decision it asks inline with options;
-  when it wants to run a command or write a file it asks permission (allow once /
-  always / reject). Manual approval is the default.
-- **Inspect any artifact** — click a figure, report, or notebook to open it in the
-  right pane; open its **History** to see every version and jump back to the
-  conversation that produced it.
-- **Reach anything with ⌘K** — the command palette runs every primary action.
-- **Add data** — drop files into the workspace (`~/Documents/OpenScience`) or attach
-  them in the composer; the agent reads and writes there.
+- Workspace files, raw data, session history, provenance, notebooks, and run records
+  stay local by default.
+- Command execution, file deletion, dependency installation, and remote connections
+  are human-approved flows in the desktop app.
+- Provider credentials are written to app-private runtime config, not to the
+  workspace, provenance, git, exports, or global OpenCode config.
+- Settings includes a plain-language data-flow view explaining what can be sent to
+  the selected model provider.
 
-## 🔒 Safety & privacy
-
-- **Local by default** — your workspace files, raw data, code execution, session
-  history, and provenance stay on your machine. Settings shows, in plain language,
-  exactly what is sent to your chosen model provider (your messages and the file /
-  command output the agent reads for the task) and what never leaves.
-- **Human-in-the-loop** — command execution, file deletion, dependency installs, and
-  remote connections require approval; the app ships in manual-approval mode.
-- **Credentials** — provider keys live in an app-private file, never in the workspace,
-  provenance, logs, or exports.
-
-## 🗂️ Repository layout
+## Repository layout
 
 | Path | Purpose |
 | --- | --- |
-| `apps/desktop/` | Tauri 2 + React + TypeScript + Vite desktop shell (`src/` frontend, `src-tauri/` Rust) |
-| `packages/shared/` | Shared domain types and the chart design system |
-| `packages/sdk/` | `OpenCodeClient` SDK wrapper (isolates the UI from the runtime) |
-| `packages/ui/` | Shared UI component library |
-| `runtime/skills/core/` | First-party scientific skills (`traceability-review`, `publication-figures`) |
-| `runtime/skills/external/` | The bundled `ai4s-skills` pack (fetched by script) |
-| `runtime/` | `manager`, `opencode-profile`, `mcp` configuration |
-| `docs/` | `PRD.md`, `TECHNICAL_DESIGN.md`, `REQUIREMENTS.md`, `CONNECT_YOUR_TOOLS.md` |
-| `examples/bci-trends/` | A built-in end-to-end demo project workspace |
-| `scripts/` | `release/` and `dev/` scripts (sidecar + skills fetchers) |
+| `apps/desktop/` | Tauri + React desktop app. |
+| `packages/sdk/` | `OpenCodeClient`; keeps the UI from calling OpenCode directly. |
+| `packages/shared/` | Shared domain types and chart palette. |
+| `packages/ui/` | Shared UI package. |
+| `runtime/skills/core/` | First-party scientific skills. |
+| `runtime/skills/external/` | Build-fetched external skills. |
+| `runtime/harness/` | Runtime harness knowledge and operator context. |
+| `runtime/mcp/` | MCP runtime notes/configuration. |
+| `examples/` | Built-in example workspaces. |
+| `scripts/dev/` | Sidecar, `uv`, skill fetchers, and focused regression probes. |
+| `docs/` | Product, technical, operator, connector, and research notes. |
 
-## 📌 Status & roadmap
+## Status
 
-`v0.1`, in active development — a working desktop MVP on macOS. See
-[`PROGRESS.md`](./PROGRESS.md) for the log and
-[`docs/REQUIREMENTS.md`](./docs/REQUIREMENTS.md) / [`docs/PRD.md`](./docs/PRD.md) for
-the full spec.
+Current app version: **v0.1.7**.
 
-- ✅ End-to-end workflow, artifact provenance, traceability reviewer, local Python
-  kernel + Jupyter, one-click science connectors, plain-language data-flow, chart
-  design system, command palette.
-- 🚧 Next: domain renderers (protein / chemical structures), an R kernel, a Windows
-  installer, larger multi-file projects, and HPC / Slurm compute.
+The project is a working desktop MVP in active development. The most reliable current
+implementation log is [`PROGRESS.md`](./PROGRESS.md). Product and architecture notes
+live in [`docs/PRD.md`](./docs/PRD.md) and
+[`docs/TECHNICAL_DESIGN.md`](./docs/TECHNICAL_DESIGN.md), but those documents include
+target design as well as historical status notes.
 
-## 🤝 Contributing
+Near-term work is focused on signed/notarized releases, broader Windows/Linux
+verification, auto-update, richer connector hardening, and continued reproducibility
+review.
 
-Issues and PRs are welcome. Keep changes minimal and verifiable, follow the design
-principles in [`AGENTS.md`](./AGENTS.md) (simple · explicit · clear · complete), and
-run `pnpm test`, `pnpm typecheck`, and `pnpm lint` before opening a PR.
+## Contributing
 
-## ⚖️ License
+Issues and PRs are welcome. Keep changes minimal and verifiable, follow
+[`AGENTS.md`](./AGENTS.md), and run the checks before opening a PR. For discussion,
+join the [Open Science Discord](https://discord.gg/fWNMDKcd5P) or the
+[linux.do](https://linux.do) community.
 
-[MIT](./LICENSE). Bundled third-party scientific skills and connectors carry their own
-licenses.
+## License
 
-> This is beta research tooling. Outputs are drafts — verify numbers, citations, and
-> claims, and have a domain expert review before any submission or decision.
+[MIT](./LICENSE). Bundled third-party skills and connectors keep their own licenses.
 
-## 🙏 Acknowledgments
-
-Built on [Tauri](https://tauri.app), [OpenCode](https://opencode.ai), and the
-[ai4s-skills](https://github.com/ai4s-research/ai4s-skills) pack. Thanks to
-[linux.do](https://linux.do) — a vibrant tech community where this project is shared
-and discussed.
+> Open Science is beta research tooling. Treat outputs as drafts: verify numbers,
+> citations, code, and conclusions before publication or decision-making.

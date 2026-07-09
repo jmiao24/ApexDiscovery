@@ -1,0 +1,154 @@
+<div align="center">
+
+[![Open Science — An open AI workbench for scientists](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+
+# Open Science
+
+**Un banco de trabajo abierto de IA para científicos.** Tu socio de investigación para ciencia rigurosa.
+
+Open Science es un banco de trabajo de investigación con IA, de código abierto, **local-first**, **agnóstico al modelo** y orientado a la **reproducibilidad**. No es solo un chat: conecta agentes, notebooks, archivos, figuras, informes, ejecuciones y revisión en un flujo de escritorio auditable. La UI de escritorio se publica actualmente en siete idiomas seleccionables.
+
+<p>
+  <a href="./README.md">English</a> ·
+  <a href="./README.zh.md">简体中文</a> ·
+  <a href="./README.ja.md">日本語</a> ·
+  <b>Español</b> ·
+  <a href="./README.de.md">Deutsch</a> ·
+  <a href="./README.fr.md">Français</a> ·
+  <a href="./README.ko.md">한국어</a>
+</p>
+
+<p>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/version-v0.1.7-orange" alt="v0.1.7">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platforms">
+  <img src="https://img.shields.io/badge/i18n-7%20languages-5B8DEF" alt="7 interface languages">
+  <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20React-24C8DB" alt="Built with Tauri + React">
+  <img src="https://img.shields.io/badge/runtime-OpenCode-success" alt="OpenCode runtime">
+  <a href="https://discord.gg/fWNMDKcd5P"><img src="https://img.shields.io/badge/Join-Discord-5865F2" alt="Join Discord"></a>
+</p>
+
+</div>
+
+---
+
+## Índice
+
+- [✨ Qué hace](#qué-hace)
+- [🎬 Capturas](#capturas)
+- [🧪 Capacidades actuales](#capacidades-actuales)
+- [🔌 Skills y conectores](#skills-y-conectores)
+- [📦 Instalación](#instalación)
+- [🚀 Compilar desde el código](#compilar-desde-el-código)
+- [🔒 Seguridad y privacidad](#seguridad-y-privacidad)
+- [🗂️ Estructura del repositorio](#estructura-del-repositorio)
+- [📌 Estado](#estado)
+
+## Qué hace
+
+- **Banco de trabajo, no solo chat**: planifica, aprueba, ejecuta, inspecciona artefactos, revisa y reproduce desde una sola app.
+- **Artefactos trazables**: figuras, tablas, informes, notebooks y salidas de ejecución pueden enlazarse con código, entradas, entorno, salida del modelo y conversación.
+- **Local-first**: las sesiones viven en carpetas locales; archivos, procedencia, notebooks, vistas previas y registros de ejecución permanecen en tu máquina por defecto.
+- **Agnóstico al modelo**: la UI habla con un sidecar OpenCode fijado mediante `packages/sdk`; proveedores, skills y servidores MCP siguen siendo intercambiables.
+- **Reproducibilidad primero**: ejecuciones locales, SSH/Slurm, Modal y notebook-batch pueden guardarse como run records reproducibles.
+
+## Capturas
+
+![End-to-end dose-response analysis](./docs/assets/showcase-workflow.webp)
+
+![Artifact inspector showing provenance](./docs/assets/showcase-provenance.webp)
+
+![Literature survey producing a rendered PDF manuscript](./docs/assets/showcase-literature.webp)
+
+<details>
+<summary><b>Más capturas</b></summary>
+
+<br>
+
+![Jupyter notebook](./docs/assets/showcase-notebook.webp)
+
+![Experiment sweep](./docs/assets/showcase-experiment.webp)
+
+![Skills library](./docs/assets/showcase-skills.webp)
+
+</details>
+
+## Capacidades actuales
+
+| Área | Estado actual |
+| --- | --- |
+| Escritorio | Tauri 2 + React + TypeScript + Vite, con objetivos de build para macOS, Windows y Linux. |
+| Runtime | Sidecar OpenCode incluido, iniciado por la app y aislado de la configuración/datos OpenCode del usuario. |
+| Sesiones | Chat multi-sesión, historial, carpetas fechadas, historial global entre workspaces, comandos `/` y modo shell `!`. |
+| Archivos | Navegación global y por sesión, menú contextual, abrir/revelar en el sistema, copiar ruta y servidor local de previsualización. |
+| Notebooks | Archivos `.ipynb` reales, creación Python/R, kernel local, entorno Jupyter gestionado con `uv` incluido y acción para abrir JupyterLab. |
+| Ejecuciones | Logs append-only, índice SQLite global, búsqueda/facetas/paginación, superficies locales/remotas, enlaces a salidas, logs y prompts de reproducción. |
+| Procedencia | `.openscience/provenance.jsonl` registra versiones de archivos y conecta artefactos con la ejecución o edición que los creó. |
+| Visores | PDF, imagen, vídeo, HTML, Markdown, código, CSV/TSV con gráficos, DOCX, XLSX, PPTX, moléculas, 3D mesh, genoma, FITS, DOS/DOSCAR, EIGENVAL bands, qcode, mapas de anomalías y phase. |
+| Idiomas de UI | English, 简体中文, 日本語, Español, Deutsch, Français y 한국어. Portuguese (Brazil) y Arabic están registrados, pero aún no son seleccionables. |
+
+## Skills y conectores
+
+En build se obtienen `ai4s-skills`, los skills `docx`/`pdf`/`pptx`/`xlsx` de `anthropics/skills`, y los skills propios en `runtime/skills/core/`: `traceability-review`, `stats-integrity`, `domain-check`, `large-file`, `publication-figures`, `remote-compute` y `modal-run`.
+
+Conectores MCP científicos de un clic: búsqueda bibliográfica, bases biomédicas, Materials Project, FRED, Space weather, Open-Meteo y USGS water data. También puedes agregar cualquier servidor MCP local o remoto desde Settings.
+
+## Instalación
+
+Descarga la versión más reciente desde [Releases](https://github.com/ai4s-research/open-science/releases/latest).
+
+- **macOS**: `.dmg` / `.app`, Apple Silicon e Intel, macOS 13 Ventura o posterior.
+- **Windows**: `.exe` NSIS y `.msi`, Windows 10/11 x64.
+- **Linux**: `.deb` y `.rpm` para x86_64.
+
+Los builds aún no están firmados. En macOS, si Gatekeeper bloquea la app:
+
+```bash
+xattr -cr "/Applications/Open Science.app"
+```
+
+En Windows, usa **More info -> Run anyway** en SmartScreen.
+
+## Compilar desde el código
+
+```bash
+git clone https://github.com/ai4s-research/open-science
+cd open-science
+pnpm install
+bash scripts/dev/fetch-opencode.sh
+bash scripts/dev/fetch-uv.sh
+bash scripts/dev/fetch-skills.sh
+pnpm --filter @ai4s/desktop tauri dev
+pnpm --filter @ai4s/desktop tauri build
+```
+
+Comprobaciones:
+
+```bash
+pnpm test
+pnpm typecheck
+pnpm lint
+```
+
+## Seguridad y privacidad
+
+Los archivos del workspace, datos crudos, historial, procedencia, notebooks y run records permanecen locales por defecto. La ejecución de comandos, borrado de archivos, instalación de dependencias y conexiones remotas pasan por aprobación humana. Las credenciales se guardan en configuración privada de la app, no en el workspace, procedencia, git, exportaciones ni configuración global de OpenCode.
+
+## Estructura del repositorio
+
+| Ruta | Propósito |
+| --- | --- |
+| `apps/desktop/` | App de escritorio Tauri + React. |
+| `packages/sdk/` | `OpenCodeClient`, la capa que evita llamadas directas desde la UI a OpenCode. |
+| `packages/shared/` | Tipos compartidos y paleta de gráficos. |
+| `runtime/skills/core/` | Skills científicos propios. |
+| `runtime/skills/external/` | Skills externos obtenidos durante build. |
+| `examples/` | Workspaces de ejemplo incluidos. |
+| `scripts/dev/` | Fetchers de sidecar, `uv`, skills y pruebas enfocadas. |
+| `docs/` | Notas de producto, técnica, operator, conectores e investigación. |
+
+## Estado
+
+Versión actual: **v0.1.7**. El registro de implementación más fiable es [`PROGRESS.md`](./PROGRESS.md). El trabajo cercano se centra en builds firmados/notarizados, verificación Windows/Linux, auto-update, endurecimiento de conectores y revisión de reproducibilidad. Para discutir el proyecto, únete al [Open Science Discord](https://discord.gg/fWNMDKcd5P).
+
+[MIT](./LICENSE). Open Science es tooling beta de investigación: trata las salidas como borradores y verifica números, citas, código y conclusiones antes de publicar o decidir.

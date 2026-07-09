@@ -1,5 +1,9 @@
 # Progress
 
+2026-07-09 02:36 · docs(readme): folded language support into the capability tables, restored emoji in README tables of contents, and added the Open Science Discord invite.
+
+2026-07-09 01:14 · docs(readme): refreshed README for v0.1.7 current capabilities and added README translations for all seven shipped UI languages.
+
 2026-07-08 20:47 · fix(remote-compute): remote/modal run outputs are now immutable per run. Root cause: skills required recording but still fetched reruns into stable paths like `results/humanoid-walk/humanoid_walk.mp4`, so `.openscience/remote-runs.jsonl` kept distinct hashes while old bytes were overwritten. Updated remote-compute/modal-run skills to use fresh `RESULT` directories, and both `record_run.py` helpers now reject any output path already recorded by an earlier remote run. Added a dev regression test covering both helpers; red → green verified.
 
 2026-07-08 20:28 · fix(preview): right-pane GIF/image previews no longer generate dead URLs for bare artifact names. Root cause: `preview_url` returned a URL without validating relative paths, so `humanoid_walk.gif` could become a 404 `<img>` URL (question mark) while the Files browser worked via an already-resolved path; `relativize` now validates literal paths and falls back to the existing bounded basename resolver before building the URL. Verified with a failing-then-passing regression test and full Rust lib tests (78 passed).
