@@ -103,7 +103,13 @@
       "openTitle": "Open {{path}} — the agent works on this notebook in this session"
     },
     "connBadge": {
-      "title": "OpenCode · {{status}}"
+      "title": "OpenCode · {{status}}",
+      "status": {
+        "ready": "ready",
+        "connecting": "connecting",
+        "error": "error",
+        "offline": "offline"
+      }
     },
     "status": {
       "paused": "Paused — the agent needs your answer below",

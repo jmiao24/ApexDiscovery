@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { FlaskConical, FolderOpen, Loader2, NotebookPen, PanelLeft, PlugZap } from "lucide-react";
+import type { RuntimeStatus } from "@ai4s/shared";
 import { DRAFT_KEY, rootSessionOf, subagentActivity, useRuntimeStore } from "@/lib/runtime";
 import { queryRuns } from "@/lib/runs";
 import { useOverlayTitlebar, useUiStore } from "@/lib/store";
@@ -132,8 +133,8 @@ export function LiveSessionPage() {
   // outlive the turn.
   useEffect(() => {
     if (!running) return;
-    const t = window.setInterval(() => void reconcileRunning(), 15_000);
-    return () => window.clearInterval(t);
+    const timer = window.setInterval(() => void reconcileRunning(), 15_000);
+    return () => window.clearInterval(timer);
   }, [running, reconcileRunning]);
 
   // The oldest unanswered request blocks the run — surface it. Requests from
@@ -441,13 +442,13 @@ function ThreadSkeleton() {
   );
 }
 
-function ConnBadge({ status }: { status: string }) {
+function ConnBadge({ status }: { status: RuntimeStatus }) {
   const { t } = useTranslation(["session", "common"]);
   const tone = status === "ready" ? "text-ok" : status === "error" ? "text-error" : "text-muted";
   return (
     <span
       className={cn("flex items-center gap-1.5 text-xs", tone)}
-      title={t("live.connBadge.title", { status })}
+      title={t("live.connBadge.title", { status: t(`live.connBadge.status.${status}`) })}
     >
       <span
         className={cn(
@@ -458,7 +459,7 @@ function ConnBadge({ status }: { status: string }) {
       />
       {/* Ready is the norm — a green dot says it all (hover for detail). Text
           appears only for states that need attention. */}
-      {status !== "ready" && t("live.connBadge.title", { status })}
+      {status !== "ready" && t("live.connBadge.title", { status: t(`live.connBadge.status.${status}`) })}
     </span>
   );
 }
