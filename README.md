@@ -37,6 +37,15 @@ runs, and review into one auditable desktop workflow.
 
 ---
 
+## Recognition
+
+Open Science Desktop currently achieves **state-of-the-art performance among
+evaluated AI agents** on
+[ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/)
+(agent track, as of July 9, 2026). ResearchClawBench is an end-to-end benchmark
+for autonomous scientific research, evaluating agents on reading data and related
+work, writing code, producing figures, and generating publication-style reports.
+
 ## Contents
 
 - [✨ What it does](#what-it-does)
