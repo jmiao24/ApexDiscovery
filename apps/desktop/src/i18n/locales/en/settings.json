@@ -111,5 +111,76 @@
     "importFailed": "Import failed",
     "noOpenCodeLoginFound": "No OpenCode CLI login found on this machine.",
     "importedLogin": "Imported your OpenCode CLI login."
+  },
+  "dataFlow": {
+    "title": "Privacy & data flow",
+    "subtitle": "What stays on this machine, and exactly what leaves it.",
+    "local": {
+      "heading": "Stays on this machine",
+      "workspaceFiles": "Your workspace files and raw data",
+      "codeExecution": "Code execution — the Python kernel and Jupyter run locally; datasets are processed here, never uploaded in bulk.",
+      "sessionHistory": "Session history and provenance records, in the app's private data folder.",
+      "providerKeys": "Provider keys and login tokens — an app-private file readable only by your account; never written to the workspace, provenance, logs, or exports."
+    },
+    "remote": {
+      "heading": "Sent to your model provider",
+      "noModel": "no model configured",
+      "messages": "Your messages, and the file contents / command output the agent reads to do the task you asked for.",
+      "notBackground": "Nothing is sent in the background — data leaves only during a conversation turn.",
+      "providerPolicy": "What the provider retains is governed by its own data policy."
+    },
+    "skillsHint": "Skills and MCP servers you add may make their own network calls — review them before installing."
+  },
+  "modal": {
+    "title": "Cloud compute (Modal)",
+    "subtitle": "Run GPU / elastic jobs on Modal with your own account — then just ask the agent.",
+    "recheck": "Re-check",
+    "unavailable": "Available in the desktop app.",
+    "ready": "Ready",
+    "installedNotAuthenticated": "Installed, not authenticated",
+    "notInstalled": "Not installed",
+    "readyHint": {
+      "prefix": "Ask the agent to run heavy work on Modal — it uses the",
+      "suffix": "skill and your token."
+    }
+  },
+  "remoteCompute": {
+    "title": "Remote compute",
+    "subtitle": "Run jobs on your own servers over SSH — CPU or GPU; Slurm optional. Uses your own SSH keys; nothing is installed on the machine.",
+    "unavailable": "Available in the desktop app.",
+    "empty": "No machines yet — add one below.",
+    "hostPlaceholderWithHosts": "user@host — or pick from your ~/.ssh/config ({{count}})",
+    "hostPlaceholder": "user@host.example.edu",
+    "add": "Add",
+    "adding": "Adding…",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "checking": "checking…",
+    "unreachable": "unreachable",
+    "reprobeTitle": "Re-probe this machine",
+    "removeTitle": "Remove this machine",
+    "chips": {
+      "cores_one": "{{count}} core",
+      "cores_other": "{{count}} cores",
+      "diskFree": "{{size}} free",
+      "gpuHomogeneous": "{{count}}× {{name}}",
+      "gpuMixed": "{{count}} GPUs",
+      "slurmPrefix": "Slurm "
+    },
+    "usage": {
+      "cpuLoad": "CPU load",
+      "memory": "Memory",
+      "disk": "Disk"
+    },
+    "slurm": {
+      "readingQueue": "Reading the queue…",
+      "queueUnavailable": "Queue unavailable.",
+      "noJobs": "No jobs in the queue.",
+      "cancelJob": "Cancel job {{id}}"
+    },
+    "toast": {
+      "couldNotCancel": "Could not cancel {{id}}",
+      "jobCanceled": "Job {{id}} canceled"
+    }
   }
 }

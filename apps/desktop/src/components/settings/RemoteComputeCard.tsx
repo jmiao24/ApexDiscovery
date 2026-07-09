@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, Loader2, RefreshCw, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   addComputeMachine,
   computeCancel,
@@ -17,6 +19,9 @@ import {
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 
+/** The `t` type the plain (non-component) helpers below take as a parameter. */
+type TFn = TFunction<["settings", "common"]>;
+
 /**
  * Remote compute over SSH. Connect any machine you can SSH to (CPU or GPU;
  * Slurm optional). Each machine shows capability chips and an expandable
@@ -24,6 +29,7 @@ import { cn } from "@/lib/cn";
  * host is recorded in .openscience/compute.json for the remote-compute skill.
  */
 export function RemoteComputeCard() {
+  const { t } = useTranslation(["settings", "common"]);
   const [hosts, setHosts] = useState<string[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [draft, setDraft] = useState("");
@@ -91,7 +97,7 @@ export function RemoteComputeCard() {
       await removeComputeMachine(host);
       setMachines((m) => m.filter((x) => x.host !== host));
     } catch (e) {
-      toast.error(`Could not remove: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`${t("toast.couldNotRemove")}: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -99,10 +105,12 @@ export function RemoteComputeCard() {
     try {
       await computeCancel(host, id);
     } catch (e) {
-      toast.error(`Could not cancel ${id}: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(
+        `${t("remoteCompute.toast.couldNotCancel", { id })}: ${e instanceof Error ? e.message : String(e)}`,
+      );
       return;
     }
-    toast.success(`Job ${id} canceled`);
+    toast.success(t("remoteCompute.toast.jobCanceled", { id }));
     // The cancel itself succeeded; a refetch failure just leaves the queue
     // stale, same as probe()'s jobs failure — it must not read as a cancel error.
     try {
@@ -116,21 +124,18 @@ export function RemoteComputeCard() {
   return (
     <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
       <header className="border-b border-border px-5 py-3">
-        <h2 className="font-serif text-[15px] text-text">Remote compute</h2>
-        <p className="mt-0.5 text-xs text-muted">
-          Run jobs on your own servers over SSH — CPU or GPU; Slurm optional. Uses your own SSH
-          keys; nothing is installed on the machine.
-        </p>
+        <h2 className="font-serif text-[15px] text-text">{t("remoteCompute.title")}</h2>
+        <p className="mt-0.5 text-xs text-muted">{t("remoteCompute.subtitle")}</p>
       </header>
       <div className="px-5 py-4">
         {!isTauri ? (
-          <p className="text-[13px] text-muted">Available in the desktop app.</p>
+          <p className="text-[13px] text-muted">{t("remoteCompute.unavailable")}</p>
         ) : (
           <>
             <div className="overflow-hidden rounded-input border border-border">
               {machines.length === 0 && (
                 <p className="bg-surface px-3 py-2.5 text-[13px] text-muted">
-                  No machines yet — add one below.
+                  {t("remoteCompute.empty")}
                 </p>
               )}
               {machines.map((m, i) => (
@@ -156,8 +161,8 @@ export function RemoteComputeCard() {
                     onKeyDown={(e) => e.key === "Enter" && void add()}
                     placeholder={
                       hosts.length > 0
-                        ? `user@host — or pick from your ~/.ssh/config (${hosts.length})`
-                        : "user@host.example.edu"
+                        ? t("remoteCompute.hostPlaceholderWithHosts", { count: hosts.length })
+                        : t("remoteCompute.hostPlaceholder")
                     }
                     className={inputCls("flex-1 font-mono")}
                   />
@@ -168,7 +173,7 @@ export function RemoteComputeCard() {
                   </datalist>
                   <button className={btnAccent()} onClick={() => void add()} disabled={adding || !draft.trim()}>
                     {adding ? <Loader2 size={12} className="animate-spin" /> : null}
-                    {adding ? "Adding…" : "Add"}
+                    {adding ? t("remoteCompute.adding") : t("remoteCompute.add")}
                   </button>
                 </div>
                 {addError && <p className="mt-2 text-xs text-error">{addError}</p>}
@@ -202,17 +207,18 @@ function MachineRow({
   onRemove: () => void;
   onCancel: (id: string) => void;
 }) {
+  const { t } = useTranslation(["settings", "common"]);
   const loading = probe === "loading" || probe === undefined;
   const p = typeof probe === "object" ? probe : null;
   const reachable = !!p?.reachable;
-  const chips = p && reachable ? capabilityChips(p) : [];
+  const chips = p && reachable ? capabilityChips(p, t) : [];
   return (
     <div className={cn("bg-surface", !first && "border-t border-border")}>
       <div className="flex items-center gap-2.5 px-3 py-2.5 text-[13px]">
         <button
           className="shrink-0 text-muted transition-colors hover:text-text"
           onClick={onToggle}
-          aria-label={expanded ? "Collapse" : "Expand"}
+          aria-label={expanded ? t("remoteCompute.collapse") : t("remoteCompute.expand")}
         >
           <ChevronRight size={13} className={cn("transition-transform", expanded && "rotate-90")} />
         </button>
@@ -225,22 +231,26 @@ function MachineRow({
         <span className="font-mono font-medium text-text">{machine.label || machine.host}</span>
         {machine.label && <span className="text-xs text-muted">{machine.host}</span>}
         <span className="min-w-0 flex-1 truncate text-xs text-muted">
-          {loading ? "checking…" : reachable ? chips.join(" · ") : p?.message ?? "unreachable"}
+          {loading
+            ? t("remoteCompute.checking")
+            : reachable
+              ? chips.join(" · ")
+              : p?.message ?? t("remoteCompute.unreachable")}
         </span>
         <button
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-text"
           onClick={onRefresh}
-          title="Re-probe this machine"
-          aria-label="Re-probe this machine"
+          title={t("remoteCompute.reprobeTitle")}
+          aria-label={t("remoteCompute.reprobeTitle")}
         >
           <RefreshCw size={13} className={cn(loading && "animate-spin")} />
         </button>
         <button
           className="shrink-0 text-xs text-muted transition-colors hover:text-error"
           onClick={onRemove}
-          title="Remove this machine"
+          title={t("remoteCompute.removeTitle")}
         >
-          Remove
+          {t("common:actions.remove")}
         </button>
       </div>
       {expanded && reachable && p && (
@@ -257,16 +267,18 @@ function MachineRow({
 }
 
 function UsageSnapshot({ p }: { p: ComputeProbe }) {
+  const { t } = useTranslation(["settings", "common"]);
   return (
     <div className="space-y-1.5 text-xs text-muted">
       {p.cores != null && p.load1 != null && (
         <div>
-          <span className="text-text">CPU load</span> {p.load1.toFixed(2)} / {p.cores} cores
+          <span className="text-text">{t("remoteCompute.usage.cpuLoad")}</span> {p.load1.toFixed(2)} /{" "}
+          {t("remoteCompute.chips.cores", { count: p.cores })}
         </div>
       )}
       {p.mem_total_bytes != null && (
         <div>
-          <span className="text-text">Memory</span>{" "}
+          <span className="text-text">{t("remoteCompute.usage.memory")}</span>{" "}
           {fmtBytes((p.mem_total_bytes ?? 0) - (p.mem_avail_bytes ?? 0))} / {fmtBytes(p.mem_total_bytes)}
         </div>
       )}
@@ -278,7 +290,8 @@ function UsageSnapshot({ p }: { p: ComputeProbe }) {
       ))}
       {p.disk_free_bytes != null && p.disk_total_bytes != null && (
         <div>
-          <span className="text-text">Disk</span> {fmtBytes(p.disk_free_bytes)} free /{" "}
+          <span className="text-text">{t("remoteCompute.usage.disk")}</span>{" "}
+          {t("remoteCompute.chips.diskFree", { size: fmtBytes(p.disk_free_bytes) })} /{" "}
           {fmtBytes(p.disk_total_bytes)}
         </div>
       )}
@@ -293,9 +306,10 @@ function SlurmQueue({
   jobs: ComputeJob[] | null | undefined;
   onCancel: (id: string) => void;
 }) {
-  if (jobs === undefined) return <p className="text-xs text-muted">Reading the queue…</p>;
-  if (jobs === null) return <p className="text-xs text-muted">Queue unavailable.</p>;
-  if (jobs.length === 0) return <p className="text-xs text-muted">No jobs in the queue.</p>;
+  const { t } = useTranslation(["settings", "common"]);
+  if (jobs === undefined) return <p className="text-xs text-muted">{t("remoteCompute.slurm.readingQueue")}</p>;
+  if (jobs === null) return <p className="text-xs text-muted">{t("remoteCompute.slurm.queueUnavailable")}</p>;
+  if (jobs.length === 0) return <p className="text-xs text-muted">{t("remoteCompute.slurm.noJobs")}</p>;
   return (
     <div className="space-y-1">
       {jobs.map((j) => (
@@ -315,8 +329,8 @@ function SlurmQueue({
           <button
             className="flex h-6 w-6 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-error"
             onClick={() => onCancel(j.id)}
-            title={`Cancel job ${j.id}`}
-            aria-label={`Cancel job ${j.id}`}
+            title={t("remoteCompute.slurm.cancelJob", { id: j.id })}
+            aria-label={t("remoteCompute.slurm.cancelJob", { id: j.id })}
           >
             <X size={13} />
           </button>
@@ -327,21 +341,25 @@ function SlurmQueue({
 }
 
 /** Collapsed identity chips, e.g. ["16 cores", "64 GB", "2× RTX 3090", "1.2 TB free"]. */
-function capabilityChips(p: ComputeProbe): string[] {
+function capabilityChips(p: ComputeProbe, t: TFn): string[] {
   const chips: string[] = [];
-  if (p.cores != null) chips.push(`${p.cores} cores`);
+  if (p.cores != null) chips.push(t("remoteCompute.chips.cores", { count: p.cores }));
   if (p.mem_total_bytes != null) chips.push(fmtBytes(p.mem_total_bytes));
-  const gpu = gpuSummary(p.gpus);
+  const gpu = gpuSummary(p.gpus, t);
   if (gpu) chips.push(gpu);
-  if (p.disk_free_bytes != null) chips.push(`${fmtBytes(p.disk_free_bytes)} free`);
-  if (p.slurm) chips.push(p.slurm.replace(/^slurm\s*/i, "Slurm "));
+  if (p.disk_free_bytes != null) {
+    chips.push(t("remoteCompute.chips.diskFree", { size: fmtBytes(p.disk_free_bytes) }));
+  }
+  if (p.slurm) chips.push(p.slurm.replace(/^slurm\s*/i, t("remoteCompute.chips.slurmPrefix")));
   return chips;
 }
 
-function gpuSummary(gpus: GpuInfo[]): string | null {
+function gpuSummary(gpus: GpuInfo[], t: TFn): string | null {
   if (gpus.length === 0) return null;
   const name = gpus[0].name;
-  return gpus.every((g) => g.name === name) ? `${gpus.length}× ${name}` : `${gpus.length} GPUs`;
+  return gpus.every((g) => g.name === name)
+    ? t("remoteCompute.chips.gpuHomogeneous", { count: gpus.length, name })
+    : t("remoteCompute.chips.gpuMixed", { count: gpus.length });
 }
 
 /** Bytes → short human string: 64 GB, 1.2 TB, 400 GB. */
