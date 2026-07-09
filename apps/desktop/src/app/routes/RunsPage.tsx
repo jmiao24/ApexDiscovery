@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   Check,
   ChevronDown,
@@ -45,6 +46,7 @@ interface Filter {
  * and the per-session `RunsPane` (passes `sessionId` to narrow to one session).
  */
 function RunsView({ sessionId }: { sessionId?: string }) {
+  const { t } = useTranslation(["runs", "common"]);
   const [filter, setFilter] = useState<Filter>({ search: "" });
   const [debounced, setDebounced] = useState("");
   const [rows, setRows] = useState<RunRecord[]>([]);
@@ -60,8 +62,8 @@ function RunsView({ sessionId }: { sessionId?: string }) {
 
   // Debounce the search box so each keystroke doesn't hit the index.
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(filter.search.trim()), 220);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setDebounced(filter.search.trim()), 220);
+    return () => clearTimeout(timer);
   }, [filter.search]);
 
   const base = useMemo(
@@ -152,12 +154,12 @@ function RunsView({ sessionId }: { sessionId?: string }) {
               <input
                 value={filter.search}
                 onChange={(e) => setFilter((f) => ({ ...f, search: e.target.value }))}
-                placeholder="Search command or output path…"
+                placeholder={t("searchPlaceholder")}
                 className="w-full rounded-input border border-border bg-surface py-1.5 pl-8 pr-3 text-sm text-text outline-none placeholder:text-muted focus:border-accent"
               />
             </div>
-            <FacetChip label="OK" count={okN} active={filter.status === "ok"} onClick={() => toggle("status", "ok")} dot="bg-ok" />
-            <FacetChip label="Failed" count={failedN} active={filter.status === "failed"} onClick={() => toggle("status", "failed")} dot="bg-error" />
+            <FacetChip label={t("filter.ok")} count={okN} active={filter.status === "ok"} onClick={() => toggle("status", "ok")} dot="bg-ok" />
+            <FacetChip label={t("filter.failed")} count={failedN} active={filter.status === "failed"} onClick={() => toggle("status", "failed")} dot="bg-error" />
             {remoteSurfaces.map((f) => (
               <FacetChip
                 key={f.value}
@@ -180,14 +182,14 @@ function RunsView({ sessionId }: { sessionId?: string }) {
                       active ? "bg-surface-2 text-text" : "text-muted hover:text-text",
                     )}
                   >
-                    {k === "all" ? "Anytime" : k}
+                    {k === "all" ? t("filter.anytime") : k}
                   </button>
                 );
               })}
             </div>
             {anyFilter && (
               <button className="text-xs text-link hover:underline" onClick={() => setFilter({ search: "" })}>
-                Clear
+                {t("filter.clear")}
               </button>
             )}
           </div>
@@ -195,23 +197,24 @@ function RunsView({ sessionId }: { sessionId?: string }) {
 
         {state === "loading" && (
           <div className="mt-8 flex items-center gap-2 text-sm text-muted">
-            <Loader2 size={15} className="animate-spin" /> Loading runs…
+            <Loader2 size={15} className="animate-spin" /> {t("loading")}
           </div>
         )}
 
         {state !== "loading" && rows.length === 0 && !anyFilter && (
           <div className="mt-8 rounded-input border border-dashed border-border bg-surface px-4 py-8 text-center">
             <FlaskConical size={22} className="mx-auto text-muted" strokeWidth={1.5} />
-            <p className="mt-2 text-sm font-medium text-text">No runs recorded yet</p>
+            <p className="mt-2 text-sm font-medium text-text">{t("empty.title")}</p>
             <p className="mx-auto mt-1 max-w-sm text-xs text-muted">
-              When the agent runs code (e.g. <span className="font-mono text-text">python train.py</span>), each
-              execution is recorded here with its reproducibility recipe.
+              {t("empty.bodyPrefix")}
+              <span className="font-mono text-text">{t("empty.bodyExample")}</span>
+              {t("empty.bodySuffix")}
             </p>
           </div>
         )}
 
         {state !== "loading" && rows.length === 0 && anyFilter && (
-          <div className="mt-8 text-center text-sm text-muted">No runs match your filters.</div>
+          <div className="mt-8 text-center text-sm text-muted">{t("empty.noMatch")}</div>
         )}
 
         {/* The ledger — borderless rows grouped under sticky day labels. */}
@@ -242,7 +245,7 @@ function RunsView({ sessionId }: { sessionId?: string }) {
           <div ref={sentinel} />
           {state === "loadingMore" && (
             <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted">
-              <Loader2 size={13} className="animate-spin" /> Loading more…
+              <Loader2 size={13} className="animate-spin" /> {t("loadingMore")}
             </div>
           )}
         </div>
@@ -253,6 +256,7 @@ function RunsView({ sessionId }: { sessionId?: string }) {
 /** Global Runs view (sidebar) — all runs across every session, like the global
  *  Files browser and Notebooks page. */
 export function RunsPage() {
+  const { t } = useTranslation(["runs", "common"]);
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-8 py-8">
@@ -261,10 +265,11 @@ export function RunsPage() {
             <FlaskConical size={17} strokeWidth={1.75} />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="font-serif text-xl leading-tight text-text">Runs</h1>
+            <h1 className="font-serif text-xl leading-tight text-text">{t("title")}</h1>
             <p className="mt-0.5 text-sm text-muted">
-              Every experiment execution across all sessions — command, code version, environment,
-              hardware, and outputs. <span className="text-text/70">Reproduce</span> re-runs it and compares results.
+              {t("description.prefix")}
+              <span className="text-text/70">{t("action.reproduce")}</span>
+              {t("description.suffix")}
             </p>
           </div>
         </header>
@@ -285,16 +290,17 @@ export function RunsPane({
   onClose: () => void;
   controls?: React.ReactNode;
 }) {
+  const { t } = useTranslation(["runs", "common"]);
   return (
     <div className="flex h-full flex-col border-l border-border bg-surface">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <PaneTitlebarInset />
         <FlaskConical size={14} strokeWidth={1.5} className="shrink-0 text-text" />
-        <span className="text-sm font-medium text-text">Runs</span>
-        <span className="text-xs text-muted">this session</span>
+        <span className="text-sm font-medium text-text">{t("title")}</span>
+        <span className="text-xs text-muted">{t("pane.subtitle")}</span>
         <div className="flex-1" />
         {controls}
-        <button className="text-text hover:opacity-60" aria-label="Close runs" onClick={onClose}>
+        <button className="text-text hover:opacity-60" aria-label={t("pane.closeAria")} onClick={onClose}>
           <X size={14} strokeWidth={1.5} />
         </button>
       </div>
@@ -326,6 +332,7 @@ function RunRow({
   log: { hash: string; text: string | null } | null;
   onToggleLog: (hash: string) => void;
 }) {
+  const { t } = useTranslation(["runs", "common"]);
   const failed = r.status === "failed";
   const remote = r.surface && r.surface !== "local";
   return (
@@ -342,7 +349,7 @@ function RunRow({
         )}
         <span
           className={cn("h-1.5 w-1.5 shrink-0 rounded-full", failed ? "bg-error" : "bg-ok")}
-          title={failed ? "Failed" : "Succeeded"}
+          title={failed ? t("status.failed") : t("status.succeeded")}
         />
         <span className={cn("min-w-0 flex-1 truncate font-mono text-[13px]", failed ? "text-text/70" : "text-text")}>
           {r.command}
@@ -367,18 +374,20 @@ function RunRow({
               </Chip>
             )}
             {r.env?.hardware && (
-              <Chip icon={<Cpu size={11} />} title="Hardware this run executed on">
+              <Chip icon={<Cpu size={11} />} title={t("hardware.title")}>
                 {hardwareLabel(r.env.hardware)}
               </Chip>
             )}
-            {r.env?.packages && <Chip icon={<Package size={11} />}>{r.env.packages.count} packages</Chip>}
+            {r.env?.packages && (
+              <Chip icon={<Package size={11} />}>{t("hardware.packageCount", { count: r.env.packages.count })}</Chip>
+            )}
             {r.remoteHardware && (
-              <Chip icon={<Cpu size={11} />} title="Remote hardware this run executed on">
+              <Chip icon={<Cpu size={11} />} title={t("hardware.remoteTitle")}>
                 {r.remoteHardware}
               </Chip>
             )}
             {r.host && (
-              <Chip title="Cluster host / Modal app">
+              <Chip title={t("host.title")}>
                 {r.host}
                 {r.jobId && ` · job ${r.jobId}`}
               </Chip>
@@ -386,41 +395,40 @@ function RunRow({
           </div>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-            <Action icon={<RotateCcw size={12} />} onClick={onReproduce} title="Draft a prompt that re-runs this command and compares the outputs">
-              Reproduce
+            <Action icon={<RotateCcw size={12} />} onClick={onReproduce} title={t("action.reproduceTitle")}>
+              {t("action.reproduce")}
             </Action>
             {r.logHash && (
-              <Action icon={<ScrollText size={12} />} onClick={() => onToggleLog(r.logHash!)} active={log?.hash === r.logHash} title="View captured stdout/stderr">
-                Log
+              <Action icon={<ScrollText size={12} />} onClick={() => onToggleLog(r.logHash!)} active={log?.hash === r.logHash} title={t("action.logTitle")}>
+                {t("action.log")}
               </Action>
             )}
             {onOpenConversation && (
-              <Action icon={<MessageSquare size={12} />} onClick={onOpenConversation} title="Open the conversation this run came from">
-                Open conversation
+              <Action icon={<MessageSquare size={12} />} onClick={onOpenConversation} title={t("action.openConversationTitle")}>
+                {t("action.openConversation")}
               </Action>
             )}
-            <Action icon={copied ? <Check size={12} /> : <Copy size={12} />} onClick={onCopy} title="Copy the command">
-              {copied ? "Copied" : "Copy command"}
+            <Action icon={copied ? <Check size={12} /> : <Copy size={12} />} onClick={onCopy} title={t("action.copyTitle")}>
+              {copied ? t("action.copied") : t("action.copyCommand")}
             </Action>
           </div>
 
-          {r.code && r.code.length > 0 && <FileGroup icon={<FileCode2 size={12} />} label="Code" files={r.code} />}
+          {r.code && r.code.length > 0 && <FileGroup icon={<FileCode2 size={12} />} label={t("files.code")} files={r.code} />}
           {r.outputs && r.outputs.length > 0 && (
-            <FileGroup icon={<FileOutput size={12} />} label="Outputs" files={r.outputs} openable />
+            <FileGroup icon={<FileOutput size={12} />} label={t("files.outputs")} files={r.outputs} openable />
           )}
           {!r.outputs?.length && remote && (
             <p className="text-muted">
-              Ran on {r.surface === "hpc" ? "an HPC cluster" : r.surface} — outputs live off this machine and weren't
-              captured locally.
+              {t("remote.outputsNotCaptured", { surface: r.surface === "hpc" ? t("remote.hpcLabel") : r.surface })}
             </p>
           )}
 
           {r.logHash && log?.hash === r.logHash && (
             <div className="overflow-hidden rounded-input border border-border bg-surface-2">
-              <div className="border-b border-border px-2.5 py-1 text-[11px] text-muted">stdout / stderr</div>
+              <div className="border-b border-border px-2.5 py-1 text-[11px] text-muted">{t("log.header")}</div>
               {log.text === null ? (
                 <div className="flex items-center gap-2 px-2.5 py-2 text-muted">
-                  <Loader2 size={12} className="animate-spin" /> Loading…
+                  <Loader2 size={12} className="animate-spin" /> {t("log.loading")}
                 </div>
               ) : (
                 <pre className="max-h-64 overflow-auto px-2.5 py-2 font-mono text-[11px] leading-relaxed text-text">
@@ -501,6 +509,7 @@ function Action({
 }
 
 function FileGroup({ icon, label, files, openable }: { icon: React.ReactNode; label: string; files: RunArtifact[]; openable?: boolean }) {
+  const { t } = useTranslation(["runs", "common"]);
   return (
     <div>
       <div className="mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted">
@@ -512,7 +521,7 @@ function FileGroup({ icon, label, files, openable }: { icon: React.ReactNode; la
             <li key={f.path}>
               <button
                 onClick={() => void openArtifactExternally(f.path, "workspace")}
-                title="Open this output file"
+                title={t("files.openTitle")}
                 className="group flex w-full items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-surface-2"
               >
                 <span className="min-w-0 flex-1 truncate font-mono text-text group-hover:text-link">{f.path}</span>
