@@ -130,6 +130,15 @@
       "warning": "Warning",
       "failed": "Failed"
     },
+    "verb": {
+      "Ran": "Ran",
+      "Created": "Created",
+      "Edited": "Edited",
+      "Read": "Read",
+      "Searched": "Searched",
+      "Listed": "Listed",
+      "Fetched": "Fetched"
+    },
     "group": {
       "phrase": {
         "ran_one": "ran a command",

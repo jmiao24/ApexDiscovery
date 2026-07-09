@@ -65,6 +65,11 @@ export type ToolCallStatus =
   | "warning"
   | "failed";
 
+/** Closed vocabulary emitted by `toolPresentation()` (apps/desktop/src/lib/runtime.ts)
+ *  — never derived from LLM/tool output, so each value maps to a per-key
+ *  translation (`session:tool.verb.<Verb>`), not raw text. */
+export type ToolVerb = "Ran" | "Created" | "Edited" | "Read" | "Searched" | "Listed" | "Fetched";
+
 export interface ToolCallBlock {
   kind: "tool-call";
   /** What to recognize the step by: a de-noised command, a file path, a
@@ -74,7 +79,7 @@ export interface ToolCallBlock {
   /** Right-aligned meta, e.g. "142 lines of output" or "16m 2s". */
   meta?: string;
   /** Display verb rendered before the title ("Ran", "Created", "Edited"…). */
-  verb?: string;
+  verb?: ToolVerb;
   /** OpenCode tool name ("bash", "write", …) — picks the detail renderer. */
   tool?: string;
   /** Full command line as executed (bash) — shown in the expanded detail. */

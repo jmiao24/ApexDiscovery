@@ -13,7 +13,7 @@ import {
   type SkillInfo,
   type ToolCallStatus,
 } from "@ai4s/sdk";
-import type { ArtifactBlock, RuntimeStatus, ThreadBlock } from "@ai4s/shared";
+import type { ArtifactBlock, RuntimeStatus, ThreadBlock, ToolVerb } from "@ai4s/shared";
 import {
   detectTools as probeTools,
   getApprovalMode,
@@ -1135,7 +1135,7 @@ export function toolPresentation(
   tool: string,
   title: string | undefined,
   input?: Record<string, unknown>,
-): { verb?: string; title: string } {
+): { verb?: ToolVerb; title: string } {
   const command = str(input?.command);
   const filePath = str(input?.filePath) || str(input?.path);
   const fallback = tidyToolTitle(title?.trim() || command || filePath || tool || "tool");

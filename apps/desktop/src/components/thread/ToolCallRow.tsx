@@ -41,7 +41,7 @@ export function ToolCallRow({ block, activity }: { block: ToolCallBlock; activit
         <span className={cn("shrink-0", s.className)} aria-label={t(`tool.status.${block.status}`)} role="img">
           {s.icon}
         </span>
-        {block.verb && <span className="shrink-0 text-muted">{block.verb}</span>}
+        {block.verb && <span className="shrink-0 text-muted">{t(`tool.verb.${block.verb}`)}</span>}
         <span
           className={cn(
             "flex-1 truncate",
