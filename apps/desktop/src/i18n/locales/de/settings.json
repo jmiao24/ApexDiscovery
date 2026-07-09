@@ -1,1 +1,186 @@
-{}
+{
+  "appearance": {
+    "title": "Erscheinungsbild",
+    "theme": {
+      "light": "Hell",
+      "dark": "Dunkel"
+    }
+  },
+  "language": {
+    "label": "Sprache"
+  },
+  "page": {
+    "title": "Einstellungen",
+    "subtitle": "Hier wird ausschließlich die gebündelte OpenCode-Runtime konfiguriert — eine Konfiguration, keine Kopien."
+  },
+  "runtime": {
+    "title": "Agent-Runtime",
+    "hint": "opencode serve, gesteuert über dessen HTTP- + SSE-API",
+    "connect": "Verbinden",
+    "disconnect": "Trennen"
+  },
+  "model": {
+    "title": "Modell",
+    "hint": "Die unten aufgeführten Anbieter stellen die hier wählbaren Modelle bereit",
+    "connectPrompt": "Verbinden Sie die Runtime, um Modelle zu konfigurieren.",
+    "notSet": "Nicht festgelegt — Standardmodell wählen",
+    "providersDivider": "Anbieter"
+  },
+  "providers": {
+    "modelCount_one": "{{count}} Modell",
+    "modelCount_other": "{{count}} Modelle",
+    "builtInFree": "integriert · kostenlos",
+    "removeTitle": "Anmeldedaten/Konfiguration dieses Anbieters entfernen",
+    "searchPlaceholder": "Anbieter verbinden — {{count}} durchsuchen (anthropic, openrouter, deepseek…)",
+    "apiKeyLabel": "API-Schlüssel",
+    "completeLogin": "Anmeldung abschließen",
+    "waitingForBrowser": "Warte, bis Sie im Browser fertig sind…",
+    "pasteCode": "Den Code aus dem Browser einfügen",
+    "customEndpoint": "Benutzerdefinierter Endpunkt",
+    "customEndpointHint": "selbst gehostet · lokales Ollama · OpenAI-/Anthropic-kompatibel",
+    "customNamePlaceholder": "Name — z. B. Ollama, Mein DeepSeek-Gateway",
+    "openaiCompatible": "OpenAI-kompatibel",
+    "anthropicCompatible": "Anthropic-kompatibel",
+    "customUrlPlaceholder": "Basis-URL — Ollama: http://127.0.0.1:11434/v1",
+    "customKeyPlaceholder": "API-Schlüssel — optional, für Ollama nicht erforderlich",
+    "customModelsPlaceholder": "Modell-IDs, durch Kommas getrennt",
+    "addEndpoint": "Endpunkt hinzufügen",
+    "importLogin": "Nutzen Sie bereits die OpenCode-CLI? Deren Anmeldung importieren"
+  },
+  "mcp": {
+    "title": "MCP-Server",
+    "hint": "Zusätzliche Werkzeuge für den Agenten (Model Context Protocol) — z. B. ein Jupyter- oder Browser-MCP",
+    "connectPrompt": "Verbinden Sie die Runtime, um MCP-Server zu konfigurieren.",
+    "openSource": "Open Source",
+    "enterKeyFirstTitle": "Zuerst den API-Schlüssel eingeben",
+    "settingUp": "Wird eingerichtet…",
+    "enable": "Aktivieren",
+    "freeKeySuffix": "(kostenloser Schlüssel)",
+    "getFreeKey": "Kostenlosen Schlüssel anfordern",
+    "jupyterLabel": "Jupyter",
+    "jupyterDescription": "ermöglicht dem Agenten die Steuerung echter Notebooks · isolierte Umgebung mit numpy·pandas·matplotlib, ~500 MB beim ersten Ausführen · nach der Einrichtung nutzt auch die „Ausführen“-Schaltfläche der App sie, sodass Sie und der Agent sich ein Python teilen",
+    "setUpAndEnable": "Einrichten & aktivieren",
+    "startingDownload": "Download wird gestartet…",
+    "typeLocal": "lokal",
+    "typeRemote": "remote",
+    "namePlaceholder": "Name — z. B. jupyter, playwright",
+    "commandPlaceholder": "Befehl — z. B. npx -y @playwright/mcp",
+    "urlPlaceholder": "URL — z. B. https://example.com/mcp",
+    "addServer": "Server hinzufügen"
+  },
+  "workspace": {
+    "title": "Arbeitsbereich",
+    "hint": "Local-first — jede Sitzung arbeitet in ihrem eigenen, hier erstellten, datierten Unterordner",
+    "unavailable": "in der Desktop-App verfügbar",
+    "change": "Ändern…",
+    "reveal": "Anzeigen"
+  },
+  "python": {
+    "title": "Lokaler Python-Kernel",
+    "hint": "Führt Notebook-Zellen in der App aus. Nutzt Ihre Jupyter-Umgebung, falls eingerichtet (gleiches Python wie der Agent), sonst automatische Erkennung — oder unten einen expliziten Interpreter festlegen",
+    "sourceManual": "manuell",
+    "sourceAppManaged": "app-verwaltet",
+    "sourceAutoDetected": "automatisch erkannt",
+    "checking": "wird geprüft…",
+    "pathPlaceholder": "Interpreter-Pfad — z. B. /opt/anaconda3/bin/python3 oder C:\\ProgramData\\anaconda3\\python.exe",
+    "useThisPython": "Dieses Python verwenden",
+    "clearOverride": "Überschreibung zurücksetzen"
+  },
+  "toast": {
+    "interpreterSet": "Interpreter festgelegt — Notebook-Zellen laufen jetzt darauf.",
+    "overrideCleared": "Überschreibung zurückgesetzt.",
+    "couldNotSetInterpreter": "Der Interpreter konnte nicht festgelegt werden",
+    "folderSet": "Neue Sitzungen werden in diesem Ordner erstellt.",
+    "couldNotSetFolder": "Der Ordner konnte nicht festgelegt werden",
+    "couldNotSetModel": "Das Modell konnte nicht festgelegt werden",
+    "defaultModelSet": "Standardmodell auf {{model}} gesetzt",
+    "couldNotSaveKey": "Der Schlüssel konnte nicht gespeichert werden",
+    "providerConnected": "{{providerID}} verbunden",
+    "couldNotStartLogin": "Die Anmeldung konnte nicht gestartet werden",
+    "loginDidNotComplete": "Die Anmeldung wurde nicht abgeschlossen",
+    "couldNotRemove": "Entfernen nicht möglich",
+    "providerRemoved": "{{providerID}} entfernt",
+    "couldNotAddEndpoint": "Der Endpunkt konnte nicht hinzugefügt werden",
+    "endpointFieldsRequired": "Name, Basis-URL und mindestens eine Modell-ID sind erforderlich.",
+    "endpointAdded": "{{name}} hinzugefügt — dessen Modelle sind oben jetzt auswählbar.",
+    "couldNotAddMcp": "Der MCP-Server konnte nicht hinzugefügt werden",
+    "mcpFieldsRequired": "Name und Befehl/URL sind erforderlich.",
+    "mcpAdded": "MCP-Server {{name}} hinzugefügt",
+    "couldNotRemoveMcp": "Der MCP-Server konnte nicht entfernt werden",
+    "mcpRemoved": "MCP-Server {{name}} entfernt",
+    "importFailed": "Import fehlgeschlagen",
+    "noOpenCodeLoginFound": "Auf diesem Rechner wurde keine OpenCode-CLI-Anmeldung gefunden.",
+    "importedLogin": "Ihre OpenCode-CLI-Anmeldung wurde importiert."
+  },
+  "dataFlow": {
+    "title": "Datenschutz & Datenfluss",
+    "subtitle": "Was auf diesem Rechner bleibt und was ihn genau verlässt.",
+    "local": {
+      "heading": "Bleibt auf diesem Rechner",
+      "workspaceFiles": "Ihre Arbeitsbereichsdateien und Rohdaten",
+      "codeExecution": "Codeausführung — der Python-Kernel und Jupyter laufen lokal; Datensätze werden hier verarbeitet, nie in großen Mengen hochgeladen.",
+      "sessionHistory": "Sitzungsverlauf und Herkunftsnachweise, im privaten Datenordner der App.",
+      "providerKeys": "Anbieterschlüssel und Anmelde-Token — eine app-private Datei, die nur von Ihrem Konto gelesen werden kann; wird nie in den Arbeitsbereich, die Herkunftsdaten, Protokolle oder Exporte geschrieben."
+    },
+    "remote": {
+      "heading": "An Ihren Modellanbieter gesendet",
+      "noModel": "kein Modell konfiguriert",
+      "messages": "Ihre Nachrichten sowie die Dateiinhalte / Befehlsausgaben, die der Agent liest, um die von Ihnen gewünschte Aufgabe zu erledigen.",
+      "notBackground": "Im Hintergrund wird nichts gesendet — Daten verlassen den Rechner nur während eines Gesprächsschritts.",
+      "providerPolicy": "Was der Anbieter speichert, unterliegt dessen eigener Datenrichtlinie."
+    },
+    "skillsHint": "Von Ihnen hinzugefügte Skills und MCP-Server können eigene Netzwerkaufrufe tätigen — prüfen Sie sie vor der Installation."
+  },
+  "modal": {
+    "title": "Cloud-Computing (Modal)",
+    "subtitle": "GPU-/elastische Jobs auf Modal mit Ihrem eigenen Konto ausführen — dann einfach den Agenten fragen.",
+    "recheck": "Erneut prüfen",
+    "unavailable": "In der Desktop-App verfügbar.",
+    "ready": "Bereit",
+    "installedNotAuthenticated": "Installiert, nicht authentifiziert",
+    "notInstalled": "Nicht installiert",
+    "readyHint": {
+      "prefix": "Bitten Sie den Agenten, aufwendige Arbeiten auf Modal auszuführen — er nutzt den",
+      "suffix": "Skill und Ihr Token."
+    }
+  },
+  "remoteCompute": {
+    "title": "Remote-Computing",
+    "subtitle": "Jobs auf Ihren eigenen Servern über SSH ausführen — CPU oder GPU; Slurm optional. Nutzt Ihre eigenen SSH-Schlüssel; auf dem Rechner wird nichts installiert.",
+    "unavailable": "In der Desktop-App verfügbar.",
+    "empty": "Noch keine Rechner — unten einen hinzufügen.",
+    "hostPlaceholderWithHosts": "user@host — oder aus Ihrer ~/.ssh/config wählen ({{count}})",
+    "hostPlaceholder": "user@host.example.edu",
+    "add": "Hinzufügen",
+    "adding": "Wird hinzugefügt…",
+    "collapse": "Einklappen",
+    "expand": "Ausklappen",
+    "checking": "wird geprüft…",
+    "unreachable": "nicht erreichbar",
+    "reprobeTitle": "Diesen Rechner erneut prüfen",
+    "removeTitle": "Diesen Rechner entfernen",
+    "chips": {
+      "cores_one": "{{count}} Kern",
+      "cores_other": "{{count}} Kerne",
+      "diskFree": "{{size}} frei",
+      "gpuHomogeneous": "{{count}}× {{name}}",
+      "gpuMixed": "{{count}} GPUs",
+      "slurmPrefix": "Slurm "
+    },
+    "usage": {
+      "cpuLoad": "CPU-Last",
+      "memory": "Arbeitsspeicher",
+      "disk": "Speicherplatz"
+    },
+    "slurm": {
+      "readingQueue": "Warteschlange wird gelesen…",
+      "queueUnavailable": "Warteschlange nicht verfügbar.",
+      "noJobs": "Keine Jobs in der Warteschlange.",
+      "cancelJob": "Job {{id}} abbrechen"
+    },
+    "toast": {
+      "couldNotCancel": "{{id}} konnte nicht abgebrochen werden",
+      "jobCanceled": "Job {{id}} abgebrochen"
+    }
+  }
+}
