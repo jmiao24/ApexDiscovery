@@ -20,3 +20,23 @@ describe("Settings language selector", () => {
     useUiStore.getState().setLocale("en");
   });
 });
+
+describe("Settings page strings (i18n)", () => {
+  it("renders the page title, subtitle, and card titles in English", async () => {
+    renderAt("/settings");
+    expect(await screen.findByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Everything here configures the bundled OpenCode runtime — one config, no copies."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Agent runtime")).toBeInTheDocument();
+    expect(screen.getByText("MCP servers")).toBeInTheDocument();
+    expect(screen.getByText("Workspace")).toBeInTheDocument();
+  });
+
+  it("renders the disconnected-runtime prompts and the Workspace fallback text", async () => {
+    renderAt("/settings");
+    expect(await screen.findByText("Connect the runtime to configure models.")).toBeInTheDocument();
+    expect(screen.getByText("Connect the runtime to configure MCP servers.")).toBeInTheDocument();
+    expect(screen.getByText("available in the desktop app")).toBeInTheDocument();
+  });
+});

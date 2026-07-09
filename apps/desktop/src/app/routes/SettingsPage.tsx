@@ -53,7 +53,7 @@ export function SettingsPage() {
   const setTheme = useUiStore((s) => s.setTheme);
   const locale = useUiStore((s) => s.locale);
   const setLocale = useUiStore((s) => s.setLocale);
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   // Select each field individually. A bare `useRuntimeStore()` subscribed to the
   // WHOLE store, so every unrelated mutation (session events, streaming, idle
   // checks) re-rendered this page — in the packaged WKWebView that repaint storm
@@ -161,10 +161,10 @@ export function SettingsPage() {
     try {
       await setPythonPath(path);
       setPyPath("");
-      toast.success(path ? "Interpreter set — notebook cells now run on it." : "Override cleared.");
+      toast.success(path ? t("toast.interpreterSet") : t("toast.overrideCleared"));
       refreshPython();
     } catch (e) {
-      toast.error(`Could not set the interpreter: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`${t("toast.couldNotSetInterpreter")}: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setSavingPy(false);
     }
@@ -175,9 +175,9 @@ export function SettingsPage() {
     if (!picked) return;
     try {
       setWsPath(await setWorkspaceBase(picked));
-      toast.success("New sessions will be created in this folder.");
+      toast.success(t("toast.folderSet"));
     } catch (err) {
-      toast.error(`Could not set the folder: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`${t("toast.couldNotSetFolder")}: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -209,22 +209,22 @@ export function SettingsPage() {
   };
 
   const saveModel = (model: string) =>
-    run("Could not set the model", async () => {
+    run(t("toast.couldNotSetModel"), async () => {
       if (model) await getClient()!.setDefaultModel(model);
-      toast.success(`Default model set to ${model}`);
+      toast.success(t("toast.defaultModelSet", { model }));
     });
 
   const saveKey = (providerID: string) =>
-    run("Could not save the key", async () => {
+    run(t("toast.couldNotSaveKey"), async () => {
       await getClient()!.setProviderApiKey(providerID, keyInput.trim());
       cancelOAuth(); // a pending browser login for this panel is now moot
       setKeyInput("");
       setConnectQuery("");
-      toast.success(`${providerID} connected`);
+      toast.success(t("toast.providerConnected", { providerID }));
     });
 
   const startOAuth = (providerID: string, methodIndex: number, inputs?: Record<string, string>) =>
-    run("Could not start the login", async () => {
+    run(t("toast.couldNotStartLogin"), async () => {
       invalidateOauthWait(); // this flow replaces any pending one
       const gen = oauthGen.current;
       const auth = await getClient()!.oauthAuthorize(providerID, methodIndex, inputs);
@@ -250,12 +250,12 @@ export function SettingsPage() {
         return;
       }
       setOauth(null);
-      toast.success(`${providerID} connected`);
+      toast.success(t("toast.providerConnected", { providerID }));
       await refreshAll();
     } catch (e) {
       if (gen !== oauthGen.current) return; // cancelled — the abort is expected
       setOauth(null);
-      toast.error(`Login did not complete: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`${t("toast.loginDidNotComplete")}: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       if (oauthAbort.current === abort) oauthAbort.current = null;
     }
@@ -268,18 +268,18 @@ export function SettingsPage() {
   };
 
   const completeOAuth = () =>
-    run("Login did not complete", async () => {
+    run(t("toast.loginDidNotComplete"), async () => {
       if (!oauth) return;
       const { providerID, methodIndex } = oauth;
       invalidateOauthWait(); // the pasted code supersedes any browser wait
       await getClient()!.oauthCallback(providerID, methodIndex, codeInput.trim() || undefined);
-      toast.success(`${providerID} connected`);
+      toast.success(t("toast.providerConnected", { providerID }));
       setOauth(null);
       setCodeInput("");
     });
 
   const disconnectProvider = (providerID: string) =>
-    run("Could not remove", async () => {
+    run(t("toast.couldNotRemove"), async () => {
       if (customIds.includes(providerID)) {
         // Custom endpoints live in the config file; removal restarts the sidecar.
         await removeConfigEntry("provider", providerID);
@@ -287,15 +287,15 @@ export function SettingsPage() {
       } else {
         await getClient()!.removeProviderAuth(providerID);
       }
-      toast.success(`${providerID} removed`);
+      toast.success(t("toast.providerRemoved", { providerID }));
     });
 
   const saveCustom = () =>
-    run("Could not add the endpoint", async () => {
+    run(t("toast.couldNotAddEndpoint"), async () => {
       const id = cName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       const models = cModels.split(",").map((s) => s.trim()).filter(Boolean);
       if (!id || !cUrl.trim() || models.length === 0) {
-        toast.error("Name, base URL and at least one model id are required.");
+        toast.error(t("toast.endpointFieldsRequired"));
         return;
       }
       await getClient()!.addCustomProvider(id, {
@@ -305,7 +305,7 @@ export function SettingsPage() {
         apiKey: cKey.trim() || undefined,
         models,
       });
-      toast.success(`${cName.trim()} added — its models are now selectable above.`);
+      toast.success(t("toast.endpointAdded", { name: cName.trim() }));
       setShowCustom(false);
       setCName("");
       setCUrl("");
@@ -314,11 +314,11 @@ export function SettingsPage() {
     });
 
   const addMcp = () =>
-    run("Could not add the MCP server", async () => {
+    run(t("toast.couldNotAddMcp"), async () => {
       const name = mName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       const target = mTarget.trim();
       if (!name || !target) {
-        toast.error("Name and command/URL are required.");
+        toast.error(t("toast.mcpFieldsRequired"));
         return;
       }
       await getClient()!.addMcpServer(
@@ -327,7 +327,7 @@ export function SettingsPage() {
           ? { type: "local", command: target.split(/\s+/), enabled: true }
           : { type: "remote", url: target, enabled: true },
       );
-      toast.success(`MCP server ${name} added`);
+      toast.success(t("toast.mcpAdded", { name }));
       setMName("");
       setMTarget("");
     });
@@ -342,22 +342,22 @@ export function SettingsPage() {
   };
 
   const removeMcp = (name: string) =>
-    run("Could not remove the MCP server", async () => {
+    run(t("toast.couldNotRemoveMcp"), async () => {
       await removeConfigEntry("mcp", name);
       await useRuntimeStore.getState().connectRetry();
-      toast.success(`MCP server ${name} removed`);
+      toast.success(t("toast.mcpRemoved", { name }));
     });
 
   const importLogin = () =>
-    run("Import failed", async () => {
+    run(t("toast.importFailed"), async () => {
       const found = await importOpenCodeLogin();
       if (!found) {
-        toast.error("No OpenCode CLI login found on this machine.");
+        toast.error(t("toast.noOpenCodeLoginFound"));
         return;
       }
       // The sidecar restarted with the imported credentials — reconnect.
       await useRuntimeStore.getState().connectRetry();
-      toast.success("Imported your OpenCode CLI login.");
+      toast.success(t("toast.importedLogin"));
     });
 
   // Resolve the search box to a catalog entry (by id or exact name).
@@ -375,13 +375,11 @@ export function SettingsPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-2xl px-8 pb-16 pt-8">
-        <h1 className="font-serif text-xl text-text">Settings</h1>
-        <p className="mt-0.5 text-xs text-muted">
-          Everything here configures the bundled OpenCode runtime — one config, no copies.
-        </p>
+        <h1 className="font-serif text-xl text-text">{t("page.title")}</h1>
+        <p className="mt-0.5 text-xs text-muted">{t("page.subtitle")}</p>
 
         {/* ---- Agent runtime ---- */}
-        <Card title="Agent runtime" hint="opencode serve, driven over its HTTP + SSE API">
+        <Card title={t("runtime.title")} hint={t("runtime.hint")}>
           <div className="flex items-center gap-2">
             <input
               value={serverUrl}
@@ -391,11 +389,11 @@ export function SettingsPage() {
             />
             {connected ? (
               <button onClick={disconnect} className={btnGhost()}>
-                Disconnect
+                {t("runtime.disconnect")}
               </button>
             ) : (
               <button onClick={connect} className={btnAccent()}>
-                Connect
+                {t("runtime.connect")}
               </button>
             )}
           </div>
@@ -417,9 +415,9 @@ export function SettingsPage() {
         </Card>
 
         {/* ---- Models & providers ---- */}
-        <Card title="Model" hint="Providers below supply the models you can pick here">
+        <Card title={t("model.title")} hint={t("model.hint")}>
           {!connected ? (
-            <p className="text-[13px] text-muted">Connect the runtime to configure models.</p>
+            <p className="text-[13px] text-muted">{t("model.connectPrompt")}</p>
           ) : (
             <>
               <div className="relative">
@@ -429,7 +427,7 @@ export function SettingsPage() {
                   disabled={busy}
                   className={cn(inputCls("w-full appearance-none pr-9"), "cursor-pointer")}
                 >
-                  <option value="">Not set — pick a default model</option>
+                  <option value="">{t("model.notSet")}</option>
                   {providers.map((p) => (
                     <optgroup key={p.id} label={p.name}>
                       {p.models.map((m) => (
@@ -446,7 +444,7 @@ export function SettingsPage() {
                 />
               </div>
 
-              <Divider label="Providers" />
+              <Divider label={t("model.providersDivider")} />
 
               <div className="overflow-hidden rounded-input border border-border">
                 {providers.map((p, i) => (
@@ -460,21 +458,21 @@ export function SettingsPage() {
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-ok" />
                     <span className="font-medium text-text">{p.name}</span>
                     <span className="text-xs text-muted">
-                      {p.models.length} model{p.models.length === 1 ? "" : "s"}
+                      {t("providers.modelCount", { count: p.models.length })}
                     </span>
                     <div className="flex-1" />
                     {p.id === "opencode" ? (
                       <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted ring-1 ring-border">
-                        built-in · free
+                        {t("providers.builtInFree")}
                       </span>
                     ) : (
                       <button
                         className="text-xs text-muted transition-colors hover:text-error"
                         onClick={() => void disconnectProvider(p.id)}
                         disabled={busy}
-                        title="Remove this provider's credentials/config"
+                        title={t("providers.removeTitle")}
                       >
-                        Remove
+                        {t("common:actions.remove")}
                       </button>
                     )}
                   </div>
@@ -495,7 +493,7 @@ export function SettingsPage() {
                         cancelOAuth();
                         setPromptInputs({});
                       }}
-                      placeholder={`Connect a provider — search ${catalog.length} (anthropic, openrouter, deepseek…)`}
+                      placeholder={t("providers.searchPlaceholder", { count: catalog.length })}
                       className={inputCls("w-full pl-8")}
                     />
                     <datalist id="provider-catalog">
@@ -558,7 +556,7 @@ export function SettingsPage() {
                           type="password"
                           value={keyInput}
                           onChange={(e) => setKeyInput(e.target.value)}
-                          placeholder={`${selected.name} API key${selected.env[0] ? ` (${selected.env[0]})` : ""}`}
+                          placeholder={`${selected.name} ${t("providers.apiKeyLabel")}${selected.env[0] ? ` (${selected.env[0]})` : ""}`}
                           className={inputCls("flex-1 font-mono")}
                         />
                         <button
@@ -566,7 +564,7 @@ export function SettingsPage() {
                           onClick={() => void saveKey(selected.id)}
                           disabled={busy || !keyInput.trim()}
                         >
-                          <Check size={13} /> Save
+                          <Check size={13} /> {t("common:actions.save")}
                         </button>
                       </div>
                     </div>
@@ -580,7 +578,7 @@ export function SettingsPage() {
                           <input
                             value={codeInput}
                             onChange={(e) => setCodeInput(e.target.value)}
-                            placeholder="Paste the code from the browser"
+                            placeholder={t("providers.pasteCode")}
                             className={inputCls("w-full font-mono")}
                           />
                           <button
@@ -593,18 +591,18 @@ export function SettingsPage() {
                             ) : (
                               <Check size={13} />
                             )}
-                            Complete login
+                            {t("providers.completeLogin")}
                           </button>
                         </>
                       ) : (
                         <div className="flex items-center gap-2 text-xs text-muted">
                           <Loader2 size={12} className="shrink-0 animate-spin" />
-                          Waiting for you to finish in the browser…
+                          {t("providers.waitingForBrowser")}
                           <button
                             className="text-muted underline transition-colors hover:text-text"
                             onClick={cancelOAuth}
                           >
-                            Cancel
+                            {t("common:actions.cancel")}
                           </button>
                         </div>
                       )}
@@ -623,9 +621,9 @@ export function SettingsPage() {
                       size={13}
                       className={cn("transition-transform", showCustom && "rotate-90")}
                     />
-                    Custom endpoint
+                    {t("providers.customEndpoint")}
                     <span className="text-xs text-muted/70">
-                      self-hosted · local Ollama · OpenAI/Anthropic-compatible
+                      {t("providers.customEndpointHint")}
                     </span>
                   </button>
                   {showCustom && (
@@ -634,7 +632,7 @@ export function SettingsPage() {
                         <input
                           value={cName}
                           onChange={(e) => setCName(e.target.value)}
-                          placeholder="Name — e.g. Ollama, My DeepSeek gateway"
+                          placeholder={t("providers.customNamePlaceholder")}
                           className={inputCls("flex-1")}
                         />
                         <select
@@ -642,14 +640,14 @@ export function SettingsPage() {
                           onChange={(e) => setCNpm(e.target.value)}
                           className={inputCls("w-[190px]")}
                         >
-                          <option value="@ai-sdk/openai-compatible">OpenAI-compatible</option>
-                          <option value="@ai-sdk/anthropic">Anthropic-compatible</option>
+                          <option value="@ai-sdk/openai-compatible">{t("providers.openaiCompatible")}</option>
+                          <option value="@ai-sdk/anthropic">{t("providers.anthropicCompatible")}</option>
                         </select>
                       </div>
                       <input
                         value={cUrl}
                         onChange={(e) => setCUrl(e.target.value)}
-                        placeholder="Base URL — Ollama: http://127.0.0.1:11434/v1"
+                        placeholder={t("providers.customUrlPlaceholder")}
                         className={inputCls("w-full font-mono")}
                       />
                       <div className="flex gap-2">
@@ -657,18 +655,18 @@ export function SettingsPage() {
                           type="password"
                           value={cKey}
                           onChange={(e) => setCKey(e.target.value)}
-                          placeholder="API key — optional, Ollama needs none"
+                          placeholder={t("providers.customKeyPlaceholder")}
                           className={inputCls("flex-1 font-mono")}
                         />
                         <input
                           value={cModels}
                           onChange={(e) => setCModels(e.target.value)}
-                          placeholder="Model ids, comma-separated"
+                          placeholder={t("providers.customModelsPlaceholder")}
                           className={inputCls("flex-1 font-mono")}
                         />
                       </div>
                       <button className={btnAccent()} onClick={() => void saveCustom()} disabled={busy}>
-                        Add endpoint
+                        {t("providers.addEndpoint")}
                       </button>
                     </div>
                   )}
@@ -682,7 +680,7 @@ export function SettingsPage() {
                   disabled={busy}
                 >
                   <Download size={12} />
-                  Already use the OpenCode CLI? Import its login
+                  {t("providers.importLogin")}
                 </button>
               )}
             </>
@@ -690,12 +688,9 @@ export function SettingsPage() {
         </Card>
 
         {/* ---- MCP servers ---- */}
-        <Card
-          title="MCP servers"
-          hint="Extra tools for the agent (Model Context Protocol) — e.g. a Jupyter or browser MCP"
-        >
+        <Card title={t("mcp.title")} hint={t("mcp.hint")}>
           {!connected ? (
-            <p className="text-[13px] text-muted">Connect the runtime to configure MCP servers.</p>
+            <p className="text-[13px] text-muted">{t("mcp.connectPrompt")}</p>
           ) : (
             <div className="overflow-hidden rounded-input border border-border">
               {/* Curated open-source science connectors — one-click enable. */}
@@ -716,7 +711,7 @@ export function SettingsPage() {
                               {c.discipline}
                             </span>
                             <span className="ml-1.5 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted ring-1 ring-border">
-                              open source
+                              {t("mcp.openSource")}
                             </span>
                             <div className="truncate text-xs text-muted">{c.description}</div>
                             <div className="truncate font-mono text-[11px] text-muted/70">
@@ -728,14 +723,14 @@ export function SettingsPage() {
                             className={btnAccent("h-8")}
                             onClick={() => void enableConnector(c.id)}
                             disabled={enablingConnector !== null || busy || keyMissing}
-                            title={keyMissing ? "Enter the API key first" : undefined}
+                            title={keyMissing ? t("mcp.enterKeyFirstTitle") : undefined}
                           >
                             {enablingConnector === c.id ? (
                               <>
-                                <Loader2 size={12} className="animate-spin" /> Setting up…
+                                <Loader2 size={12} className="animate-spin" /> {t("mcp.settingUp")}
                               </>
                             ) : (
-                              "Enable"
+                              t("mcp.enable")
                             )}
                           </button>
                         </div>
@@ -747,7 +742,7 @@ export function SettingsPage() {
                               onChange={(e) =>
                                 setConnectorKeys((k) => ({ ...k, [c.id]: e.target.value }))
                               }
-                              placeholder={`${c.apiKeyEnv} (free key)`}
+                              placeholder={`${c.apiKeyEnv} ${t("mcp.freeKeySuffix")}`}
                               className="h-8 min-w-0 flex-1 rounded-input border border-border bg-surface-2 px-2 font-mono text-[12px] text-text placeholder:text-muted/60"
                             />
                             {c.apiKeyUrl && (
@@ -757,7 +752,7 @@ export function SettingsPage() {
                                 rel="noreferrer"
                                 className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-accent hover:underline"
                               >
-                                <ExternalLink size={11} /> Get a free key
+                                <ExternalLink size={11} /> {t("mcp.getFreeKey")}
                               </a>
                             )}
                           </div>
@@ -771,10 +766,9 @@ export function SettingsPage() {
                 <div className="flex items-center gap-2.5 border-b border-border bg-surface px-3 py-2.5 text-[13px]">
                   <NotebookPen size={14} className="shrink-0 text-muted" />
                   <div className="min-w-0 flex-1">
-                    <span className="font-medium text-text">Jupyter</span>
+                    <span className="font-medium text-text">{t("mcp.jupyterLabel")}</span>
                     <span className="ml-2 text-xs text-muted">
-                      lets the agent drive real notebooks · isolated env w/ numpy·pandas·matplotlib, ~500 MB on first run ·
-                      once set up, the app's Run button uses it too, so you and the agent share one Python
+                      {t("mcp.jupyterDescription")}
                     </span>
                   </div>
                   <button
@@ -784,12 +778,12 @@ export function SettingsPage() {
                   >
                     {jupyterBusy ? (
                       <>
-                        <Loader2 size={12} className="animate-spin" /> Setting up…
+                        <Loader2 size={12} className="animate-spin" /> {t("mcp.settingUp")}
                       </>
                     ) : jupyter?.installed ? (
-                      "Enable"
+                      t("mcp.enable")
                     ) : (
-                      "Set up & enable"
+                      t("mcp.setUpAndEnable")
                     )}
                   </button>
                 </div>
@@ -800,7 +794,7 @@ export function SettingsPage() {
                 <div className="flex items-center gap-2 border-b border-border bg-surface-2/50 px-3 py-1.5">
                   <Loader2 size={11} className="shrink-0 animate-spin text-muted" />
                   <span className="truncate font-mono text-[11px] text-muted">
-                    {setupLine ?? "starting download…"}
+                    {setupLine ?? t("mcp.startingDownload")}
                   </span>
                 </div>
               )}
@@ -838,7 +832,7 @@ export function SettingsPage() {
                     onClick={() => void removeMcp(s.name)}
                     disabled={busy}
                   >
-                    Remove
+                    {t("common:actions.remove")}
                   </button>
                 </div>
               ))}
@@ -853,7 +847,7 @@ export function SettingsPage() {
                   <input
                     value={mName}
                     onChange={(e) => setMName(e.target.value)}
-                    placeholder="Name — e.g. jupyter, playwright"
+                    placeholder={t("mcp.namePlaceholder")}
                     className={inputCls("flex-1")}
                   />
                   <select
@@ -861,8 +855,8 @@ export function SettingsPage() {
                     onChange={(e) => setMType(e.target.value as "local" | "remote")}
                     className={inputCls("w-[110px]")}
                   >
-                    <option value="local">local</option>
-                    <option value="remote">remote</option>
+                    <option value="local">{t("mcp.typeLocal")}</option>
+                    <option value="remote">{t("mcp.typeRemote")}</option>
                   </select>
                 </div>
                 <div className="flex gap-2">
@@ -871,13 +865,13 @@ export function SettingsPage() {
                     onChange={(e) => setMTarget(e.target.value)}
                     placeholder={
                       mType === "local"
-                        ? "Command — e.g. npx -y @playwright/mcp"
-                        : "URL — e.g. https://example.com/mcp"
+                        ? t("mcp.commandPlaceholder")
+                        : t("mcp.urlPlaceholder")
                     }
                     className={inputCls("flex-1 font-mono")}
                   />
                   <button className={btnAccent()} onClick={() => void addMcp()} disabled={busy}>
-                    Add server
+                    {t("mcp.addServer")}
                   </button>
                 </div>
               </div>
@@ -886,10 +880,7 @@ export function SettingsPage() {
         </Card>
 
         {/* ---- Workspace ---- */}
-        <Card
-          title="Workspace"
-          hint="Local-first — each session works in its own dated subfolder created here"
-        >
+        <Card title={t("workspace.title")} hint={t("workspace.hint")}>
           <div className="flex items-center gap-2">
             <span
               className={cn(
@@ -897,15 +888,15 @@ export function SettingsPage() {
                 "select-all bg-surface-2 text-muted",
               )}
             >
-              {wsPath ?? "available in the desktop app"}
+              {wsPath ?? t("workspace.unavailable")}
             </span>
             {wsPath && (
               <>
                 <button className={btnGhost("gap-1.5")} onClick={() => void changeWorkspaceBase()}>
-                  Change…
+                  {t("workspace.change")}
                 </button>
                 <button className={btnGhost("gap-1.5")} onClick={() => void openWorkspaceBase()}>
-                  <FolderOpen size={13} /> Reveal
+                  <FolderOpen size={13} /> {t("workspace.reveal")}
                 </button>
               </>
             )}
@@ -914,10 +905,7 @@ export function SettingsPage() {
 
         {/* ---- Local Python kernel ---- */}
         {isTauri && (
-          <Card
-            title="Local Python kernel"
-            hint="Runs notebook cells in the app. Uses your Jupyter environment when set up (same Python as the agent), else auto-detects — or set an explicit interpreter below"
-          >
+          <Card title={t("python.title")} hint={t("python.hint")}>
             <div className="flex items-center gap-2 text-[13px]">
               <span
                 className={cn(
@@ -932,15 +920,15 @@ export function SettingsPage() {
                   </span>
                   <span className="shrink-0 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted ring-1 ring-border">
                     {pyInfo.source === "manual"
-                      ? "manual"
+                      ? t("python.sourceManual")
                       : pyInfo.source === "jupyter-env"
-                        ? "app-managed"
-                        : "auto-detected"}
+                        ? t("python.sourceAppManaged")
+                        : t("python.sourceAutoDetected")}
                   </span>
                 </>
               ) : (
                 <span className="min-w-0 flex-1 text-error">
-                  {pyInfo?.error ?? "checking…"}
+                  {pyInfo?.error ?? t("python.checking")}
                 </span>
               )}
             </div>
@@ -948,10 +936,7 @@ export function SettingsPage() {
               <input
                 value={pyPath}
                 onChange={(e) => setPyPath(e.target.value)}
-                placeholder={
-                  pyInfo?.configured ??
-                  "Interpreter path — e.g. /opt/anaconda3/bin/python3 or C:\\ProgramData\\anaconda3\\python.exe"
-                }
+                placeholder={pyInfo?.configured ?? t("python.pathPlaceholder")}
                 className={inputCls("flex-1 font-mono")}
                 spellCheck={false}
               />
@@ -960,7 +945,7 @@ export function SettingsPage() {
                 onClick={() => void savePythonPath(pyPath.trim())}
                 disabled={savingPy || !pyPath.trim()}
               >
-                {savingPy ? <Loader2 size={12} className="animate-spin" /> : "Use this Python"}
+                {savingPy ? <Loader2 size={12} className="animate-spin" /> : t("python.useThisPython")}
               </button>
               {pyInfo?.configured && (
                 <button
@@ -968,7 +953,7 @@ export function SettingsPage() {
                   onClick={() => void savePythonPath("")}
                   disabled={savingPy}
                 >
-                  Clear override
+                  {t("python.clearOverride")}
                 </button>
               )}
             </div>
