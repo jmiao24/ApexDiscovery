@@ -37,6 +37,10 @@ runs, and review into one auditable desktop workflow.
 
 ---
 
+🎉 **Recognition:** Open Science Desktop ranks #1 by scored-task average on [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/), an end-to-end benchmark for autonomous scientific research agents (Pass@1 leaderboard, July 9, 2026).
+
+---
+
 ## Contents
 
 - [✨ What it does](#what-it-does)
