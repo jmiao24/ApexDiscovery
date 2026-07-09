@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-09 06:00 · release(v0.1.8): bumped version to 0.1.8 and tagged; CI builds macOS/Windows/Linux installers into a draft GitHub Release. Covers the full i18n rollout (7 UI languages) and Open Science Desktop rebrand since v0.1.7.
+
 2026-07-09 05:40 · docs(brand): updated the Open Science Desktop tagline and GitHub description/topics to include Linux alongside macOS and Windows.
 
 2026-07-09 04:02 · docs(brand): repositioned the project as Open Science Desktop in README/agent metadata, added a neutral OpenScience comparison page, and updated the GitHub repo description/topics.
