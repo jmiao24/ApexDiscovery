@@ -51,7 +51,12 @@
     },
     "agentsSection": {
       "sectionTitle": "Agents ({{count}})",
-      "empty": "No agents reported."
+      "empty": "No agents reported.",
+      "agentMode": {
+        "primary": "primary",
+        "subagent": "subagent",
+        "all": "all"
+      }
     },
     "skillsListSection": {
       "sectionTitle": "Skills ({{count}})",

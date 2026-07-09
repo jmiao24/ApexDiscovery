@@ -87,9 +87,11 @@ export function SkillsPage() {
           <>
             <Section title={t("skills.agentsSection.sectionTitle", { count: agents.length })} icon={<Bot size={15} />}>
               {agents.length === 0 && <Empty>{t("skills.agentsSection.empty")}</Empty>}
-              {agents.map((a) => (
-                <RowItem key={a.name} name={a.name} desc={a.description} tag={a.mode} />
-              ))}
+              {agents.map((a) => {
+                const mode = modeOf(a.mode);
+                const modeLabel = mode ? t(`skills.agentsSection.agentMode.${mode}`) : a.mode;
+                return <RowItem key={a.name} name={a.name} desc={a.description} tag={modeLabel} />;
+              })}
             </Section>
             <Section title={t("skills.skillsListSection.sectionTitle", { count: skills.length })} icon={<Puzzle size={15} />}>
               {skills.length === 0 && <Empty>{t("skills.skillsListSection.empty")}</Empty>}
@@ -124,6 +126,16 @@ function sourceOf(location?: string): SkillSource | undefined {
   if (location.includes("/builtin/")) return "builtin";
   if (location.includes("/.opencode/")) return "project";
   return "user";
+}
+
+// AgentInfo.mode is typed `string` (external SDK), but OpenCode only ever
+// emits "primary" | "subagent" | "all" — see useRuntimeStore's a.mode ===
+// "primary" check. Narrow to the known set so we can translate it; unknown
+// values (future SDK additions) fall back to the raw string at the call site.
+type AgentMode = "primary" | "subagent" | "all";
+
+function modeOf(mode?: string): AgentMode | undefined {
+  return mode === "primary" || mode === "subagent" || mode === "all" ? mode : undefined;
 }
 
 function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
