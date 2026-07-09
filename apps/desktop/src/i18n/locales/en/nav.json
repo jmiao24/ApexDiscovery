@@ -31,7 +31,13 @@
   "status": {
     "runtime": "Runtime",
     "model": "Model",
-    "modelNotSet": "not set"
+    "modelNotSet": "not set",
+    "values": {
+      "ready": "ready",
+      "connecting": "connecting",
+      "error": "error",
+      "offline": "offline"
+    }
   },
   "commandPalette": {
     "ariaLabel": "Command palette",

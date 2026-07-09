@@ -25,7 +25,11 @@ export function StatusPills() {
 
   return (
     <div className="flex flex-col gap-1 text-xs text-muted">
-      <Pill dot={RUNTIME_TONE[runtime]} label={t("status.runtime")} value={runtime} />
+      <Pill
+        dot={RUNTIME_TONE[runtime]}
+        label={t("status.runtime")}
+        value={t(`status.values.${runtime}`)}
+      />
       <Pill
         dot={MODEL_TONE[model]}
         label={t("status.model")}
