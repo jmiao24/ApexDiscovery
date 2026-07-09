@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
 import { Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Session } from "@ai4s/shared";
 import { BlockList } from "./BlockList";
 
 export function ThreadView({ session }: { session: Session }) {
+  const { t } = useTranslation(["session", "common"]);
   const isExample = session.group === "Examples";
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -11,7 +13,7 @@ export function ThreadView({ session }: { session: Session }) {
         <h1 className="truncate text-[13px] font-medium text-text">{session.title}</h1>
         {isExample && (
           <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] text-muted ring-1 ring-border">
-            Example · read-only
+            {t("thread.exampleBadge")}
           </span>
         )}
       </div>
@@ -23,12 +25,12 @@ export function ThreadView({ session }: { session: Session }) {
       <div className="px-8 pb-5 pt-2">
         <div className="mx-auto flex max-w-[760px] items-center gap-3 rounded-card border border-border bg-surface-2/60 px-4 py-3 text-sm text-muted">
           <Sparkles size={16} className="text-accent" />
-          <span>This is a sample session. Start a live agent session to chat for real.</span>
+          <span>{t("thread.sampleNotice")}</span>
           <Link
             to="/live"
             className="ml-auto rounded-input bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90"
           >
-            New session
+            {t("starters.newSession")}
           </Link>
         </div>
       </div>

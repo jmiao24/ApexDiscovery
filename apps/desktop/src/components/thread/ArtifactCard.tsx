@@ -8,6 +8,7 @@ import {
   Paperclip,
   SquareArrowOutUpRight,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ArtifactBlock, ArtifactKind } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 
@@ -29,6 +30,7 @@ export function ArtifactCard({
   block: ArtifactBlock;
   onOpen?: (a: ArtifactBlock) => void;
 }) {
+  const { t } = useTranslation(["session", "common"]);
   return (
     <div
       className={cn(
@@ -41,13 +43,15 @@ export function ArtifactCard({
       <span className="shrink-0 text-accent">{ICON[block.artifact]}</span>
       <span className="truncate font-medium text-text">{block.filename}</span>
       <span className="shrink-0 rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted ring-1 ring-border">
-        {block.artifact}
+        {t(`artifact.kind.${block.artifact}`)}
       </span>
-      <span className="shrink-0 truncate text-xs text-muted">· via {block.tool}</span>
+      <span className="shrink-0 truncate text-xs text-muted">
+        {t("artifact.via", { tool: block.tool })}
+      </span>
       <div className="flex-1" />
       {onOpen && (
         <span className="flex shrink-0 items-center gap-1 rounded-input px-2 py-1 text-xs text-link">
-          <SquareArrowOutUpRight size={13} /> Open
+          <SquareArrowOutUpRight size={13} /> {t("artifact.open")}
         </span>
       )}
     </div>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ThreadBlock, ToolCallBlock } from "@ai4s/shared";
+import i18n from "@/i18n";
 import { cn } from "@/lib/cn";
 import { DiffView } from "@/components/code-viewer/DiffView";
 import { STATUS } from "./ToolCallRow";
@@ -50,21 +52,21 @@ export function summarizeGroup(blocks: ToolCallBlock[]): string {
   const phrase = (verb: string, n: number): string => {
     switch (verb) {
       case "Ran":
-        return n === 1 ? "ran a command" : `ran ${n} commands`;
+        return i18n.t("session:tool.group.phrase.ran", { count: n });
       case "Created":
-        return n === 1 ? "created a file" : `created ${n} files`;
+        return i18n.t("session:tool.group.phrase.created", { count: n });
       case "Edited":
-        return n === 1 ? "edited a file" : `edited ${n} files`;
+        return i18n.t("session:tool.group.phrase.edited", { count: n });
       case "Read":
-        return n === 1 ? "read a file" : `read ${n} files`;
+        return i18n.t("session:tool.group.phrase.read", { count: n });
       case "Searched":
-        return n === 1 ? "ran a search" : `ran ${n} searches`;
+        return i18n.t("session:tool.group.phrase.searched", { count: n });
       case "Listed":
-        return "listed files";
+        return i18n.t("session:tool.group.phrase.listed");
       case "Fetched":
-        return n === 1 ? "fetched a page" : `fetched ${n} pages`;
+        return i18n.t("session:tool.group.phrase.fetched", { count: n });
       default:
-        return n === 1 ? "ran a step" : `ran ${n} steps`;
+        return i18n.t("session:tool.group.phrase.default", { count: n });
     }
   };
   const text = [...counts.entries()].map(([verb, n]) => phrase(verb, n)).join(", ");
@@ -187,6 +189,7 @@ function detailFor(block: ToolCallBlock): React.ReactNode | null {
 }
 
 function ToolRow({ block, activity }: { block: ToolCallBlock; activity?: string }) {
+  const { t } = useTranslation(["session", "common"]);
   const s = STATUS[block.status];
   const running = block.status === "running";
   // While running the live tail is already on screen — the row only becomes
@@ -218,7 +221,7 @@ function ToolRow({ block, activity }: { block: ToolCallBlock; activity?: string 
           detail && "cursor-pointer hover:bg-surface-2",
         )}
       >
-        <span className={cn("shrink-0", s.className)} aria-label={s.label} role="img">
+        <span className={cn("shrink-0", s.className)} aria-label={t(`tool.status.${block.status}`)} role="img">
           {s.icon}
         </span>
         {block.verb && <span className="shrink-0 text-muted">{block.verb}</span>}
@@ -272,6 +275,7 @@ export function ToolGroup({
   blocks: ToolCallBlock[];
   activityFor?: (childSessionId: string) => string | undefined;
 }) {
+  const { t } = useTranslation(["session", "common"]);
   // While a step runs the group stays open (the live tail must be visible);
   // once everything settles it folds to the summary. The fold waits a grace
   // period — within a turn the next command follows in seconds, and an
@@ -284,8 +288,8 @@ export function ToolGroup({
       setAutoOpen(true);
       return;
     }
-    const t = window.setTimeout(() => setAutoOpen(false), 2000);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => setAutoOpen(false), 2000);
+    return () => window.clearTimeout(timer);
   }, [active]);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const open = userOpen ?? autoOpen;
@@ -314,9 +318,7 @@ export function ToolGroup({
         )}
         <span className="min-w-0 truncate">{summarizeGroup(blocks)}</span>
         {failed > 0 && (
-          <span className="shrink-0 text-error">
-            · {failed} failed
-          </span>
+          <span className="shrink-0 text-error">· {t("tool.group.failedCount", { count: failed })}</span>
         )}
       </button>
       <Collapse open={open}>

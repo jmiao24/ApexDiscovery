@@ -1,6 +1,7 @@
 import { useState, type MouseEvent } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Download } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { FigureAnnotation, FigureBlock as FigureBlockT } from "@ai4s/shared";
 import { saveTextWithFeedback } from "@/lib/download";
 
@@ -16,6 +17,7 @@ export function FigureBlock({
   block: FigureBlockT;
   onComment?: (annotation: FigureAnnotation, figureTitle: string) => void;
 }) {
+  const { t } = useTranslation(["session", "common"]);
   const [pins, setPins] = useState<FigureAnnotation[]>(block.annotations ?? []);
   const [draft, setDraft] = useState<{ x: number; y: number } | null>(null);
   const [note, setNote] = useState("");
@@ -48,7 +50,7 @@ export function FigureBlock({
         <span className="text-sm font-medium text-text">{block.title}</span>
         <button
           className="ml-auto text-muted hover:text-text"
-          aria-label="Download figure"
+          aria-label={t("figure.downloadAria")}
           onClick={() => void saveTextWithFeedback(`${block.title}.svg`, imageToText(block.src), "image/svg+xml")}
         >
           <Download size={15} />
@@ -63,7 +65,7 @@ export function FigureBlock({
           onClick={onImageClick}
           role="button"
           tabIndex={0}
-          aria-label="Add annotation"
+          aria-label={t("figure.addAnnotationAria")}
         >
           <img src={block.src} alt={block.title} className="mx-auto block max-w-full" />
         </div>
@@ -74,7 +76,7 @@ export function FigureBlock({
               <button
                 className="absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-fg shadow-pop ring-2 ring-white"
                 style={{ left: `${a.x}%`, top: `${a.y}%` }}
-                aria-label={`Annotation ${a.index}: ${a.note}`}
+                aria-label={t("figure.annotationAria", { index: a.index, note: a.note })}
               >
                 {a.index}
               </button>
@@ -108,16 +110,16 @@ export function FigureBlock({
                   if (e.key === "Enter") send();
                   if (e.key === "Escape") setDraft(null);
                 }}
-                placeholder="Add a note…"
+                placeholder={t("figure.notePlaceholder")}
                 className="w-44 bg-transparent text-sm text-text outline-none placeholder:text-muted"
-                aria-label="Annotation note"
+                aria-label={t("figure.noteAria")}
               />
               <button
                 className="rounded-input bg-text px-3 py-1 text-xs font-medium text-bg disabled:opacity-40"
                 onClick={send}
                 disabled={!note.trim()}
               >
-                Send
+                {t("figure.send")}
               </button>
             </div>
           </div>

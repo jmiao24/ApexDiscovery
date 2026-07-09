@@ -1,25 +1,19 @@
 import { useState } from "react";
 import { ChevronDown, ShieldCheck, X } from "lucide-react";
-import type { FindingLevel, ReviewCheck, ReviewerBlock } from "@ai4s/shared";
+import { useTranslation } from "react-i18next";
+import type { FindingLevel, ReviewerBlock } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 
-const BADGE: Record<FindingLevel, { label: string; className: string }> = {
-  warn: { label: "Warn", className: "bg-warn/15 text-warn ring-warn/30" },
-  ok: { label: "OK", className: "bg-ok/15 text-ok ring-ok/30" },
-  error: { label: "Error", className: "bg-error/15 text-error ring-error/30" },
-};
-
-const CHECK_TAG: Record<ReviewCheck, string> = {
-  citation: "citation",
-  number: "number",
-  figure: "figure ↔ code",
-  domain: "domain",
-  integrity: "integrity",
+const BADGE: Record<FindingLevel, { className: string }> = {
+  warn: { className: "bg-warn/15 text-warn ring-warn/30" },
+  ok: { className: "bg-ok/15 text-ok ring-ok/30" },
+  error: { className: "bg-error/15 text-error ring-error/30" },
 };
 
 /** Structured reviewer findings. Dismissal is a session-local reading aid —
  *  the underlying review text stays in the conversation. */
 export function ReviewerCard({ block }: { block: ReviewerBlock }) {
+  const { t } = useTranslation(["session", "common"]);
   const [open, setOpen] = useState(true);
   const [dismissed, setDismissed] = useState<ReadonlySet<number>>(new Set());
   const visible = block.findings
@@ -33,10 +27,10 @@ export function ReviewerCard({ block }: { block: ReviewerBlock }) {
         aria-expanded={open}
       >
         <ShieldCheck size={16} className="text-muted" />
-        <span className="text-sm font-medium text-text">Reviewer</span>
+        <span className="text-sm font-medium text-text">{t("reviewer.heading")}</span>
         <span className="text-sm text-muted">
-          · {visible.length} finding{visible.length === 1 ? "" : "s"}
-          {dismissed.size > 0 && ` · ${dismissed.size} dismissed`}
+          {t("reviewer.findingCount", { count: visible.length })}
+          {dismissed.size > 0 && ` ${t("reviewer.dismissedCount", { count: dismissed.size })}`}
         </span>
         <ChevronDown
           size={16}
@@ -57,18 +51,18 @@ export function ReviewerCard({ block }: { block: ReviewerBlock }) {
                       badge.className,
                     )}
                   >
-                    {badge.label}
+                    {t(`reviewer.badge.${f.level}`)}
                   </span>
                   {(f.tag || f.check) && (
                     <span className="rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted ring-1 ring-border">
-                      {f.tag ?? (f.check ? CHECK_TAG[f.check] : "")}
+                      {f.tag ?? (f.check ? t(`reviewer.checkTag.${f.check}`) : "")}
                     </span>
                   )}
                   <span className="text-sm font-medium text-text">{f.title}</span>
                   <button
                     className="ml-auto shrink-0 text-muted opacity-0 hover:text-text group-hover:opacity-100"
-                    aria-label={`Dismiss finding: ${f.title}`}
-                    title="Dismiss this finding"
+                    aria-label={t("reviewer.dismissAria", { title: f.title })}
+                    title={t("reviewer.dismissTitle")}
                     onClick={() => setDismissed(new Set([...dismissed, i]))}
                   >
                     <X size={14} />
@@ -83,7 +77,7 @@ export function ReviewerCard({ block }: { block: ReviewerBlock }) {
             );
           })}
           {visible.length === 0 && block.findings.length > 0 && (
-            <p className="text-sm text-muted">All findings dismissed.</p>
+            <p className="text-sm text-muted">{t("reviewer.allDismissed")}</p>
           )}
           {block.note && <p className="text-sm text-muted">{block.note}</p>}
         </div>

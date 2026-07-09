@@ -1,17 +1,19 @@
 import { AlertTriangle, Check, Clock, Loader2, ShieldQuestion, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ToolCallBlock, ToolCallStatus } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 
-export const STATUS: Record<
-  ToolCallStatus,
-  { label: string; icon: React.ReactNode; className: string }
-> = {
-  pending: { label: "Pending", icon: <Clock size={13} />, className: "text-muted" },
-  running: { label: "Running", icon: <Loader2 size={13} className="animate-spin" />, className: "text-accent" },
-  "waiting-approval": { label: "Waiting", icon: <ShieldQuestion size={14} />, className: "text-warn" },
-  success: { label: "Success", icon: <Check size={13} />, className: "text-ok" },
-  warning: { label: "Warning", icon: <AlertTriangle size={14} />, className: "text-warn" },
-  failed: { label: "Failed", icon: <X size={14} />, className: "text-error" },
+// Icon + tone per status. The aria-label text is looked up from
+// `session:tool.status.*` at render time (`t(\`tool.status.${status}\`)`) so it
+// reacts to locale changes — never cache the translated label in this
+// module-scope map.
+export const STATUS: Record<ToolCallStatus, { icon: React.ReactNode; className: string }> = {
+  pending: { icon: <Clock size={13} />, className: "text-muted" },
+  running: { icon: <Loader2 size={13} className="animate-spin" />, className: "text-accent" },
+  "waiting-approval": { icon: <ShieldQuestion size={14} />, className: "text-warn" },
+  success: { icon: <Check size={13} />, className: "text-ok" },
+  warning: { icon: <AlertTriangle size={14} />, className: "text-warn" },
+  failed: { icon: <X size={14} />, className: "text-error" },
 };
 
 // Mechanical steps that succeeded (or are pending/running) are recorded quietly,
@@ -23,6 +25,7 @@ export const STATUS: Record<
 export const PROMINENT = new Set<ToolCallStatus>(["waiting-approval", "warning", "failed"]);
 
 export function ToolCallRow({ block, activity }: { block: ToolCallBlock; activity?: string }) {
+  const { t } = useTranslation(["session", "common"]);
   const s = STATUS[block.status];
   const prominent = PROMINENT.has(block.status);
   return (
@@ -35,7 +38,7 @@ export function ToolCallRow({ block, activity }: { block: ToolCallBlock; activit
             : "px-2 py-1 text-[12.5px]",
         )}
       >
-        <span className={cn("shrink-0", s.className)} aria-label={s.label} role="img">
+        <span className={cn("shrink-0", s.className)} aria-label={t(`tool.status.${block.status}`)} role="img">
           {s.icon}
         </span>
         {block.verb && <span className="shrink-0 text-muted">{block.verb}</span>}

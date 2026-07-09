@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Check, HelpCircle, ShieldQuestion } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { PermissionAskedEvent, PermissionReply, QuestionAskedEvent } from "@ai4s/sdk";
 import { cn } from "@/lib/cn";
 
@@ -63,6 +64,7 @@ function QuestionCard({
   onAnswer: (requestId: string, answers: string[][]) => void;
   onReject: (requestId: string) => void;
 }) {
+  const { t } = useTranslation(["session", "common"]);
   // One selection set + one custom string per question.
   const [selected, setSelected] = useState<Record<number, Set<string>>>({});
   const [custom, setCustom] = useState<Record<number, string>>({});
@@ -91,15 +93,17 @@ function QuestionCard({
       <header className="border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-2">
           <HelpCircle size={15} className="text-accent" />
-          <span className="text-sm font-medium text-text">The agent needs your input</span>
+          <span className="text-sm font-medium text-text">{t("interaction.question.heading")}</span>
           <button
             className="ml-auto text-xs text-muted hover:text-text"
             onClick={() => onReject(question.requestId)}
           >
-            Skip
+            {t("interaction.skip")}
           </button>
         </div>
-        {origin && <div className="mt-0.5 pl-6 text-xs text-muted">Asked by {origin}</div>}
+        {origin && (
+          <div className="mt-0.5 pl-6 text-xs text-muted">{t("interaction.askedBy", { origin })}</div>
+        )}
       </header>
 
       <div className="space-y-4 px-4 py-3.5">
@@ -150,7 +154,7 @@ function QuestionCard({
                 <input
                   value={custom[qi] ?? ""}
                   onChange={(e) => setCustom((c) => ({ ...c, [qi]: e.target.value }))}
-                  placeholder="Or type your own answer…"
+                  placeholder={t("interaction.question.customPlaceholder")}
                   className="w-full rounded-input border border-border bg-surface px-3 py-2 text-[13px] text-text outline-none placeholder:text-muted focus:border-accent/60"
                 />
               )}
@@ -165,14 +169,14 @@ function QuestionCard({
             className="rounded-input px-3 py-1.5 text-xs text-muted hover:text-text"
             onClick={() => onReject(question.requestId)}
           >
-            Skip
+            {t("interaction.skip")}
           </button>
           <button
             disabled={!ready}
             onClick={() => onAnswer(question.requestId, items.map((_, qi) => answerFor(qi)))}
             className="rounded-input bg-accent px-3.5 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90 disabled:opacity-40"
           >
-            Submit
+            {t("interaction.submit")}
           </button>
         </footer>
       )}
@@ -189,16 +193,20 @@ function PermissionCard({
   origin?: string;
   onReply: (requestId: string, reply: PermissionReply) => void;
 }) {
+  const { t } = useTranslation(["session", "common"]);
   return (
     <div className="rounded-card border border-warn/40 bg-surface shadow-card">
       <header className="border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-2">
           <ShieldQuestion size={15} className="text-warn" />
           <span className="text-sm font-medium text-text">
-            The agent asks permission: <span className="font-mono">{actionLabel(permission.action)}</span>
+            {t("interaction.permission.heading")}{" "}
+            <span className="font-mono">{actionLabel(permission.action)}</span>
           </span>
         </div>
-        {origin && <div className="mt-0.5 pl-6 text-xs text-muted">Asked by {origin}</div>}
+        {origin && (
+          <div className="mt-0.5 pl-6 text-xs text-muted">{t("interaction.askedBy", { origin })}</div>
+        )}
       </header>
       {permission.resources.length > 0 && (
         <div className="px-4 py-3">
@@ -212,20 +220,20 @@ function PermissionCard({
           className="rounded-input px-3 py-1.5 text-xs text-error hover:bg-error/10"
           onClick={() => onReply(permission.requestId, "reject")}
         >
-          Reject
+          {t("interaction.reject")}
         </button>
         <div className="flex-1" />
         <button
           className="rounded-input border border-border px-3 py-1.5 text-xs text-text hover:bg-surface-2"
           onClick={() => onReply(permission.requestId, "always")}
         >
-          Always allow
+          {t("interaction.alwaysAllow")}
         </button>
         <button
           className="rounded-input bg-accent px-3.5 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90"
           onClick={() => onReply(permission.requestId, "once")}
         >
-          Allow once
+          {t("interaction.allowOnce")}
         </button>
       </footer>
     </div>

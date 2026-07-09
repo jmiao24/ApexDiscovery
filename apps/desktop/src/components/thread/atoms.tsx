@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Loader2, Paperclip } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type {
   ArtifactBlock,
   DataTableBlock,
@@ -27,6 +28,7 @@ export function AgentMessage({
   markdown: string;
   onOpenArtifact?: (a: ArtifactBlock) => void;
 }) {
+  const { t } = useTranslation(["session", "common"]);
   // Files the agent mentions (e.g. a PDF produced by running code) become clickable.
   // Each mention is resolved to a real workspace path first — prose often names a
   // bare filename ("index.html") whose file lives in a subdirectory; mentions of
@@ -60,7 +62,7 @@ export function AgentMessage({
               key={path}
               onClick={() => onOpenArtifact?.(refToArtifactBlock(path))}
               className="flex items-center gap-1.5 rounded-input border border-border bg-surface px-2 py-1 text-xs text-text hover:bg-surface-2"
-              title={`Preview ${path}`}
+              title={t("agentMessage.previewTitle", { path })}
             >
               <Paperclip size={12} className="text-accent" />
               <span className="font-mono">{path.split(/[\\/]/).pop()}</span>

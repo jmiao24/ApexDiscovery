@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { FolderOpen } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 import { isTauri, pickFolder } from "@/lib/tauri";
 import { datedWorkspaceName, useRuntimeStore } from "@/lib/runtime";
 
 /** Last path segment of the workspace folder, or "Workspace" when unknown. */
 export function baseName(path: string | null): string {
-  if (!path) return "Workspace";
-  return path.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || "Workspace";
+  const fallback = i18n.t("session:workspaceChip.fallbackName");
+  if (!path) return fallback;
+  return path.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || fallback;
 }
 
 /**
@@ -17,6 +20,7 @@ export function baseName(path: string | null): string {
  * header's Files toggle names it, so the chip disappears.
  */
 export function WorkspaceChip() {
+  const { t } = useTranslation(["session", "common"]);
   const workspace = useRuntimeStore((s) => s.workspace);
   const currentId = useRuntimeStore((s) => s.currentId);
   const workspacePinned = useRuntimeStore((s) => s.workspacePinned);
@@ -44,14 +48,14 @@ export function WorkspaceChip() {
       disabled={busy || sending}
       title={
         workspacePinned
-          ? `${workspace ?? ""} — click to choose a different folder`
-          : `Starts in a new dated folder (${datedWorkspaceName()}) — click to choose a folder instead`
+          ? t("workspaceChip.titlePinned", { workspace: workspace ?? "" })
+          : t("workspaceChip.titleUnpinned", { name: datedWorkspaceName() })
       }
-      aria-label="Choose session folder"
+      aria-label={t("workspaceChip.chooseAria")}
     >
       <FolderOpen size={14} className="shrink-0" />
       {busy ? (
-        <span>Switching…</span>
+        <span>{t("workspaceChip.switching")}</span>
       ) : (
         workspacePinned && <span className="max-w-[200px] truncate">{baseName(workspace)}</span>
       )}
