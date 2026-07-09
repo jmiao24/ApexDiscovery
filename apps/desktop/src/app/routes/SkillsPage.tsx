@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Bot, Boxes, Check, Package, Puzzle, X } from "lucide-react";
 import { useRuntimeStore } from "@/lib/runtime";
 import { cn } from "@/lib/cn";
@@ -9,6 +10,7 @@ import { cn } from "@/lib/cn";
  * skills/agents from the OpenCode runtime, environment from the host system.
  */
 export function SkillsPage() {
+  const { t } = useTranslation(["pages", "common"]);
   const navigate = useNavigate();
   const { skills, agents, tools, status, loadCatalog, detectTools, installSkill } = useRuntimeStore();
   const connected = status === "ready";
@@ -34,19 +36,20 @@ export function SkillsPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-8 py-8">
-        <h1 className="font-serif text-xl text-text">Skills &amp; Agents</h1>
+        <h1 className="font-serif text-xl text-text">{t("skills.title")}</h1>
         <p className="mt-1 text-sm text-muted">
-          Loaded live from the OpenCode runtime — the bundled ai4s-skills pack plus anything under{" "}
-          <span className="font-mono">.opencode/skills/</span> in your workspace.
+          {t("skills.description.prefix")}
+          <span className="font-mono">.opencode/skills/</span>
+          {t("skills.description.suffix")}
         </p>
 
         {/* Install a skill (#1) */}
-        <Section title="Install a skill" icon={<Boxes size={15} />}>
+        <Section title={t("skills.install.sectionTitle")} icon={<Boxes size={15} />}>
           <div className="p-4">
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Paste a skill (Markdown) or a GitHub URL — the agent installs it into .opencode/skills/"
+              placeholder={t("skills.install.placeholder")}
               rows={3}
               className="w-full resize-y rounded-input border border-border bg-surface px-3 py-2 text-sm text-text outline-none placeholder:text-muted"
             />
@@ -56,53 +59,57 @@ export function SkillsPage() {
                 disabled={!connected || !text.trim() || installing}
                 className="rounded-input bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-40"
               >
-                {installing ? "Starting…" : "Install with agent"}
+                {installing ? t("skills.install.starting") : t("skills.install.cta")}
               </button>
               <span className="text-xs text-muted">
-                {connected
-                  ? "Opens a session and asks the agent to add it (customize-opencode)."
-                  : "Connect the runtime first."}
+                {connected ? t("skills.install.hintConnected") : t("skills.install.hintDisconnected")}
               </span>
             </div>
           </div>
         </Section>
 
         {/* Environment (#2) */}
-        <Section title="Scientific environment" icon={<Package size={15} />}>
-          {tools.length === 0 && <Empty>Environment detection runs in the desktop app.</Empty>}
-          {tools.map((t) => (
-            <div key={t.name} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-              {t.found ? <Check size={15} className="text-ok" /> : <X size={15} className="text-muted" />}
-              <span className="w-24 text-text">{t.name}</span>
+        <Section title={t("skills.environment.sectionTitle")} icon={<Package size={15} />}>
+          {tools.length === 0 && <Empty>{t("skills.environment.detectionUnavailable")}</Empty>}
+          {tools.map((tool) => (
+            <div key={tool.name} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+              {tool.found ? <Check size={15} className="text-ok" /> : <X size={15} className="text-muted" />}
+              <span className="w-24 text-text">{tool.name}</span>
               <span className="flex-1 truncate font-mono text-xs text-muted">
-                {t.found ? t.version ?? "found" : "not found"}
+                {tool.found ? tool.version ?? t("skills.environment.found") : t("skills.environment.notFound")}
               </span>
             </div>
           ))}
-          <p className="px-4 py-2 text-xs text-muted">
-            OpenCode runs code with whatever is installed here (e.g. Python via its shell tool).
-            Python/R/Jupyter are not bundled; install them or a Science Pack to enable analysis.
-          </p>
+          <p className="px-4 py-2 text-xs text-muted">{t("skills.environment.note")}</p>
         </Section>
 
         {connected ? (
           <>
-            <Section title={`Agents (${agents.length})`} icon={<Bot size={15} />}>
-              {agents.length === 0 && <Empty>No agents reported.</Empty>}
+            <Section title={t("skills.agentsSection.sectionTitle", { count: agents.length })} icon={<Bot size={15} />}>
+              {agents.length === 0 && <Empty>{t("skills.agentsSection.empty")}</Empty>}
               {agents.map((a) => (
                 <RowItem key={a.name} name={a.name} desc={a.description} tag={a.mode} />
               ))}
             </Section>
-            <Section title={`Skills (${skills.length})`} icon={<Puzzle size={15} />}>
-              {skills.length === 0 && <Empty>No skills loaded yet.</Empty>}
-              {skills.map((s) => (
-                <RowItem key={s.name} name={s.name} desc={s.description} tag={sourceOf(s.location)} />
-              ))}
+            <Section title={t("skills.skillsListSection.sectionTitle", { count: skills.length })} icon={<Puzzle size={15} />}>
+              {skills.length === 0 && <Empty>{t("skills.skillsListSection.empty")}</Empty>}
+              {skills.map((s) => {
+                const source = sourceOf(s.location);
+                const sourceLabel =
+                  source === "builtin"
+                    ? t("skills.skillsListSection.source.builtin")
+                    : source === "project"
+                      ? t("skills.skillsListSection.source.project")
+                      : source === "user"
+                        ? t("skills.skillsListSection.source.user")
+                        : undefined;
+                return <RowItem key={s.name} name={s.name} desc={s.description} tag={sourceLabel} />;
+              })}
             </Section>
           </>
         ) : (
           <div className="mt-6 rounded-card border border-border bg-surface p-5 text-sm text-muted">
-            Connect the runtime to list the skills and agents it has loaded.
+            {t("skills.disconnected")}
           </div>
         )}
       </div>
@@ -110,9 +117,11 @@ export function SkillsPage() {
   );
 }
 
-function sourceOf(location?: string): string | undefined {
+type SkillSource = "builtin" | "project" | "user";
+
+function sourceOf(location?: string): SkillSource | undefined {
   if (!location) return undefined;
-  if (location.includes("/builtin/")) return "built-in";
+  if (location.includes("/builtin/")) return "builtin";
   if (location.includes("/.opencode/")) return "project";
   return "user";
 }

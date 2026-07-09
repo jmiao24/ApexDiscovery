@@ -12,6 +12,7 @@ import enRuns from "./locales/en/runs.json";
 import enSession from "./locales/en/session.json";
 import enInspector from "./locales/en/inspector.json";
 import enErrors from "./locales/en/errors.json";
+import enPages from "./locales/en/pages.json";
 
 import zhCommon from "./locales/zh-Hans/common.json";
 import zhNav from "./locales/zh-Hans/nav.json";
@@ -20,6 +21,7 @@ import zhRuns from "./locales/zh-Hans/runs.json";
 import zhSession from "./locales/zh-Hans/session.json";
 import zhInspector from "./locales/zh-Hans/inspector.json";
 import zhErrors from "./locales/zh-Hans/errors.json";
+import zhPages from "./locales/zh-Hans/pages.json";
 
 import jaCommon from "./locales/ja/common.json";
 import jaNav from "./locales/ja/nav.json";
@@ -28,6 +30,7 @@ import jaRuns from "./locales/ja/runs.json";
 import jaSession from "./locales/ja/session.json";
 import jaInspector from "./locales/ja/inspector.json";
 import jaErrors from "./locales/ja/errors.json";
+import jaPages from "./locales/ja/pages.json";
 
 import esCommon from "./locales/es/common.json";
 import esNav from "./locales/es/nav.json";
@@ -36,6 +39,7 @@ import esRuns from "./locales/es/runs.json";
 import esSession from "./locales/es/session.json";
 import esInspector from "./locales/es/inspector.json";
 import esErrors from "./locales/es/errors.json";
+import esPages from "./locales/es/pages.json";
 
 import deCommon from "./locales/de/common.json";
 import deNav from "./locales/de/nav.json";
@@ -44,6 +48,7 @@ import deRuns from "./locales/de/runs.json";
 import deSession from "./locales/de/session.json";
 import deInspector from "./locales/de/inspector.json";
 import deErrors from "./locales/de/errors.json";
+import dePages from "./locales/de/pages.json";
 
 import frCommon from "./locales/fr/common.json";
 import frNav from "./locales/fr/nav.json";
@@ -52,6 +57,7 @@ import frRuns from "./locales/fr/runs.json";
 import frSession from "./locales/fr/session.json";
 import frInspector from "./locales/fr/inspector.json";
 import frErrors from "./locales/fr/errors.json";
+import frPages from "./locales/fr/pages.json";
 
 import koCommon from "./locales/ko/common.json";
 import koNav from "./locales/ko/nav.json";
@@ -60,19 +66,20 @@ import koRuns from "./locales/ko/runs.json";
 import koSession from "./locales/ko/session.json";
 import koInspector from "./locales/ko/inspector.json";
 import koErrors from "./locales/ko/errors.json";
+import koPages from "./locales/ko/pages.json";
 
 export const NAMESPACES = [
-  "common", "nav", "settings", "runs", "session", "inspector", "errors",
+  "common", "nav", "settings", "runs", "session", "inspector", "errors", "pages",
 ] as const;
 
 const resources = {
-  en: { common: enCommon, nav: enNav, settings: enSettings, runs: enRuns, session: enSession, inspector: enInspector, errors: enErrors },
-  "zh-Hans": { common: zhCommon, nav: zhNav, settings: zhSettings, runs: zhRuns, session: zhSession, inspector: zhInspector, errors: zhErrors },
-  ja: { common: jaCommon, nav: jaNav, settings: jaSettings, runs: jaRuns, session: jaSession, inspector: jaInspector, errors: jaErrors },
-  es: { common: esCommon, nav: esNav, settings: esSettings, runs: esRuns, session: esSession, inspector: esInspector, errors: esErrors },
-  de: { common: deCommon, nav: deNav, settings: deSettings, runs: deRuns, session: deSession, inspector: deInspector, errors: deErrors },
-  fr: { common: frCommon, nav: frNav, settings: frSettings, runs: frRuns, session: frSession, inspector: frInspector, errors: frErrors },
-  ko: { common: koCommon, nav: koNav, settings: koSettings, runs: koRuns, session: koSession, inspector: koInspector, errors: koErrors },
+  en: { common: enCommon, nav: enNav, settings: enSettings, runs: enRuns, session: enSession, inspector: enInspector, errors: enErrors, pages: enPages },
+  "zh-Hans": { common: zhCommon, nav: zhNav, settings: zhSettings, runs: zhRuns, session: zhSession, inspector: zhInspector, errors: zhErrors, pages: zhPages },
+  ja: { common: jaCommon, nav: jaNav, settings: jaSettings, runs: jaRuns, session: jaSession, inspector: jaInspector, errors: jaErrors, pages: jaPages },
+  es: { common: esCommon, nav: esNav, settings: esSettings, runs: esRuns, session: esSession, inspector: esInspector, errors: esErrors, pages: esPages },
+  de: { common: deCommon, nav: deNav, settings: deSettings, runs: deRuns, session: deSession, inspector: deInspector, errors: deErrors, pages: dePages },
+  fr: { common: frCommon, nav: frNav, settings: frSettings, runs: frRuns, session: frSession, inspector: frInspector, errors: frErrors, pages: frPages },
+  ko: { common: koCommon, nav: koNav, settings: koSettings, runs: koRuns, session: koSession, inspector: koInspector, errors: koErrors, pages: koPages },
 } as const;
 
 void i18n.use(initReactI18next).init({

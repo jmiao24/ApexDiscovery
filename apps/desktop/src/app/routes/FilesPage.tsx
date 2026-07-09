@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ChevronRight,
   Dna,
@@ -56,6 +57,7 @@ function humanSize(n: number): string {
  * so all past work is reachable in one place.
  */
 export function FilesPage() {
+  const { t } = useTranslation(["pages", "common"]);
   const [dir, setDir] = useState(""); // base-relative; "" = the base folder
   const [entries, setEntries] = useState<DirEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,13 +125,13 @@ export function FilesPage() {
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {entries === null && (
             <div className="flex items-center gap-2 p-2 text-sm text-muted">
-              <Loader2 size={14} className="animate-spin" /> Loading…
+              <Loader2 size={14} className="animate-spin" /> {t("files.loading")}
             </div>
           )}
           {error && <div className="p-2 text-sm text-error">{error}</div>}
           {entries && entries.length === 0 && !error && (
             <div className="p-2 text-sm text-muted">
-              {isTauri ? "This folder is empty." : "The file explorer is available in the desktop app."}
+              {isTauri ? t("files.folderEmpty") : t("files.explorerUnavailableWeb")}
             </div>
           )}
           {entries?.map((entry) => (
@@ -156,7 +158,7 @@ export function FilesPage() {
           <FilePreview key={selected.path} entry={selected} root="base" onClose={() => setSelected(null)} />
         ) : (
           <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted">
-            Select a file to preview it here.
+            {t("files.selectFilePrompt")}
           </div>
         )}
       </div>
@@ -209,6 +211,7 @@ export function SessionFilesPane({
   /** Pane-level header buttons (e.g. maximize), rendered before Close. */
   controls?: React.ReactNode;
 }) {
+  const { t } = useTranslation(["pages", "common"]);
   const workspace = useRuntimeStore((s) => s.workspace);
   const [dir, setDir] = useState("");
   const [entries, setEntries] = useState<DirEntry[] | null>(null);
@@ -260,10 +263,10 @@ export function SessionFilesPane({
         <span className="truncate text-sm font-medium text-text" title={workspace ?? undefined}>
           {baseName(workspace)}
         </span>
-        <span className="text-xs text-muted">this session's folder</span>
+        <span className="text-xs text-muted">{t("files.pane.subtitle")}</span>
         <div className="flex-1" />
         {controls}
-        <button className="text-text hover:opacity-60" aria-label="Close files" onClick={onClose}>
+        <button className="text-text hover:opacity-60" aria-label={t("files.pane.closeAria")} onClick={onClose}>
           <X size={14} strokeWidth={1.5} />
         </button>
       </div>
@@ -292,12 +295,12 @@ export function SessionFilesPane({
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {entries === null && (
           <div className="flex items-center gap-2 p-2 text-sm text-muted">
-            <Loader2 size={14} className="animate-spin" /> Loading…
+            <Loader2 size={14} className="animate-spin" /> {t("files.loading")}
           </div>
         )}
         {error && <div className="p-2 text-sm text-error">{error}</div>}
         {entries && entries.length === 0 && !error && (
-          <div className="p-2 text-sm text-muted">This folder is empty.</div>
+          <div className="p-2 text-sm text-muted">{t("files.folderEmpty")}</div>
         )}
         {entries?.map((entry) => (
           <FileContextMenu key={entry.path} entry={entry} root="workspace">

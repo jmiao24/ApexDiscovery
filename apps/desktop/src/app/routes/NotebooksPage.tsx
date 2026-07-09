@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, ExternalLink, NotebookPen, Plus } from "lucide-react";
 import { addTextToWorkspace, isTauri, jupyterStatus, openJupyterLab } from "@/lib/tauri";
 import { listNotebooks, type NotebookEntry } from "@/lib/artifactFile";
@@ -16,6 +17,7 @@ import i18n from "@/i18n";
  * first. A notebook's kernel always runs in the notebook's own folder.
  */
 export function NotebooksPage() {
+  const { t } = useTranslation(["pages", "common"]);
   const [entries, setEntries] = useState<NotebookEntry[]>([]);
   /** Open notebook + the tree its path resolves in ("base" = listed here;
    *  "workspace" = just created in the active session folder). */
@@ -39,10 +41,10 @@ export function NotebooksPage() {
     setOpeningLab(true);
     try {
       const ok = await openJupyterLab();
-      if (ok) toast.success("Opening JupyterLab in your browser…");
-      else toast.error("Set up Jupyter first — Settings → MCP servers → Jupyter.");
+      if (ok) toast.success(t("notebooks.toast.openingJupyterLab"));
+      else toast.error(t("notebooks.toast.setUpJupyterFirst"));
     } catch (e) {
-      toast.error(`Could not open JupyterLab: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`${t("notebooks.toast.couldNotOpenJupyterLab")}: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setOpeningLab(false);
     }
@@ -66,7 +68,7 @@ export function NotebooksPage() {
       await refresh();
       setOpen({ path: name, root: "workspace" });
     } catch (err) {
-      toast.error(`Could not create notebook: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`${t("notebooks.toast.couldNotCreateNotebook")}: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -87,17 +89,17 @@ export function NotebooksPage() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-8 py-6">
         <div className="flex items-center gap-3">
-          <h1 className="font-serif text-xl text-text">Notebooks</h1>
+          <h1 className="font-serif text-xl text-text">{t("notebooks.title")}</h1>
           <div className="flex-1" />
           {isTauri && jupyterInstalled && (
             <button
               className="flex items-center gap-1.5 rounded-input border border-border bg-surface px-2.5 py-1.5 text-xs text-text transition-colors hover:bg-surface-2 disabled:opacity-50"
               onClick={() => void openLab()}
               disabled={openingLab}
-              title="Open the full JupyterLab (same env and files) in your browser"
+              title={t("notebooks.openJupyterLabTitle")}
             >
               <ExternalLink size={13} className="text-muted" />
-              Open JupyterLab
+              {t("notebooks.openJupyterLab")}
             </button>
           )}
           <div className="relative" ref={menuRef}>
@@ -108,7 +110,7 @@ export function NotebooksPage() {
               aria-haspopup="menu"
               aria-expanded={menuOpen}
             >
-              <Plus size={13} /> New notebook <ChevronDown size={12} className="opacity-80" />
+              <Plus size={13} /> {t("notebooks.newNotebook")} <ChevronDown size={12} className="opacity-80" />
             </button>
             {menuOpen && (
               <div
@@ -120,30 +122,25 @@ export function NotebooksPage() {
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text hover:bg-surface-2"
                   onClick={() => void createNew("python")}
                 >
-                  <NotebookPen size={13} className="text-muted" /> Python notebook
+                  <NotebookPen size={13} className="text-muted" /> {t("notebooks.pythonNotebook")}
                 </button>
                 <button
                   role="menuitem"
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text hover:bg-surface-2"
                   onClick={() => void createNew("r")}
                 >
-                  <NotebookPen size={13} className="text-muted" /> R notebook
+                  <NotebookPen size={13} className="text-muted" /> {t("notebooks.rNotebook")}
                 </button>
               </div>
             )}
           </div>
         </div>
-        <p className="mt-1 text-sm text-muted">
-          All Jupyter notebooks across your session folders, newest first. Cells run on the
-          local Python or R kernel in the notebook's own folder; the agent works on the same files.
-        </p>
+        <p className="mt-1 text-sm text-muted">{t("notebooks.description")}</p>
 
         <div className="mt-5 space-y-1.5">
           {entries.length === 0 && (
             <div className="rounded-card border border-border bg-surface p-5 text-sm text-muted">
-              {isTauri
-                ? "No notebooks yet. Create one, or ask the agent to produce one."
-                : "Notebooks are available in the desktop app."}
+              {isTauri ? t("notebooks.empty.tauri") : t("notebooks.empty.web")}
             </div>
           )}
           {entries.map((e) => {

@@ -5,7 +5,7 @@ describe("i18n instance", () => {
   it("initializes with English and the full namespace set", () => {
     expect(i18n.language).toBe("en");
     expect(NAMESPACES).toContain("common");
-    expect(NAMESPACES.length).toBe(7);
+    expect(NAMESPACES.length).toBe(8);
   });
 
   it("resolves a seeded key", () => {
