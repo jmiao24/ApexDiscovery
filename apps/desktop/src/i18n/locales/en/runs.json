@@ -60,5 +60,12 @@
   "log": {
     "header": "stdout / stderr",
     "loading": "Loading…"
+  },
+  "relative": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "justNow": "just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago"
   }
 }

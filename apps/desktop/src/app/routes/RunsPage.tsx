@@ -570,17 +570,17 @@ function dayLabel(ts: number): string {
   const now = new Date();
   const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const days = Math.round((startOf(now) - startOf(d)) / 86_400_000);
-  if (days <= 0) return "Today";
-  if (days === 1) return "Yesterday";
+  if (days <= 0) return i18n.t("runs:relative.today");
+  if (days === 1) return i18n.t("runs:relative.yesterday");
   if (days < 7) return d.toLocaleDateString(i18n.language, { weekday: "long" });
   return d.toLocaleDateString(i18n.language, { month: "long", day: "numeric", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
 }
 
 function relativeTs(ts: number): string {
   const secs = Math.max(0, Math.floor(Date.now() / 1000 - ts));
-  if (secs < 60) return "just now";
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  if (secs < 86_400) return `${Math.floor(secs / 3600)}h ago`;
+  if (secs < 60) return i18n.t("runs:relative.justNow");
+  if (secs < 3600) return i18n.t("runs:relative.minutesAgo", { count: Math.floor(secs / 60) });
+  if (secs < 86_400) return i18n.t("runs:relative.hoursAgo", { count: Math.floor(secs / 3600) });
   return new Date(ts * 1000).toLocaleDateString(i18n.language, { hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" });
 }
 
