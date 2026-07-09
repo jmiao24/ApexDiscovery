@@ -22,8 +22,8 @@
 
 <p>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/version-v0.1.7-orange" alt="v0.1.7">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platforms">
+  <a href="https://internscience.github.io/ResearchClawBench-Home/"><img src="https://img.shields.io/badge/%F0%9F%8F%86%20%231-ResearchClawBench-FFB300" alt="#1 on ResearchClawBench"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platforms">
   <img src="https://img.shields.io/badge/i18n-7%20languages-5B8DEF" alt="7 interface languages">
   <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20React-24C8DB" alt="Built with Tauri + React">
   <img src="https://img.shields.io/badge/runtime-OpenCode-success" alt="OpenCode runtime">
@@ -56,11 +56,14 @@
 
 ## 它能做什么
 
-- **工作台，而不是只有聊天**：规划、批准、执行、检查工件、审查和复现实验都在一个桌面应用里完成。
-- **可追溯工件**：图、表、报告、笔记本和运行输出可以回到代码、输入、环境、模型输出和对话上下文。
-- **本地优先工作区**：会话位于本地工作区文件夹内；文件、溯源、笔记本、预览和运行记录默认留在本机。
-- **模型无关运行时**：UI 通过 `packages/sdk` 调用内置固定版本的 OpenCode sidecar，模型提供方、技能和 MCP 服务器保持可插拔。
-- **可复现优先**：本地、SSH/Slurm、Modal 和 notebook-batch 运行都可以记录为可复现的 run record，而不是散落的终端输出。
+**跑完整个科研闭环**——从一个宽泛的方向到一篇成稿论文：探索、文献综述、假设、实验代码、分析、绘图、写作，全部在一次连续、可审计的会话里完成。
+
+- **自主科研智能体**：内置的 `ai4s-agent` 端到端串起各专项技能(探索 → 综述 → 实验 → 写作)，每一步都把一个真实、可检查的工件落到你的工作区里,而不只是一条聊天回复。
+- **一切都可回溯**：图、表、报告、笔记本和运行输出都连回生成它们的确切代码、输入、环境、模型输出和对话。
+- **本地优先，数据归你**：会话、数据、溯源、笔记本和运行记录都在本机的本地文件夹里,默认不外流。
+- **模型无关运行时**：UI 通过 `packages/sdk` 调用内置固定版本的 OpenCode sidecar——自带模型即可;模型提供方、技能和 MCP 服务器保持可插拔。
+- **天然可复现**：本地、SSH/Slurm、Modal 和 notebook-batch 运行都被记录为可复现的 run record,而不是散落的终端输出。
+- **可扩展**：智能体技能、MCP 服务器与一键科学连接器、`/` 命令、`!` shell 模式,以及一个模型无关的 SDK。
 
 ## 效果演示
 
@@ -90,6 +93,22 @@
 </details>
 
 ## 当前能力
+
+**把科研闭环做成技能。** 一个元技能跑完整条流水线;每个阶段都是一个自足的技能,产出真实、可评审的工件——在 OpenCode 支持的任意模型上都能跑:
+
+| 技能 | 职责 | 主要产出 |
+| --- | --- | --- |
+| `ai4s-agent` | 按顺序运行下面四个技能 | 完整的研究包 |
+| `research-explorer` | 把宽泛方向收敛成具体课题 | `research_exploration.md`、`topic_matrix.md`、`literature_pre_survey.md` |
+| `literature-survey` | 撰写文献综述 | 6–20 页 PDF、60+ 条真实引用、LaTeX 源码、分类学图 |
+| `experiment-suite` | 构建实验包 | 设计文档、可运行代码、带溯源的 `results.json`、图、报告 |
+| `paper-writer` | 撰写研究论文 | 8–14 页 PDF、200+ 引用、4–8 张图、表格 |
+| `mindmap-render` | 渲染思维导图 | 由 `topic_matrix.md` 生成的图片 |
+| `integrity-auditor` | 审计论文完整性 | 图像/数值/逻辑问题、四级证据分级、`audit_report.md` |
+
+这些技能随 `ai4s-skills` 技能包一起提供,与第一方审查技能以及下方的 Office/文档技能并列。
+
+### 平台
 
 | 范围 | 当前状态 |
 | --- | --- |
@@ -209,8 +228,6 @@ pnpm lint
 | `docs/` | 产品、技术、operator、连接器和研究笔记。 |
 
 ## 状态
-
-当前应用版本：**v0.1.7**。
 
 项目是正在积极开发的桌面 MVP。最可靠的当前实现日志是 [`PROGRESS.md`](./PROGRESS.md)。
 产品和架构说明位于 [`docs/PRD.md`](./docs/PRD.md) 和

@@ -20,8 +20,8 @@ Formerly Open Science. Una alternativa desktop open source a Claude Science y wo
 
 <p>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/version-v0.1.7-orange" alt="v0.1.7">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platforms">
+  <a href="https://internscience.github.io/ResearchClawBench-Home/"><img src="https://img.shields.io/badge/%F0%9F%8F%86%20%231-ResearchClawBench-FFB300" alt="#1 on ResearchClawBench"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platforms">
   <img src="https://img.shields.io/badge/i18n-7%20languages-5B8DEF" alt="7 interface languages">
   <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20React-24C8DB" alt="Built with Tauri + React">
   <img src="https://img.shields.io/badge/runtime-OpenCode-success" alt="OpenCode runtime">
@@ -50,11 +50,14 @@ Formerly Open Science. Una alternativa desktop open source a Claude Science y wo
 
 ## Qué hace
 
-- **Banco de trabajo, no solo chat**: planifica, aprueba, ejecuta, inspecciona artefactos, revisa y reproduce desde una sola app.
-- **Artefactos trazables**: figuras, tablas, informes, notebooks y salidas de ejecución pueden enlazarse con código, entradas, entorno, salida del modelo y conversación.
-- **Local-first**: las sesiones viven en carpetas locales; archivos, procedencia, notebooks, vistas previas y registros de ejecución permanecen en tu máquina por defecto.
-- **Agnóstico al modelo**: la UI habla con un sidecar OpenCode fijado mediante `packages/sdk`; proveedores, skills y servidores MCP siguen siendo intercambiables.
-- **Reproducibilidad primero**: ejecuciones locales, SSH/Slurm, Modal y notebook-batch pueden guardarse como run records reproducibles.
+**Ejecuta todo el ciclo de investigación** — de una dirección amplia a un artículo terminado: exploración, revisión bibliográfica, hipótesis, código de experimentos, análisis, figuras y redacción, en una sola sesión continua y auditable.
+
+- **Agentes de investigación autónomos**: el `ai4s-agent` incluido encadena skills especializadas de principio a fin (explorar → revisar → experimentar → escribir), y cada paso deja un artefacto real e inspeccionable en tu workspace, no solo una respuesta de chat.
+- **Todo es trazable**: figuras, tablas, informes, notebooks y salidas de ejecución enlazan con el código, las entradas, el entorno, la salida del modelo y la conversación exactos que los produjeron.
+- **Local-first y tuyo**: sesiones, datos, procedencia, notebooks y registros de ejecución viven en carpetas locales de tu máquina. Nada sale por defecto.
+- **Runtime agnóstico al modelo**: la UI habla mediante `packages/sdk` con un sidecar OpenCode fijado y empaquetado. Trae tu propio modelo; proveedores, skills y servidores MCP siguen siendo intercambiables.
+- **Reproducible por diseño**: las ejecuciones locales, SSH/Slurm, Modal y notebook-batch se registran como run records reproducibles, no como salida suelta de terminal.
+- **Extensible**: skills de agente, servidores MCP y conectores científicos de un clic, comandos `/`, modo shell `!` y un SDK agnóstico al modelo.
 
 ## Capturas
 
@@ -78,6 +81,22 @@ Formerly Open Science. Una alternativa desktop open source a Claude Science y wo
 </details>
 
 ## Capacidades actuales
+
+**El ciclo de investigación, como skills.** Un meta-skill ejecuta toda la tubería; cada etapa es un skill autónomo que produce un artefacto real y evaluable — ejecutable en cualquier modelo que soporte OpenCode:
+
+| Skill | Rol | Salida principal |
+| --- | --- | --- |
+| `ai4s-agent` | Ejecuta los cuatro skills siguientes, en orden | El paquete de investigación completo |
+| `research-explorer` | Convertir una dirección amplia en temas concretos | `research_exploration.md`, `topic_matrix.md`, `literature_pre_survey.md` |
+| `literature-survey` | Escribir una revisión bibliográfica | PDF de 6–20 pp, 60+ citas reales, fuente LaTeX, figuras de taxonomía |
+| `experiment-suite` | Construir un paquete de experimentos | Documento de diseño, código ejecutable, `results.json` con procedencia, figuras, informe |
+| `paper-writer` | Escribir un artículo de investigación | PDF de 8–14 pp, 200+ citas, 4–8 figuras, tablas |
+| `mindmap-render` | Renderizar un mapa mental | Imagen generada a partir de un `topic_matrix.md` |
+| `integrity-auditor` | Auditar la integridad de un artículo | Hallazgos de imagen/numéricos/lógicos, evidencia en 4 niveles, `audit_report.md` |
+
+Vienen en el pack `ai4s-skills`, junto a las skills de revisión propias y las skills de Office/documentos de abajo.
+
+### Plataforma
 
 | Área | Estado actual |
 | --- | --- |
@@ -153,6 +172,6 @@ Los archivos del workspace, datos crudos, historial, procedencia, notebooks y ru
 
 ## Estado
 
-Versión actual: **v0.1.7**. El registro de implementación más fiable es [`PROGRESS.md`](./PROGRESS.md). El trabajo cercano se centra en builds firmados/notarizados, verificación Windows/Linux, auto-update, endurecimiento de conectores y revisión de reproducibilidad. Para discutir el proyecto, únete al [Open Science Discord](https://discord.gg/fWNMDKcd5P).
+El registro de implementación más fiable es [`PROGRESS.md`](./PROGRESS.md). El trabajo cercano se centra en builds firmados/notarizados, verificación Windows/Linux, auto-update, endurecimiento de conectores y revisión de reproducibilidad. Para discutir el proyecto, únete al [Open Science Discord](https://discord.gg/fWNMDKcd5P).
 
 [MIT](./LICENSE). Open Science Desktop es tooling beta de investigación: trata las salidas como borradores y verifica números, citas, código y conclusiones antes de publicar o decidir.

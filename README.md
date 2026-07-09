@@ -23,8 +23,8 @@ runs, and review into one auditable desktop workflow.
 
 <p>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/version-v0.1.7-orange" alt="v0.1.7">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platforms">
+  <a href="https://internscience.github.io/ResearchClawBench-Home/"><img src="https://img.shields.io/badge/%F0%9F%8F%86%20%231-ResearchClawBench-FFB300" alt="#1 on ResearchClawBench"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platforms">
   <img src="https://img.shields.io/badge/i18n-7%20languages-5B8DEF" alt="7 interface languages">
   <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20React-24C8DB" alt="Built with Tauri + React">
   <img src="https://img.shields.io/badge/runtime-OpenCode-success" alt="OpenCode runtime">
@@ -57,16 +57,25 @@ runs, and review into one auditable desktop workflow.
 
 ## What it does
 
-- **Workbench, not chat only** — plan, approve, execute, inspect artifacts, review,
-  and reproduce work from one desktop app.
-- **Traceable artifacts** — figures, tables, reports, notebooks, and run outputs can
-  link back to code, inputs, environment, model output, and conversation context.
-- **Local-first workspace** — sessions live in local folders under your workspace;
-  files, provenance, notebooks, previews, and run records stay on your machine.
+**Runs the whole research loop** — from a broad direction to a finished paper:
+exploration, literature survey, hypothesis, experiment code, analysis, figures, and
+write-up, in one continuous, auditable session.
+
+- **Autonomous research agents** — the bundled `ai4s-agent` chains specialist skills
+  end to end (explore → survey → experiment → write), and each stage drops a real,
+  inspectable artifact into your workspace, not just a chat reply.
+- **Everything traces back** — figures, tables, reports, notebooks, and run outputs
+  link to the exact code, inputs, environment, model output, and conversation that
+  produced them.
+- **Local-first and yours** — sessions, data, provenance, notebooks, and run records
+  live in local folders on your machine. Nothing leaves by default.
 - **Model-agnostic runtime** — the UI talks through `packages/sdk` to a bundled,
-  pinned OpenCode sidecar. Providers, skills, and MCP servers remain pluggable.
-- **Reproducibility-first** — local, SSH/Slurm, Modal, and notebook-batch runs can be
-  recorded as reproducible run records instead of loose terminal output.
+  pinned OpenCode sidecar. Bring your own model; providers, skills, and MCP servers
+  stay pluggable.
+- **Reproducible by construction** — local, SSH/Slurm, Modal, and notebook-batch runs
+  are captured as reproducible run records, not loose terminal scrollback.
+- **Extensible** — agent skills, MCP servers and one-click science connectors,
+  `/` commands, `!` shell mode, and a model-agnostic SDK.
 
 ## See it in action
 
@@ -98,6 +107,25 @@ PDF, and audit citations, unsourced numbers, and figure/code consistency.
 </details>
 
 ## Current capabilities
+
+**The research loop, as skills.** One meta-skill runs the full pipeline; each stage
+is a self-contained skill that produces a real, gradeable artifact — runnable on any
+model OpenCode supports:
+
+| Skill | Role | Primary output |
+| --- | --- | --- |
+| `ai4s-agent` | Runs the four skills below, in order | The full research package |
+| `research-explorer` | Turn a broad direction into concrete topics | `research_exploration.md`, `topic_matrix.md`, `literature_pre_survey.md` |
+| `literature-survey` | Write a literature survey | 6–20 pp PDF, 60+ real citations, LaTeX source, taxonomy figures |
+| `experiment-suite` | Build an experiment package | Design doc, runnable code, `results.json` with provenance, figures, report |
+| `paper-writer` | Write a research paper | 8–14 pp PDF, 200+ citations, 4–8 figures, tables |
+| `mindmap-render` | Render a mindmap | Image generated from a `topic_matrix.md` |
+| `integrity-auditor` | Audit a paper's integrity | Image / numerical / logical findings, 4-level evidence grading, `audit_report.md` |
+
+These ship in the `ai4s-skills` pack alongside first-party review skills and the
+office/document skills below.
+
+### Platform
 
 | Area | Current state |
 | --- | --- |
@@ -229,8 +257,6 @@ pnpm lint
 | `docs/` | Product, technical, operator, connector, and research notes. |
 
 ## Status
-
-Current app version: **v0.1.7**.
 
 The project is a working desktop MVP in active development. The most reliable current
 implementation log is [`PROGRESS.md`](./PROGRESS.md). Product and architecture notes
