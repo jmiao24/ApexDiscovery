@@ -53,14 +53,18 @@ def main():
 ## 3 · Run it and capture the result
 
 `modal run` executes remotely and streams logs + the local entrypoint's stdout
-back. Write the result into the workspace so it becomes a traceable artifact:
+back. Write the result into a fresh, immutable result directory so it becomes a
+traceable artifact and does not overwrite a previous run:
 
 ```bash
-modal run compute.py | tee modal_result.txt
+RESULT=results/<job-name>/<YYYYmmdd-HHMMSS>
+mkdir -p "$RESULT"
+modal run compute.py | tee "$RESULT"/modal_result.txt
 ```
 
 For large outputs, have the function write to a Modal Volume and download with
-`modal volume get`, rather than returning big objects.
+`modal volume get`, rather than returning big objects. Download every run into
+its own `RESULT` directory; never reuse a recorded output path.
 
 ## 4 · Record the run (reproducibility) — REQUIRED, every time
 
@@ -72,15 +76,17 @@ workspace root):
 
 Record it completely: `--code` once per script that ran, and `--output` once
 per file you captured or downloaded (the streamed result **and** any
-`modal volume get` files) — not just the summary.
+`modal volume get` files) — not just the summary. Output paths must be under the
+fresh `RESULT` directory; the helper refuses to record paths used by earlier
+runs.
 
 ```bash
 python "$XDG_CONFIG_HOME/opencode/skills/modal-run/record_run.py" \
   --surface modal --command "modal run compute.py" \
   --status <ok|failed> --host "modal:<app-name>" \
   --hardware "<the gpu= from @app.function, e.g. A10G — or 'CPU'>" \
-  --code compute.py --output modal_result.txt \
-  --output <each downloaded file> \
+  --code compute.py --output "$RESULT"/modal_result.txt \
+  --output "$RESULT"/<each downloaded file> \
   --session-id "$(cat .openscience/session.txt 2>/dev/null)"
 ```
 

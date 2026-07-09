@@ -111,28 +111,35 @@ Use this only when `caps.slurm` is set.
 Copy **every** file the job produced into the workspace so they become
 traceable artifacts — not just a summary. That means `log`, `env.txt`, and each
 result/data/figure file the run wrote (e.g. `result.json` **and**
-`trajectory.npz`, checkpoints, plots). A fetched artifact is the only thing that
-survives; anything left on the box is not provenance.
+`trajectory.npz`, checkpoints, plots). Each finished run MUST use a fresh,
+immutable local result directory; never fetch a rerun into a directory that was
+already recorded. A fetched artifact is the only thing that survives; anything
+left on the box is not provenance.
 ```bash
-mkdir -p results/<job-name>
+RESULT=results/<job-name>/<YYYYmmdd-HHMMSS>-<pid-or-job-id>
+mkdir -p "$RESULT"
 scp -o BatchMode=yes "<host>:<remote-dir>/log" "<host>:<remote-dir>/env.txt" \
-    "<host>:<remote-dir>/<each output file>" results/<job-name>/
+    "<host>:<remote-dir>/<each output file>" "$RESULT"/
 ```
 `<remote-dir>` is the literal directory you created — name each file explicitly.
 List the job dir first (`ssh <host> "ls -la <remote-dir>"`) so you fetch them all.
+If you want a convenience "latest" copy, create it only after recording; the
+recorded `--output` paths must stay in the immutable run directory.
 
 ## 4 · Record the run (reproducibility) — REQUIRED, every time
 
 Recording is not an optional finishing flourish: the app can't see the remote
 machine, so this call is the ONLY thing that makes the run exist in Runs. Do it
-after **every** finished run — first runs, quick re-runs, and re-fetches alike.
-Skipping it (a common mistake on a casual "just run it again") loses the run
-entirely. Record it **completely** — the helper pins whatever you pass:
+after **every** finished run — first runs, quick re-runs, and recovered fetches
+alike, always using a fresh `RESULT` directory. Skipping it (a common mistake on
+a casual "just run it again") loses the run entirely. Record it **completely** —
+the helper pins whatever you pass:
 
 - `--code` once per script that actually ran — the entry script **and** every
   helper it calls (e.g. `run.sh` **and** `humanoid_sim.py`), not just the wrapper.
 - `--output` once per file you fetched in §3 — every result/data/figure, not
-  just the summary json.
+  just the summary json. These paths must be under that run's fresh `RESULT`
+  directory; the helper refuses to record output paths used by earlier runs.
 - `--env-file` the fetched `env.txt`, so the ambient interpreter + package
   versions are pinned (this is what makes an SSH run reproducible).
 - `--hardware` = what the job **used**, not what the box has. A CPU-only job on
@@ -145,8 +152,8 @@ python "$XDG_CONFIG_HOME/opencode/skills/remote-compute/record_run.py" \
   --surface ssh --command "bash run.sh" --status <ok|failed> --host <host> \
   --hardware "<hardware the job used>" \
   --code run.sh --code <each other script> \
-  --output results/<job-name>/<each output file> \
-  --env-file results/<job-name>/env.txt \
+  --output "$RESULT"/<each output file> \
+  --env-file "$RESULT"/env.txt \
   --session-id "$(cat .openscience/session.txt 2>/dev/null)"
 ```
 

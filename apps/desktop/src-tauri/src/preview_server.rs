@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, State};
 
-use crate::artifact_file::{mime_for, resolve_under};
+use crate::artifact_file::{locate_under, mime_for, resolve_under};
 use crate::runtime::workspace_dir;
 
 #[derive(Default)]
@@ -262,26 +262,36 @@ where
     Ok(port)
 }
 
-/// A workspace-relative form of `path` for the preview URL. Write-tool
-/// artifact paths are absolute — they must live under `root` (the sandbox)
-/// and are returned relative to it; relative paths pass through.
-pub fn relativize(root: &Path, path: &str) -> Result<String, String> {
-    let p = Path::new(path);
-    if !p.is_absolute() {
-        return Ok(path.trim_start_matches('/').to_string());
-    }
-    let root = root
-        .canonicalize()
-        .map_err(|e| format!("root unavailable: {e}"))?;
-    let full = p.canonicalize().map_err(|_| "file not found".to_string())?;
+fn relative_path(root: &Path, full: &Path) -> Result<String, String> {
     let rel = full
-        .strip_prefix(&root)
+        .strip_prefix(root)
         .map_err(|_| "path is outside the workspace".to_string())?;
     let parts: Vec<String> = rel
         .components()
         .map(|c| c.as_os_str().to_string_lossy().into_owned())
         .collect();
     Ok(parts.join("/"))
+}
+
+/// A workspace-relative form of `path` for the preview URL. Write-tool artifact
+/// paths are absolute and must live under `root`; relative paths are first
+/// checked literally, then resolved by basename like prose artifact links.
+pub fn relativize(root: &Path, path: &str) -> Result<String, String> {
+    let p = Path::new(path);
+    let root = root
+        .canonicalize()
+        .map_err(|e| format!("root unavailable: {e}"))?;
+    if !p.is_absolute() {
+        let rel = path.trim_start_matches('/');
+        if let Ok(full) = resolve_under(&root, rel) {
+            if full.is_file() {
+                return relative_path(&root, &full);
+            }
+        }
+        return locate_under(&root, rel).ok_or_else(|| "file not found".to_string());
+    }
+    let full = p.canonicalize().map_err(|_| "file not found".to_string())?;
+    relative_path(&root, &full)
 }
 
 /// URL a file is previewable at (starts the server on first use). `root`
@@ -402,6 +412,24 @@ mod tests {
         assert_eq!(relativize(&root, "sub/index.html").as_deref(), Ok("sub/index.html"));
         // Absolute paths outside the workspace are rejected (sandbox).
         assert!(relativize(&root, "/etc/hosts").is_err());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn relativize_resolves_bare_preview_names_before_building_urls() {
+        let root = std::env::temp_dir().join(format!(
+            "ai4s-relativize-bare-test-{}",
+            std::process::id()
+        ));
+        let nested = root.join("results").join("run-1");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("humanoid_walk.gif"), b"GIF89a").unwrap();
+
+        assert_eq!(
+            relativize(&root, "humanoid_walk.gif").as_deref(),
+            Ok("results/run-1/humanoid_walk.gif")
+        );
 
         let _ = std::fs::remove_dir_all(root);
     }

@@ -20,9 +20,9 @@ Usage (run from the workspace root):
       --status ok --host home-3090 --wall-ms 3002 \
       --hardware "used: 24 CPU cores, 62 GB RAM (CPU-only; GPUs idle)" \
       --code run.sh --code humanoid_sim.py \
-      --output results/humanoid-sim/result.json \
-      --output results/humanoid-sim/trajectory.npz \
-      --env-file results/humanoid-sim/env.txt
+      --output results/humanoid-sim/20260708-201944-12345/result.json \
+      --output results/humanoid-sim/20260708-201944-12345/trajectory.npz \
+      --env-file results/humanoid-sim/20260708-201944-12345/env.txt
 """
 import argparse
 import hashlib
@@ -113,6 +113,47 @@ def read_env(path):
     return env
 
 
+def existing_output_owner(path):
+    """Return the run id that already recorded an output path, if any."""
+    try:
+        with open(STORE, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                for output in record.get("outputs") or []:
+                    if output.get("path") == path:
+                        return record.get("runId") or "unknown run"
+    except OSError:
+        return None
+    return None
+
+
+def reject_reused_output_paths(record):
+    """Remote outputs must be immutable: a new run needs a new result path."""
+    conflicts = []
+    for output in record.get("outputs") or []:
+        path = output.get("path")
+        if not path:
+            continue
+        owner = existing_output_owner(path)
+        if owner:
+            conflicts.append((path, owner))
+    if not conflicts:
+        return
+
+    print("error: output path already recorded; refusing to overwrite run provenance.", file=sys.stderr)
+    for path, owner in conflicts:
+        print(f"  {path} was already recorded by {owner}", file=sys.stderr)
+    print(
+        "fetch this run into a new immutable result directory, e.g. "
+        "results/<job-name>/<YYYYmmdd-HHMMSS>-<run-id>/, then record those paths.",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+
+
 def main():
     p = argparse.ArgumentParser(description="Record a remote run into Open Science provenance.")
     p.add_argument("--command", required=True, help="the submit command, e.g. 'sbatch train.slurm'")
@@ -167,6 +208,7 @@ def main():
             record[key] = val
 
     os.makedirs(os.path.dirname(STORE), exist_ok=True)
+    reject_reused_output_paths(record)
     with open(STORE, "a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
     print(f"Recorded {args.surface} run {run_id} ({args.status}) → {STORE}", file=sys.stderr)
