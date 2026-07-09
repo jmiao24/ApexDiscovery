@@ -17,7 +17,9 @@ import type {
   ProviderCatalogEntry,
   ProviderInfo,
 } from "@ai4s/sdk";
+import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/lib/store";
+import { shippedLocales } from "@/i18n/config";
 import { getClient, useRuntimeStore } from "@/lib/runtime";
 import {
   importOpenCodeLogin,
@@ -49,6 +51,9 @@ import { cn } from "@/lib/cn";
 export function SettingsPage() {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
+  const locale = useUiStore((s) => s.locale);
+  const setLocale = useUiStore((s) => s.setLocale);
+  const { t } = useTranslation("settings");
   // Select each field individually. A bare `useRuntimeStore()` subscribed to the
   // WHOLE store, so every unrelated mutation (session events, streaming, idle
   // checks) re-rendered this page — in the packaged WKWebView that repaint storm
@@ -978,20 +983,37 @@ export function SettingsPage() {
         <DataFlowCard model={defaultModel} workspace={wsPath} />
 
         {/* ---- Appearance ---- */}
-        <Card title="Appearance">
+        <Card title={t("appearance.title")}>
           <div className="inline-flex rounded-input border border-border bg-surface-2 p-0.5">
-            {(["light", "dark"] as const).map((t) => (
+            {(["light", "dark"] as const).map((mode) => (
               <button
-                key={t}
-                onClick={() => setTheme(t)}
+                key={mode}
+                onClick={() => setTheme(mode)}
                 className={cn(
-                  "rounded-[5px] px-4 py-1.5 text-[13px] capitalize transition-colors",
-                  theme === t ? "bg-surface text-text shadow-card" : "text-muted hover:text-text",
+                  "rounded-[5px] px-4 py-1.5 text-[13px] transition-colors",
+                  theme === mode ? "bg-surface text-text shadow-card" : "text-muted hover:text-text",
                 )}
               >
-                {t}
+                {t(`appearance.theme.${mode}`)}
               </button>
             ))}
+          </div>
+          <div className="mt-4">
+            <label htmlFor="ui-language" className="mb-1.5 block text-xs text-muted">
+              {t("language.label")}
+            </label>
+            <select
+              id="ui-language"
+              value={locale}
+              onChange={(e) => setLocale(e.target.value)}
+              className={inputCls("w-56")}
+            >
+              {shippedLocales().map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.nativeName}
+                </option>
+              ))}
+            </select>
           </div>
         </Card>
       </div>

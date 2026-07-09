@@ -1,1 +1,12 @@
-{}
+{
+  "appearance": {
+    "title": "Appearance",
+    "theme": {
+      "light": "Light",
+      "dark": "Dark"
+    }
+  },
+  "language": {
+    "label": "Language"
+  }
+}
