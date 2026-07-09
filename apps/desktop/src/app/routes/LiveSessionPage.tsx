@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { FlaskConical, FolderOpen, Loader2, NotebookPen, PanelLeft, PlugZap } from "lucide-react";
 import { DRAFT_KEY, rootSessionOf, subagentActivity, useRuntimeStore } from "@/lib/runtime";
 import { queryRuns } from "@/lib/runs";
@@ -21,6 +22,7 @@ import { cn } from "@/lib/cn";
 /** Live agent session backed by the OpenCode runtime. `/live` (no id) is a blank draft;
  *  the session is created lazily on the first message, then the URL updates to /live/:id. */
 export function LiveSessionPage() {
+  const { t } = useTranslation(["session", "common"]);
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const {
@@ -145,7 +147,7 @@ export function LiveSessionPage() {
   // Name the subagent on the card when the ask isn't from the main agent.
   const requestOrigin =
     activeRequest && activeRequest.sessionId !== currentId
-      ? (sessions.find((s) => s.id === activeRequest.sessionId)?.title ?? "a subagent")
+      ? (sessions.find((s) => s.id === activeRequest.sessionId)?.title ?? t("live.subagentFallback"))
       : undefined;
 
   // Notebooks the agent touched in THIS session — the conversation ↔ notebook map.
@@ -216,8 +218,8 @@ export function LiveSessionPage() {
           {sidebarCollapsed && (
             <button
               onClick={() => setSidebarCollapsed(false)}
-              aria-label="Expand sidebar"
-              title={`Expand sidebar (${isMac ? "⌘B" : "Ctrl+B"})`}
+              aria-label={t("live.header.expandSidebarAria")}
+              title={t("live.header.expandSidebarTitle", { shortcut: isMac ? "⌘B" : "Ctrl+B" })}
               className="fade-in rounded p-1 text-text hover:bg-surface-2"
             >
               <PanelLeft size={14} strokeWidth={1.5} />
@@ -242,12 +244,12 @@ export function LiveSessionPage() {
                 "flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-surface-2",
                 showFiles ? "bg-surface-2 text-text" : "text-muted",
               )}
-              title={`Browse this session's folder beside the chat${workspace ? ` — ${workspace}` : ""}`}
+              title={`${t("live.filesToggle.title")}${workspace ? ` — ${workspace}` : ""}`}
               aria-pressed={showFiles}
             >
               <FolderOpen size={13} />
               <span className="max-w-[160px] truncate">
-                {workspace ? baseName(workspace) : "Files"}
+                {workspace ? baseName(workspace) : t("live.filesToggle.default")}
               </span>
             </button>
           )}
@@ -258,11 +260,11 @@ export function LiveSessionPage() {
                 "flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-surface-2",
                 showRuns ? "bg-surface-2 text-text" : "text-muted",
               )}
-              title="This session's experiment runs — beside the chat"
+              title={t("live.runsToggle.title")}
               aria-pressed={showRuns}
             >
               <FlaskConical size={13} />
-              <span>Runs</span>
+              <span>{t("live.runsToggle.label")}</span>
             </button>
           )}
           <ConnBadge status={displayStatus} />
@@ -274,7 +276,7 @@ export function LiveSessionPage() {
                 "flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-xs transition-colors hover:bg-surface-2",
                 activeArtifact?.path === nb.path ? "bg-surface-2 text-text" : "text-muted",
               )}
-              title={`Open ${nb.path} — the agent works on this notebook in this session`}
+              title={t("live.notebook.openTitle", { path: nb.path })}
             >
               <NotebookPen size={12} />
               <span className="max-w-[180px] truncate">{nb.filename}</span>
@@ -287,7 +289,7 @@ export function LiveSessionPage() {
               className="flex items-center gap-1.5 rounded-input bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
             >
               {connecting ? <Loader2 size={13} className="animate-spin" /> : <PlugZap size={13} />}
-              Connect
+              {t("live.connect")}
             </button>
           )}
         </div>
@@ -301,10 +303,11 @@ export function LiveSessionPage() {
                 real error/offline states. */}
             {!connected && !connecting && (
               <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-                <div className="text-sm font-medium text-text">OpenCode runtime</div>
+                <div className="text-sm font-medium text-text">{t("live.runtime.title")}</div>
                 <p className="mt-1 text-sm text-muted">
-                  The desktop app runs a bundled OpenCode automatically. In the browser, start one with{" "}
-                  <span className="font-mono">opencode serve</span> and connect.
+                  {t("live.runtime.bodyPrefix")}{" "}
+                  <span className="font-mono">opencode serve</span>
+                  {t("live.runtime.bodySuffix")}
                 </p>
                 <div className="mt-3 rounded-input bg-surface-2 px-3 py-2 font-mono text-xs text-text">
                   {serverUrl}
@@ -328,10 +331,10 @@ export function LiveSessionPage() {
                 <Loader2 size={14} className="shrink-0 animate-spin" />
                 <span className="shrink-0">
                   {activeRequest
-                    ? "Paused — the agent needs your answer below"
+                    ? t("live.status.paused")
                     : sending && !currentId
-                      ? "Starting the session in its folder…"
-                      : "Working…"}
+                      ? t("live.status.startingSession")
+                      : t("live.status.working")}
                 </span>
                 {!activeRequest && currentTool && (
                   <>
@@ -372,7 +375,11 @@ export function LiveSessionPage() {
               working={running}
               onStop={() => void interrupt()}
               placeholder={
-                working ? "Waiting for the reply…" : connected ? "Ask anything" : "Connect to chat"
+                working
+                  ? t("live.placeholder.waiting")
+                  : connected
+                    ? t("composer.placeholder.default")
+                    : t("live.placeholder.disconnected")
               }
               approvalMode={approvalMode}
               onApprovalModeChange={(mode) => void setApprovalMode(mode)}
@@ -435,9 +442,13 @@ function ThreadSkeleton() {
 }
 
 function ConnBadge({ status }: { status: string }) {
+  const { t } = useTranslation(["session", "common"]);
   const tone = status === "ready" ? "text-ok" : status === "error" ? "text-error" : "text-muted";
   return (
-    <span className={cn("flex items-center gap-1.5 text-xs", tone)} title={`OpenCode · ${status}`}>
+    <span
+      className={cn("flex items-center gap-1.5 text-xs", tone)}
+      title={t("live.connBadge.title", { status })}
+    >
       <span
         className={cn(
           "h-1.5 w-1.5 rounded-full",
@@ -447,7 +458,7 @@ function ConnBadge({ status }: { status: string }) {
       />
       {/* Ready is the norm — a green dot says it all (hover for detail). Text
           appears only for states that need attention. */}
-      {status !== "ready" && <>OpenCode · {status}</>}
+      {status !== "ready" && t("live.connBadge.title", { status })}
     </span>
   );
 }

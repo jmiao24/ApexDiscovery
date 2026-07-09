@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { ArrowUp, Check, ChevronDown, Hand, Paperclip, Square, Terminal, X, Zap } from "lucide-react";
 import { addFilesToWorkspace, addTextToWorkspace, isTauri, type ApprovalMode } from "@/lib/tauri";
 import { WorkspaceChip } from "@/components/thread/WorkspaceChip";
@@ -42,25 +43,11 @@ export interface ComposerCommand {
   source?: string;
 }
 
-/** The two approval modes the composer can switch between (Codex-style). */
-const APPROVAL_OPTIONS: {
-  mode: ApprovalMode;
-  label: string;
-  description: string;
-  icon: typeof Hand;
-}[] = [
-  {
-    mode: "approve",
-    label: "Approve for me",
-    description: "Asks before deleting, installing, or going remote",
-    icon: Hand,
-  },
-  {
-    mode: "full",
-    label: "Full access",
-    description: "Runs every command without asking",
-    icon: Zap,
-  },
+/** The two approval modes the composer can switch between (Codex-style). Copy
+ *  (label/description) is translated at render time — see `approvalCopy`. */
+const APPROVAL_OPTIONS: { mode: ApprovalMode; icon: typeof Hand }[] = [
+  { mode: "approve", icon: Hand },
+  { mode: "full", icon: Zap },
 ];
 
 /**
@@ -83,7 +70,7 @@ export function Composer({
   disabled,
   working,
   onStop,
-  placeholder = "Ask anything",
+  placeholder,
   approvalMode,
   onApprovalModeChange,
 }: {
@@ -95,12 +82,27 @@ export function Composer({
   /** A turn is running: the send button becomes Stop (wired to `onStop`). */
   working?: boolean;
   onStop?: () => void;
+  /** Defaults to `t("composer.placeholder.default")` ("Ask anything"). */
   placeholder?: string;
   /** The approval switch shows only when the surface provides both (the live
    *  session does; static mock sessions don't). */
   approvalMode?: ApprovalMode;
   onApprovalModeChange?: (mode: ApprovalMode) => void;
 }) {
+  const { t } = useTranslation(["session", "common"]);
+  const resolvedPlaceholder = placeholder ?? t("composer.placeholder.default");
+  // Approval-mode copy keyed by mode — APPROVAL_OPTIONS itself stays static
+  // (icons only) so it can live at module scope outside the component.
+  const approvalCopy: Record<ApprovalMode, { label: string; description: string }> = {
+    approve: {
+      label: t("composer.approval.approve.label"),
+      description: t("composer.approval.approve.description"),
+    },
+    full: {
+      label: t("composer.approval.full.label"),
+      description: t("composer.approval.full.description"),
+    },
+  };
   const [value, setValue] = useState("");
   const [files, setFiles] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
@@ -326,7 +328,11 @@ export function Composer({
         const name = await addTextToWorkspace("pasted.txt", text);
         setFiles((f) => [...f, name]);
       } catch (err) {
-        toast.error(`Could not save paste: ${err instanceof Error ? err.message : String(err)}`);
+        toast.error(
+          t("composer.error.paste", {
+            message: err instanceof Error ? err.message : String(err),
+          }),
+        );
       }
     })();
   };
@@ -338,7 +344,11 @@ export function Composer({
       const names = await addFilesToWorkspace();
       if (names.length > 0) setFiles((f) => [...f, ...names]);
     } catch (err) {
-      toast.error(`Could not add files: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(
+        t("composer.error.addFiles", {
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
     } finally {
       setAdding(false);
     }
@@ -363,7 +373,7 @@ export function Composer({
       {paletteOpen && (
         <div
           role="listbox"
-          aria-label="Commands"
+          aria-label={t("composer.commandsAria")}
           className="absolute bottom-full left-0 right-0 z-20 mb-2 max-h-64 overflow-y-auto rounded-card border border-border bg-surface p-1 shadow-card"
         >
           {matches.map((c, i) => (
@@ -387,7 +397,7 @@ export function Composer({
               )}
               {(c.source === "skill" || c.source === "mcp") && (
                 <span className="shrink-0 rounded px-1 py-0.5 text-[10px] uppercase text-muted ring-1 ring-border">
-                  {c.source}
+                  {c.source === "skill" ? t("composer.source.skill") : t("composer.source.mcp")}
                 </span>
               )}
             </button>
@@ -405,7 +415,7 @@ export function Composer({
               <span className="max-w-[220px] truncate">{name}</span>
               <button
                 className="rounded p-0.5 text-muted hover:bg-border hover:text-text"
-                aria-label={`Remove ${name}`}
+                aria-label={t("composer.file.removeAria", { name })}
                 onClick={() => setFiles((f) => f.filter((n) => n !== name))}
               >
                 <X size={11} />
@@ -423,28 +433,28 @@ export function Composer({
         onPaste={onPaste}
         placeholder={
           command
-            ? "Arguments (optional) — Enter to run"
+            ? t("composer.placeholder.arguments")
             : shellMode
-              ? "Run a shell command in the workspace folder"
-              : placeholder
+              ? t("composer.placeholder.shell")
+              : resolvedPlaceholder
         }
         className={cn(
           "max-h-[160px] w-full resize-none bg-transparent px-1.5 py-0.5 text-sm leading-6 text-text outline-none placeholder:text-muted",
           (shellMode || command) && "font-mono",
         )}
-        aria-label="Ask anything"
+        aria-label={t("composer.placeholder.default")}
       />
       {/* Codex-style action row: mode controls bottom-left, send bottom-right. */}
       <div className="flex items-center gap-1.5 pt-1">
         {command ? (
           <span
             className="flex h-7 shrink-0 items-center gap-1 rounded-input bg-accent/15 pl-2 pr-1 font-mono text-xs text-accent"
-            title="Runs this command — type arguments, or press Backspace to edit the name"
+            title={t("composer.command.chipTitle")}
           >
             /{command}
             <button
               className="rounded p-0.5 hover:bg-accent/20"
-              aria-label="Remove command"
+              aria-label={t("composer.command.removeAria")}
               onClick={unchip}
             >
               <X size={11} />
@@ -453,17 +463,17 @@ export function Composer({
         ) : shellMode ? (
           <span
             className="flex h-7 shrink-0 items-center gap-1 rounded-input bg-warn/15 px-1.5 font-mono text-xs text-warn"
-            title="Runs directly in the session's workspace folder"
+            title={t("composer.shellMode.title")}
           >
             <Terminal size={13} />
-            shell
+            {t("composer.shellMode.badge")}
           </span>
         ) : (
           canAttach && (
             <button
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-input text-muted hover:bg-surface-2 hover:text-text disabled:opacity-40"
-              aria-label="Add files"
-              title="Add local files to the workspace"
+              aria-label={t("composer.attach.addAria")}
+              title={t("composer.attach.title")}
               onClick={() => void addFiles()}
               disabled={adding}
             >
@@ -479,11 +489,11 @@ export function Composer({
             {approvalOpen && (
               <div
                 role="menu"
-                aria-label="Approval modes"
+                aria-label={t("composer.approval.menuAria")}
                 className="absolute bottom-full left-0 z-20 mb-2 w-80 rounded-card border border-border bg-surface p-1 shadow-card"
               >
                 <div className="px-2 pb-1 pt-1.5 text-xs text-muted">
-                  How should agent actions be approved?
+                  {t("composer.approval.menuTitle")}
                 </div>
                 {APPROVAL_OPTIONS.map((opt) => (
                   <button
@@ -500,8 +510,10 @@ export function Composer({
                   >
                     <opt.icon size={13} className="mt-0.5 shrink-0 text-muted" />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-xs text-text">{opt.label}</span>
-                      <span className="block text-xs text-muted">{opt.description}</span>
+                      <span className="block text-xs text-text">{approvalCopy[opt.mode].label}</span>
+                      <span className="block text-xs text-muted">
+                        {approvalCopy[opt.mode].description}
+                      </span>
                     </span>
                     {opt.mode === approvalMode && (
                       <Check size={13} className="mt-0.5 shrink-0 text-accent" />
@@ -511,13 +523,13 @@ export function Composer({
               </div>
             )}
             <button
-              aria-label="Approval mode"
-              title="How agent actions get approved"
+              aria-label={t("composer.approval.aria")}
+              title={t("composer.approval.title")}
               className="flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs text-muted hover:bg-surface-2 hover:text-text"
               onClick={() => setApprovalOpen((o) => !o)}
             >
               {approvalMode === "full" ? <Zap size={12} /> : <Hand size={12} />}
-              <span>{APPROVAL_OPTIONS.find((o) => o.mode === approvalMode)?.label}</span>
+              <span>{approvalCopy[approvalMode].label}</span>
               <ChevronDown size={11} />
             </button>
           </div>
@@ -528,8 +540,8 @@ export function Composer({
           // while the agent works — always live, even though the input is not.
           <button
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-input bg-accent text-accent-fg hover:opacity-90"
-            aria-label="Stop"
-            title="Interrupt this turn (Esc)"
+            aria-label={t("composer.stop.aria")}
+            title={t("composer.stop.title")}
             onClick={onStop}
           >
             <Square size={11} fill="currentColor" />
@@ -537,7 +549,7 @@ export function Composer({
         ) : (
           <button
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-input bg-accent text-accent-fg hover:opacity-90 disabled:opacity-40"
-            aria-label="Send"
+            aria-label={t("composer.send.aria")}
             onClick={submit}
             disabled={!canSend}
           >

@@ -1,1 +1,118 @@
-{}
+{
+  "notFound": {
+    "title": "Session not found",
+    "hint": "Pick a session from the sidebar."
+  },
+  "composer": {
+    "placeholder": {
+      "default": "Ask anything",
+      "arguments": "Arguments (optional) — Enter to run",
+      "shell": "Run a shell command in the workspace folder"
+    },
+    "commandsAria": "Commands",
+    "source": {
+      "skill": "skill",
+      "mcp": "mcp"
+    },
+    "file": {
+      "removeAria": "Remove {{name}}"
+    },
+    "attach": {
+      "addAria": "Add files",
+      "title": "Add local files to the workspace"
+    },
+    "command": {
+      "chipTitle": "Runs this command — type arguments, or press Backspace to edit the name",
+      "removeAria": "Remove command"
+    },
+    "shellMode": {
+      "badge": "shell",
+      "title": "Runs directly in the session's workspace folder"
+    },
+    "stop": {
+      "aria": "Stop",
+      "title": "Interrupt this turn (Esc)"
+    },
+    "send": {
+      "aria": "Send"
+    },
+    "approval": {
+      "aria": "Approval mode",
+      "title": "How agent actions get approved",
+      "menuAria": "Approval modes",
+      "menuTitle": "How should agent actions be approved?",
+      "approve": {
+        "label": "Approve for me",
+        "description": "Asks before deleting, installing, or going remote"
+      },
+      "full": {
+        "label": "Full access",
+        "description": "Runs every command without asking"
+      }
+    },
+    "error": {
+      "paste": "Could not save paste: {{message}}",
+      "addFiles": "Could not add files: {{message}}"
+    }
+  },
+  "starters": {
+    "newSession": "New session",
+    "heading": "What should we look into?",
+    "subheading": "Describe your analysis below — or start from one of these.",
+    "demo": {
+      "title": "Run a demo analysis, end to end",
+      "description": "Simulate a dataset, fit a model, and produce a figure and a traceable report."
+    },
+    "analyze": {
+      "title": "Analyze my data",
+      "description": "Point the agent at a file you added; get figures and a report back."
+    },
+    "audit": {
+      "title": "Audit a report for traceability",
+      "description": "Check citations, unsourced numbers, and figure-versus-code consistency."
+    },
+    "example-climate": {
+      "title": "Explore an example: climate trends",
+      "description": "Real NASA GISTEMP data — trend, decadal comparison, figure, and report."
+    },
+    "error": {
+      "setup": "Could not set up the example: {{message}}"
+    }
+  },
+  "live": {
+    "runtime": {
+      "title": "OpenCode runtime",
+      "bodyPrefix": "The desktop app runs a bundled OpenCode automatically. In the browser, start one with",
+      "bodySuffix": " and connect."
+    },
+    "connect": "Connect",
+    "subagentFallback": "a subagent",
+    "header": {
+      "expandSidebarAria": "Expand sidebar",
+      "expandSidebarTitle": "Expand sidebar ({{shortcut}})"
+    },
+    "filesToggle": {
+      "default": "Files",
+      "title": "Browse this session's folder beside the chat"
+    },
+    "runsToggle": {
+      "label": "Runs",
+      "title": "This session's experiment runs — beside the chat"
+    },
+    "notebook": {
+      "openTitle": "Open {{path}} — the agent works on this notebook in this session"
+    },
+    "connBadge": {
+      "title": "OpenCode · {{status}}"
+    },
+    "status": {
+      "paused": "Paused — the agent needs your answer below",
+      "startingSession": "Starting the session in its folder…",
+      "working": "Working…"
+    },
+    "placeholder": {
+      "disconnected": "Connect to chat",
+      "waiting": "Waiting for the reply…"
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { ChevronRight, FileSearch, FlaskConical, Globe2, LineChart } from "lucide-react";
 import { installExample, isTauri } from "@/lib/tauri";
 import { toast } from "@/lib/toast";
@@ -5,8 +6,8 @@ import { toast } from "@/lib/toast";
 export interface WorkflowStarter {
   id: string;
   icon: React.ReactNode;
-  title: string;
-  description: string;
+  /** Sent to the agent as-is — content, not UI copy, so it is never translated.
+   *  The card's display title/description live in `session:starters.<id>.*`. */
   prompt: string;
   /** Side effect to run before sending the prompt (e.g. install example files). */
   prepare?: () => Promise<void>;
@@ -18,8 +19,6 @@ export const WORKFLOW_STARTERS: WorkflowStarter[] = [
   {
     id: "demo",
     icon: <FlaskConical size={17} strokeWidth={1.75} />,
-    title: "Run a demo analysis, end to end",
-    description: "Simulate a dataset, fit a model, and produce a figure and a traceable report.",
     prompt:
       "Run a complete demo analysis end to end: simulate a small dose–response dataset in Python, " +
       "analyze it (fit + summary statistics), save one publication-quality figure as demo_analysis/figure1.png, " +
@@ -29,8 +28,6 @@ export const WORKFLOW_STARTERS: WorkflowStarter[] = [
   {
     id: "analyze",
     icon: <LineChart size={17} strokeWidth={1.75} />,
-    title: "Analyze my data",
-    description: "Point the agent at a file you added; get figures and a report back.",
     prompt:
       "Analyze the data file I added to the workspace end to end: explore it, run the analysis in code, " +
       "save at least one figure as a PNG, and write report.md with the findings — every number traced to " +
@@ -39,8 +36,6 @@ export const WORKFLOW_STARTERS: WorkflowStarter[] = [
   {
     id: "audit",
     icon: <FileSearch size={17} strokeWidth={1.75} />,
-    title: "Audit a report for traceability",
-    description: "Check citations, unsourced numbers, and figure-versus-code consistency.",
     prompt:
       "Use the traceability-review skill to audit the report or manuscript in my workspace: resolve every " +
       "citation, flag numbers with no traceable source, and check figures against the code that generated them. " +
@@ -49,8 +44,6 @@ export const WORKFLOW_STARTERS: WorkflowStarter[] = [
   {
     id: "example-climate",
     icon: <Globe2 size={17} strokeWidth={1.75} />,
-    title: "Explore an example: climate trends",
-    description: "Real NASA GISTEMP data — trend, decadal comparison, figure, and report.",
     prompt:
       "Analyze the real climate dataset at climate-trends/data/gistemp_global_means.csv " +
       "(NASA GISTEMP v4 global land–ocean temperature anomalies in °C vs the 1951–1980 mean; " +
@@ -71,19 +64,30 @@ export const WORKFLOW_STARTERS: WorkflowStarter[] = [
  * first; the starters below are an optional on-ramp, not a dashboard.
  */
 export function WorkflowStarters({ onPick }: { onPick: (prompt: string) => void }) {
+  const { t } = useTranslation(["session", "common"]);
+  // Display copy per starter id — t()'s generated key type rejects a dynamic
+  // `starters.${id}.title` template, so each card's copy is looked up by id
+  // from this literal-keyed map instead.
+  const starterCopy: Record<string, { title: string; description: string }> = {
+    demo: { title: t("starters.demo.title"), description: t("starters.demo.description") },
+    analyze: { title: t("starters.analyze.title"), description: t("starters.analyze.description") },
+    audit: { title: t("starters.audit.title"), description: t("starters.audit.description") },
+    "example-climate": {
+      title: t("starters.example-climate.title"),
+      description: t("starters.example-climate.description"),
+    },
+  };
   return (
     <div className="flex min-h-[62vh] flex-col items-center justify-center">
       <div className="w-full max-w-[500px]">
         <div className="text-center">
           <div className="text-[10.5px] font-medium uppercase tracking-[0.2em] text-muted">
-            New session
+            {t("starters.newSession")}
           </div>
           <h2 className="mt-2.5 font-serif text-[26px] leading-tight text-text">
-            What should we look into?
+            {t("starters.heading")}
           </h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            Describe your analysis below — or start from one of these.
-          </p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">{t("starters.subheading")}</p>
         </div>
 
         <div className="mt-7 overflow-hidden rounded-card border border-border bg-surface shadow-card">
@@ -96,7 +100,9 @@ export function WorkflowStarters({ onPick }: { onPick: (prompt: string) => void 
                     await s.prepare?.();
                   } catch (e) {
                     toast.error(
-                      `Could not set up the example: ${e instanceof Error ? e.message : String(e)}`,
+                      t("starters.error.setup", {
+                        message: e instanceof Error ? e.message : String(e),
+                      }),
                     );
                     return;
                   }
@@ -109,8 +115,12 @@ export function WorkflowStarters({ onPick }: { onPick: (prompt: string) => void 
                 {s.icon}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[13.5px] font-medium text-text">{s.title}</span>
-                <span className="mt-0.5 block text-xs leading-snug text-muted">{s.description}</span>
+                <span className="block text-[13.5px] font-medium text-text">
+                  {starterCopy[s.id]?.title}
+                </span>
+                <span className="mt-0.5 block text-xs leading-snug text-muted">
+                  {starterCopy[s.id]?.description}
+                </span>
               </span>
               <ChevronRight
                 size={16}

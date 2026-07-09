@@ -24,10 +24,14 @@ describe("WorkflowStarters", () => {
 
   it("renders one card per starter workflow, including the climate example", () => {
     render(<WorkflowStarters onPick={() => {}} />);
-    for (const s of WORKFLOW_STARTERS) {
-      expect(screen.getByText(s.title)).toBeInTheDocument();
-    }
+    // Titles are i18n-translated (session:starters.<id>.title); WORKFLOW_STARTERS
+    // itself no longer carries display copy, only ids/prompts — assert the
+    // rendered English text directly.
+    expect(screen.getByText("Run a demo analysis, end to end")).toBeInTheDocument();
+    expect(screen.getByText("Analyze my data")).toBeInTheDocument();
+    expect(screen.getByText("Audit a report for traceability")).toBeInTheDocument();
     expect(screen.getByText("Explore an example: climate trends")).toBeInTheDocument();
+    expect(WORKFLOW_STARTERS).toHaveLength(4);
   });
 
   it("sends the full-workflow prompt on click", async () => {
