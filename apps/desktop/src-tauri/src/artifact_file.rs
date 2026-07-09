@@ -361,7 +361,7 @@ pub fn list_notebooks(app: AppHandle, root: Option<String>) -> Result<Vec<Notebo
             }
         }
     }
-    found.sort_by(|a, b| b.modified.cmp(&a.modified));
+    found.sort_by_key(|b| std::cmp::Reverse(b.modified));
     Ok(found)
 }
 
@@ -441,6 +441,7 @@ pub fn write_workspace_file(
     content: String,
     root: Option<String>,
 ) -> Result<(), String> {
+    let scope = scope_root(&app, root.as_deref())?;
     let rel = Path::new(&path);
     if rel.is_absolute()
         || rel
@@ -449,11 +450,13 @@ pub fn write_workspace_file(
     {
         return Err("path must be a plain workspace-relative path".into());
     }
-    let full = scope_root(&app, root.as_deref())?.join(rel);
+    let full = scope.join(rel);
     if let Some(parent) = full.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(&full, content).map_err(|e| format!("write failed: {e}"))
+    std::fs::write(&full, content).map_err(|e| format!("write failed: {e}"))?;
+    crate::git_snapshot::commit_best_effort(&scope, "Update workspace files");
+    Ok(())
 }
 
 /// Pick local files via the native open dialog and copy them into the agent
@@ -478,6 +481,9 @@ pub async fn add_files_to_workspace(app: AppHandle) -> Result<Vec<String>, Strin
         std::fs::copy(&src, ws.join(&dst_name)).map_err(|e| format!("copy failed: {e}"))?;
         added.push(dst_name);
     }
+    if !added.is_empty() {
+        crate::git_snapshot::commit_best_effort(&ws, "Add workspace files");
+    }
     Ok(added)
 }
 
@@ -498,6 +504,7 @@ pub fn add_text_to_workspace(
     let ws = workspace_dir(&app)?;
     let name = unique_name(&ws, &base);
     std::fs::write(ws.join(&name), content).map_err(|e| format!("write failed: {e}"))?;
+    crate::git_snapshot::commit_best_effort(&ws, "Add workspace file");
     Ok(name)
 }
 

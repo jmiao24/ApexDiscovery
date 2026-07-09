@@ -140,12 +140,14 @@ const TONE: Record<NonNullable<StatusLineBlock["tone"]>, string> = {
 
 export function StatusLine({ block }: { block: StatusLineBlock }) {
   return (
-    <div className={cn("flex items-center gap-2 text-sm", TONE[block.tone ?? "review"])}>
-      <Loader2
-        size={14}
-        className={cn(block.tone === "running" && "animate-spin", block.tone !== "running" && "hidden")}
-      />
-      <span>{block.text}</span>
+    <div className={cn(block.divider && "border-t border-border pt-4")}>
+      <div className={cn("flex items-center gap-2 text-sm", TONE[block.tone ?? "review"])}>
+        <Loader2
+          size={14}
+          className={cn(block.tone === "running" && "animate-spin", block.tone !== "running" && "hidden")}
+        />
+        <span>{block.text}</span>
+      </div>
     </div>
   );
 }

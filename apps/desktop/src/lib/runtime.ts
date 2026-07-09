@@ -16,6 +16,7 @@ import {
 import type { ArtifactBlock, RuntimeStatus, ThreadBlock, ToolVerb } from "@ai4s/shared";
 import {
   detectTools as probeTools,
+  commitWorkspaceSnapshot,
   getApprovalMode,
   isTauri,
   logDebug,
@@ -35,6 +36,7 @@ import { deriveArtifact } from "./artifacts";
 import { provenanceInputFromEvent, recordProvenance } from "./provenance";
 import { recordRun, runInputFromEvent } from "./runs";
 import { splitReview } from "./review";
+import i18n from "@/i18n";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const URL_KEY = "ai4s.opencodeUrl";
@@ -114,6 +116,7 @@ interface RuntimeState {
   disconnect: () => void;
   refreshSessions: () => Promise<void>;
   startDraft: () => void;
+  startDraftInCurrentWorkspace: () => void;
   /** Active workspace folder (absolute path); null in the browser. */
   workspace: string | null;
   /** True when the user explicitly picked the active folder for the next new
@@ -154,6 +157,7 @@ interface RuntimeState {
 }
 
 let client: OpenCodeClient | null = null;
+let openSessionSeq = 0;
 /** Unhook the current client's status listener BEFORE closing it — teardown
  *  emits "offline", and a reconnect attempt must not flash that at the user. */
 let clientStatusUnsub: (() => void) | null = null;
@@ -296,6 +300,20 @@ async function performTurn(
         }
         if (get().status !== "ready" || !client) {
           throw new Error("Runtime did not reconnect after creating the session folder.");
+        }
+      } else if (isTauri && get().workspacePinned) {
+        // /new and /clear intentionally keep the same folder, but the old
+        // session route may have just torn down/reopened directory-scoped SSE.
+        // Rebuild the scoped client before creating the next session so first
+        // send cannot hang on a stale workspace instance.
+        set({ switching: true });
+        try {
+          await get().connectRetry();
+        } finally {
+          set({ switching: false });
+        }
+        if (get().status !== "ready" || !client) {
+          throw new Error("Runtime did not reconnect before creating the session.");
         }
       }
       id = await withRetry(() => client!.createSession());
@@ -725,7 +743,16 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
           void recordRun(run, sid, get().defaultModel);
         }
       }
-      if (event.type === "session.idle") void get().refreshSessions();
+      if (event.type === "session.idle") {
+        void get().refreshSessions();
+        void commitWorkspaceSnapshot("Snapshot session changes")
+          .then((committed) => {
+            if (committed) void logDebug(`git snapshot ✓ ${sid}`);
+          })
+          .catch((err) =>
+            logDebug(`git snapshot skipped for ${sid}: ${err instanceof Error ? err.message : String(err)}`),
+          );
+      }
     });
     try {
       void logDebug(`connect → ${get().serverUrl}`);
@@ -820,6 +847,29 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       return { currentId: null, workspacePinned: false, threads, panes };
     }),
 
+  // Local /new and /clear: clear the visible chat context, but keep the active
+  // folder. The first next message creates a new OpenCode session in that same
+  // folder; no session, database row, or file is deleted here.
+  startDraftInCurrentWorkspace: () =>
+    set((s) => {
+      const threads = { ...s.threads };
+      threads[DRAFT_KEY] = {
+        ...emptyThread(),
+        loaded: true,
+        blocks: [
+          {
+            kind: "status-line",
+            text: i18n.t("session:localCommand.cleared"),
+            tone: "review",
+            divider: true,
+          },
+        ],
+      };
+      const panes = { ...s.panes };
+      delete panes[DRAFT_KEY];
+      return { currentId: null, workspacePinned: true, threads, panes };
+    }),
+
   switchWorkspace: async (target) => {
     set({ switching: true });
     try {
@@ -847,6 +897,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   openSession: async (id) => {
+    const seq = ++openSessionSeq;
     set({ currentId: id });
     if (!client) return;
     // Follow the session into its own workspace folder: record it as active and
@@ -858,10 +909,19 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       set({ switching: true });
       try {
         await setWorkspace(dir).catch(() => {});
+        // A newer openSession has superseded this one — stop before starting a
+        // second, dueling connectRetry. Two reconnect loops tear down each
+        // other's in-flight EventSource, leaking half-open sockets until the
+        // webview's per-host connection pool is exhausted and every later
+        // session hangs on load. The winner (latest seq) does the reconnect.
+        if (seq !== openSessionSeq) return;
         await kernelReset().catch(() => {});
+        if (seq !== openSessionSeq) return;
         await get().connectRetry();
       } finally {
-        set({ switching: false });
+        // Only the still-current open clears `switching`; a superseded one must
+        // not flip it off while the winner is mid-reconnect.
+        if (seq === openSessionSeq) set({ switching: false });
       }
     }
     // Stamp the (now-active) workspace with this session's id so skill-recorded
@@ -894,6 +954,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     if (get().threads[id]?.loaded) return;
     try {
       const messages = await client.getMessages(id);
+      if (seq !== openSessionSeq || get().currentId !== id) return;
       set((s) => ({
         threads: {
           ...s.threads,
@@ -901,7 +962,19 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         },
       }));
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      const msg = err instanceof Error ? err.message : String(err);
+      if (seq !== openSessionSeq || get().currentId !== id) return;
+      set((s) => ({
+        error: msg,
+        threads: {
+          ...s.threads,
+          [id]: {
+            ...emptyThread(),
+            loaded: true,
+            blocks: [{ kind: "status-line", text: `Failed to load messages: ${msg}`, tone: "error" }],
+          },
+        },
+      }));
     }
   },
 
@@ -923,14 +996,19 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     );
   },
 
-  runCommand: (name, args) =>
-    performTurn(
+  runCommand: async (name, args) => {
+    if (name === "new" || name === "clear") {
+      get().startDraftInCurrentWorkspace();
+      return null;
+    }
+    return performTurn(
       set,
       get,
       args ? `/${name} ${args}` : `/${name}`,
       (sid) => client!.runCommand(sid, name, args),
       true,
-    ),
+    );
+  },
 
   interrupt: async () => {
     const sid = get().currentId;
@@ -1264,9 +1342,14 @@ export function foldEvent(
       }
       return { blocks, index };
     }
-    case "session.idle":
+    case "session.idle": {
+      const last = blocks[blocks.length - 1];
+      if (last?.kind === "status-line" && last.tone === "done") {
+        return { blocks, index };
+      }
       blocks.push({ kind: "status-line", text: "done", tone: "done" });
       return { blocks, index };
+    }
     default:
       return state;
   }

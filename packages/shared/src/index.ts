@@ -193,6 +193,7 @@ export interface StatusLineBlock {
   kind: "status-line";
   text: string; // e.g. "8 running · 16m 2s"
   tone?: "running" | "done" | "review" | "error";
+  divider?: boolean;
 }
 
 // ---- Inspector (right pane) ----

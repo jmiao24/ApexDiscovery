@@ -55,6 +55,11 @@
       "addFiles": "파일을 추가할 수 없습니다: {{message}}"
     }
   },
+  "localCommand": {
+    "newDescription": "이 폴더에서 채팅 컨텍스트 지우기",
+    "clearDescription": "/new와 동일합니다. 파일은 이 폴더에 남습니다",
+    "cleared": "채팅 컨텍스트를 지웠습니다. 파일은 같은 폴더에 남아 있습니다."
+  },
   "starters": {
     "newSession": "새 세션",
     "heading": "무엇을 살펴볼까요?",

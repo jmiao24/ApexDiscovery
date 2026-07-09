@@ -184,6 +184,10 @@ export interface OpenCodeClientOptions {
   username?: string;
   /** Inject fetch (defaults to global fetch; browser + node both have it). */
   fetchImpl?: typeof fetch;
+  /** Max time to wait for the SSE handshake before retrying. */
+  connectTimeoutMs?: number;
+  /** Max time to wait for short HTTP requests such as session creation. */
+  requestTimeoutMs?: number;
   /**
    * Workspace directory the server should scope skill discovery to. OpenCode
    * initializes per-directory instances lazily; without this, /api/skill can

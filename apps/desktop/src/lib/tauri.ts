@@ -300,6 +300,14 @@ export async function markSession(sessionId: string): Promise<void> {
   await invoke("mark_session", { sessionId });
 }
 
+/** Best-effort local git checkpoint for the active workspace. Returns false
+ *  when there were no changes. Never configures a remote or pushes. */
+export async function commitWorkspaceSnapshot(message: string): Promise<boolean> {
+  if (!isTauri) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<boolean>("commit_workspace_snapshot", { message });
+}
+
 /** Create a new dated folder under the base workspace and switch to it. */
 export async function newDatedWorkspace(name: string): Promise<string> {
   if (!isTauri) throw new Error("not running in the desktop app");

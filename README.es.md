@@ -32,6 +32,10 @@ Formerly Open Science. Una alternativa desktop open source a Claude Science y wo
 
 ---
 
+🎉 **Reconocimiento:** Open Science Desktop ocupa el puesto #1 por promedio de tareas puntuadas en [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/), un benchmark end-to-end para agentes autónomos de investigación científica (leaderboard Pass@1, 9 de julio de 2026).
+
+---
+
 ## Índice
 
 - [✨ Qué hace](#qué-hace)

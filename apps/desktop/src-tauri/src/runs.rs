@@ -398,7 +398,7 @@ pub fn record_run(
     // stores. Only this path takes both, always in this order, so no deadlock.
     let _guard = state.0.lock().map_err(|_| "run lock poisoned")?;
     let _prov_guard = prov_state.0.lock().map_err(|_| "provenance lock poisoned")?;
-    record_run_inner(
+    let record = record_run_inner(
         &root,
         &command,
         log.as_deref(),
@@ -409,7 +409,11 @@ pub fn record_run(
         session_id,
         model,
         Some(env),
-    )
+    )?;
+    drop(_prov_guard);
+    drop(_guard);
+    crate::git_snapshot::commit_best_effort(&root, &format!("Record run {}", record.run_id));
+    Ok(record)
 }
 
 /// `async`: reads the whole (unbounded) runs store off the UI thread.

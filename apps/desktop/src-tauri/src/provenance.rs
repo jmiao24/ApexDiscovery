@@ -458,7 +458,10 @@ pub fn record_provenance(
     let env = capture_env(&app, &root, app.package_info().version.to_string());
     // Writes are authored, not runs — no run_id here (runs.rs sets it for
     // files produced by executing code).
-    append_record(&root, &path, &tool, session_id, model, content, diff, log, Some(env), None)
+    let record = append_record(&root, &path, &tool, session_id, model, content, diff, log, Some(env), None)?;
+    drop(_guard);
+    crate::git_snapshot::commit_best_effort(&root, &format!("Record {}", record.path));
+    Ok(record)
 }
 
 /// `async`: reads the whole (unbounded) store off the UI thread.

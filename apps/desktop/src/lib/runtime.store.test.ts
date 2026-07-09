@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   newDatedWorkspace: vi.fn(async (name: string) => `/ws/${name}`),
   setWorkspace: vi.fn(async (path: string) => path),
+  commitWorkspaceSnapshot: vi.fn(async () => false),
   kernelReset: vi.fn(async () => {}),
   /** Number of connect() attempts that fail before one succeeds. */
   failConnects: 0,
@@ -22,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   getMessages: vi.fn(),
   /** History the mock server returns for any session. */
   messages: [] as unknown[],
+  /** Next getMessages call throws. */
+  failMessages: false,
   /** Next runShell call throws (HTTP-level failure). */
   failShell: false,
   /** Next runCommand call throws before any event (HTTP-level failure). */
@@ -47,6 +50,8 @@ vi.mock("./tauri", () => ({
   workspacePath: async () => "/ws/base",
   setWorkspace: mocks.setWorkspace,
   newDatedWorkspace: mocks.newDatedWorkspace,
+  markSession: async () => {},
+  commitWorkspaceSnapshot: mocks.commitWorkspaceSnapshot,
   getApprovalMode: async () => mocks.approvalMode,
   setApprovalMode: mocks.setApprovalMode,
   runtimePassword: async () => "pw-test",
@@ -137,7 +142,14 @@ vi.mock("@ai4s/sdk", () => {
     }
     async getMessages(sid: string) {
       mocks.getMessages(sid);
+      if (mocks.failMessages) throw new Error("history hung");
       return mocks.messages;
+    }
+    async listQuestions() {
+      return [];
+    }
+    async listPermissions() {
+      return [];
     }
     // The real client emits "offline" on teardown — the store must keep that
     // away from the UI while reconnecting (first-boot flicker regression).
@@ -160,6 +172,7 @@ beforeEach(async () => {
   mocks.dropCommandPost = false;
   mocks.abortTrailing = [];
   mocks.messages = [];
+  mocks.failMessages = false;
   mocks.approvalMode = "approve";
   useRuntimeStore.setState({
     currentId: null,
@@ -243,6 +256,32 @@ describe("per-session workspace folders", () => {
     await useRuntimeStore.getState().connectRetry(1);
     expect(useRuntimeStore.getState().status).toBe("error");
     expect(useRuntimeStore.getState().error).toContain("event stream");
+  });
+
+  it("a superseded openSession does not start a second, dueling reconnect", async () => {
+    // Opening a folder-scoped session reconnects the SSE stream. If a newer
+    // open (rapid switching, or an effect that fires twice) overlaps an older
+    // one, TWO connectRetry loops must NOT run: they tear down each other's
+    // in-flight EventSource and leak half-open sockets until the webview's
+    // per-host connection pool is exhausted and every later session hangs.
+    useRuntimeStore.setState({
+      sessions: [
+        { id: "A", title: "A", directory: "/ws/A" },
+        { id: "B", title: "B", directory: "/ws/B" },
+      ] as never,
+    });
+    const before = mocks.clientOpts.length;
+
+    // Fire both without awaiting the first — the exact overlap seen in the wild.
+    await Promise.all([
+      useRuntimeStore.getState().openSession("A"),
+      useRuntimeStore.getState().openSession("B"),
+    ]);
+
+    // Only the winner reconnects (one new client), and only its history loads.
+    expect(mocks.clientOpts.length - before).toBe(1);
+    expect(useRuntimeStore.getState().currentId).toBe("B");
+    expect(mocks.getMessages).toHaveBeenLastCalledWith("B");
   });
 
   it("echoes the first message instantly into the draft, then grafts it onto the session", async () => {
@@ -385,6 +424,54 @@ describe("per-session workspace folders", () => {
     const s = useRuntimeStore.getState();
     expect(s.threads["ses_new"].blocks[0]).toEqual({ kind: "user", text: "/init focus on tests" });
     expect(s.runningSessions["ses_new"]).toBeUndefined();
+  });
+
+  it("/clear starts a new draft in the same folder without calling OpenCode command", async () => {
+    useRuntimeStore.setState({
+      currentId: "ses_old",
+      workspacePinned: false,
+      threads: {
+        ses_old: { blocks: [{ kind: "user", text: "old context" }], index: {}, loaded: true },
+      },
+    });
+    const id = await useRuntimeStore.getState().runCommand("clear");
+    expect(id).toBe(null);
+    expect(mocks.runCommand).not.toHaveBeenCalled();
+
+    const cleared = useRuntimeStore.getState();
+    expect(cleared.currentId).toBe(null);
+    expect(cleared.workspacePinned).toBe(true);
+    expect(cleared.threads.ses_old.blocks).toEqual([{ kind: "user", text: "old context" }]);
+    expect(cleared.threads[DRAFT_KEY].blocks).toEqual([
+      {
+        kind: "status-line",
+        text: "Chat context cleared. Files stay in the same folder.",
+        tone: "review",
+        divider: true,
+      },
+    ]);
+
+    const connectsBeforeNextTurn = mocks.clientOpts.length;
+    await useRuntimeStore.getState().sendPrompt("next");
+    expect(mocks.newDatedWorkspace).not.toHaveBeenCalled();
+    expect(mocks.clientOpts.length).toBeGreaterThan(connectsBeforeNextTurn);
+  });
+
+  it("openSession stops the loading skeleton when history fails to load", async () => {
+    mocks.failMessages = true;
+    useRuntimeStore.setState({
+      sessions: [{ id: "ses_bad", title: "Bad session", directory: "/ws/base" }],
+      currentId: null,
+      threads: {},
+    });
+
+    await useRuntimeStore.getState().openSession("ses_bad");
+
+    const thread = useRuntimeStore.getState().threads.ses_bad;
+    expect(thread.loaded).toBe(true);
+    expect(thread.blocks).toEqual([
+      { kind: "status-line", text: "Failed to load messages: history hung", tone: "error" },
+    ]);
   });
 
   it("switchWorkspace pins the chosen folder; startDraft un-pins it", async () => {

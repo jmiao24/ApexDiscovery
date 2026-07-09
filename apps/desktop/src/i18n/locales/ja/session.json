@@ -55,6 +55,11 @@
       "addFiles": "ファイルを追加できませんでした: {{message}}"
     }
   },
+  "localCommand": {
+    "newDescription": "このフォルダでチャット文脈を消去",
+    "clearDescription": "/new と同じ。ファイルはこのフォルダに残ります",
+    "cleared": "チャット文脈を消去しました。ファイルは同じフォルダに残ります。"
+  },
   "starters": {
     "newSession": "新規セッション",
     "heading": "何を調べましょうか？",

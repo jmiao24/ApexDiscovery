@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { FlaskConical, FolderOpen, Loader2, NotebookPen, PanelLeft, PlugZap } from "lucide-react";
@@ -60,6 +60,7 @@ export function LiveSessionPage() {
     approvalMode,
     setApprovalMode,
   } = useRuntimeStore();
+  const clearingLocalCommand = useRef(false);
 
   // A deliberate workspace move restarts the sidecar — expected and brief, so
   // the UI stays "connected" (no badge flip, no Connect button, no help card).
@@ -69,8 +70,16 @@ export function LiveSessionPage() {
   const displayStatus = switching ? "ready" : status;
 
   useEffect(() => {
-    if (sessionId) void openSession(sessionId);
-    else startDraft(); // blank draft — no session created yet (#3)
+    if (sessionId) {
+      if (!clearingLocalCommand.current) void openSession(sessionId);
+    } else {
+      clearingLocalCommand.current = false;
+      // Read currentId from the store, NOT as an effect dependency: openSession
+      // sets currentId, so depending on it here re-fires this effect and opens
+      // the session a SECOND time — two concurrent connectRetry loops then leak
+      // EventSockets until the connection pool is exhausted and sessions hang.
+      if (useRuntimeStore.getState().currentId) startDraft(); // blank draft (#3)
+    }
   }, [sessionId, openSession, startDraft]);
 
   // All three composer paths reflect a freshly-created session in the URL.
@@ -79,7 +88,25 @@ export function LiveSessionPage() {
   };
   const onSend = async (text: string) => afterTurn(await sendPrompt(text));
   const onRunShell = async (command: string) => afterTurn(await runShell(command));
-  const onRunCommand = async (name: string, args: string) => afterTurn(await runCommand(name, args));
+  const onRunCommand = async (name: string, args: string) => {
+    const localClear = name === "new" || name === "clear";
+    // Only arm the guard when a real session is open. From a draft, the URL is
+    // already /live and no route/currentId change follows — arming here would
+    // strand the flag at true (the reset lives in the effect's else branch,
+    // which never re-runs) and silently block the next openSession.
+    if (localClear && sessionId) clearingLocalCommand.current = true;
+    const id = await runCommand(name, args);
+    if (localClear) navigate("/live", { replace: true });
+    else afterTurn(id);
+  };
+  const composerCommands = useMemo(() => {
+    const local = [
+      { name: "new", description: t("localCommand.newDescription"), source: "local" },
+      { name: "clear", description: t("localCommand.clearDescription"), source: "local" },
+    ];
+    const localNames = new Set(local.map((c) => c.name));
+    return [...local, ...commands.filter((c) => !localNames.has(c.name))];
+  }, [commands, t]);
 
   // Interactions from the thread/inspector fold back into the conversation as follow-up prompts.
   const handlers: BlockHandlers = {
@@ -372,7 +399,7 @@ export function LiveSessionPage() {
               onSend={onSend}
               onRunShell={(c) => void onRunShell(c)}
               onRunCommand={(n, a) => void onRunCommand(n, a)}
-              commands={commands}
+              commands={composerCommands}
               disabled={!connected || working}
               working={running}
               onStop={() => void interrupt()}

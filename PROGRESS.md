@@ -1,5 +1,23 @@
 # Progress
 
+2026-07-09 11:52 · fix(sessions): stopped the open-session effect firing twice (currentId dep) and made openSession bail before a duplicate reconnect, fixing connection-pool exhaustion that left later sessions stuck on the loading spinner; also unstuck the /new·/clear guard when clearing from a draft.
+
+2026-07-09 11:50 · fix(git-snapshot): only auto-commit into app-created workspace repos (marker-gated) so a user's own repo is never touched, and serialized snapshot commits behind a process lock to avoid index.lock races.
+
+2026-07-09 11:25 · fix(sessions): added timeouts for session list/history/recovery requests and made failed history loads render an error row instead of an endless skeleton.
+
+2026-07-09 11:18 · fix(sessions): made session idle folding idempotent so duplicate OpenCode idle events render only one done line.
+
+2026-07-09 11:15 · fix(sessions): reconnected the current-folder runtime before the first post-clear turn and added timeouts for hanging session creation.
+
+2026-07-09 11:11 · fix(sessions): preserved the local /new and /clear divider state when clearing from an existing session route.
+
+2026-07-09 11:03 · fix(runtime): added an OpenCode SSE handshake timeout so first-launch auto-connect can keep retrying instead of hanging forever.
+
+2026-07-09 10:02 · docs(readme): added the ResearchClawBench #1 recognition line across all README languages.
+
+2026-07-09 09:39 · feat(sessions): added local /new and /clear commands that clear chat context while keeping the same workspace folder, and added best-effort local git snapshots for new workspaces and workspace file changes.
+
 2026-07-09 08:53 · fix(updates): moved the update card to the bottom of Settings, made failed checks display as failed instead of "up to date", and switched desktop checks to the GitHub Releases Atom feed to avoid anonymous API rate limits.
 
 2026-07-09 08:14 · feat(updates): added 24-hour-throttled GitHub Release update checks with manual checking, dismissible Settings badge, improved language switching UI, tests, and verified web/Tauri builds.

@@ -61,3 +61,5 @@ local workspace + SQLite + JSONL provenance.
 - Avoid adding new Markdown docs unless requested — too many docs become debt.
 - Prefer minimal, verifiable changes; every step should produce a checkable result.
 - Do not write inferences as verified facts; tie conclusions to code or data.
+- New session workspaces are local git repos: the app initializes them and makes
+  best-effort local commits after workspace file changes. Never set a remote or push.

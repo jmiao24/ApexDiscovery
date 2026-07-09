@@ -313,6 +313,7 @@ fn configured_python(app: &AppHandle) -> Option<String> {
 ///   2. the app-managed Jupyter env, WHEN it exists — so "Run" in the app and
 ///      the agent's Jupyter MCP share one Python (same packages, same results);
 ///   3. discovered system installs — the fallback when Jupyter isn't set up.
+///
 /// This makes the app-managed Jupyter env the single source of truth once present,
 /// and degrades to auto-detection when it is not.
 fn resolve_python(

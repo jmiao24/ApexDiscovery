@@ -55,6 +55,11 @@
       "addFiles": "No se pudieron añadir los archivos: {{message}}"
     }
   },
+  "localCommand": {
+    "newDescription": "Borrar el contexto del chat en esta carpeta",
+    "clearDescription": "Igual que /new; los archivos permanecen aquí",
+    "cleared": "Contexto del chat borrado. Los archivos permanecen en la misma carpeta."
+  },
   "starters": {
     "newSession": "Nueva sesión",
     "heading": "¿Qué deberíamos investigar?",

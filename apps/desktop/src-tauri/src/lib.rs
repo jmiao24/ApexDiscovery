@@ -3,6 +3,7 @@
 mod artifact_file;
 mod debug_log;
 mod examples;
+mod git_snapshot;
 mod harness;
 mod compute;
 mod jupyter;
@@ -94,6 +95,7 @@ pub fn run() {
             science_mcp::science_mcp_python,
             science_mcp::setup_science_mcp,
             examples::install_example,
+            git_snapshot::commit_workspace_snapshot,
             compute::list_ssh_hosts,
             compute::compute_machines,
             compute::add_compute_machine,

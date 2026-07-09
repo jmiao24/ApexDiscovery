@@ -36,6 +36,10 @@
 
 ---
 
+🎉 **认可：** Open Science Desktop 在面向自主科研智能体的端到端基准 [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/) 上，按已评分任务平均分排名第 1（Pass@1 榜单，2026 年 7 月 9 日）。
+
+---
+
 ## 目录
 
 - [✨ 它能做什么](#它能做什么)

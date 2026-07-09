@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { OpenCodeClient, type OpenCodeEvent } from "@ai4s/sdk";
 import { startMockOpenCode, type MockOpenCode } from "@ai4s/sdk/mock-server";
 
@@ -216,5 +216,52 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
     } finally {
       delete (globalThis as { EventSource?: unknown }).EventSource;
     }
+  });
+
+  it("times out a hanging EventSource handshake so boot retry can continue", async () => {
+    class HangingEventSource {
+      onopen: (() => void) | null = null;
+      onmessage: unknown = null;
+      onerror: unknown = null;
+      close = vi.fn();
+      constructor(_url: string) {}
+    }
+    (globalThis as { EventSource?: unknown }).EventSource = HangingEventSource;
+    try {
+      const client = new OpenCodeClient({
+        baseUrl: `http://127.0.0.1:${server.port}`,
+        connectTimeoutMs: 10,
+      });
+      await expect(client.connect()).rejects.toThrow("Timed out opening OpenCode event stream");
+      expect(client.getStatus()).toBe("error");
+    } finally {
+      delete (globalThis as { EventSource?: unknown }).EventSource;
+    }
+  });
+
+  it("times out a hanging session creation request", async () => {
+    const hangingFetch = ((_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      })) as typeof fetch;
+    const client = new OpenCodeClient({
+      baseUrl: `http://127.0.0.1:${server.port}`,
+      fetchImpl: hangingFetch,
+      requestTimeoutMs: 10,
+    });
+    await expect(client.createSession()).rejects.toThrow("Timed out waiting for OpenCode");
+  });
+
+  it("times out a hanging history request", async () => {
+    const hangingFetch = ((_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      })) as typeof fetch;
+    const client = new OpenCodeClient({
+      baseUrl: `http://127.0.0.1:${server.port}`,
+      fetchImpl: hangingFetch,
+      requestTimeoutMs: 10,
+    });
+    await expect(client.getMessages("ses_hung")).rejects.toThrow("Timed out waiting for OpenCode");
   });
 });

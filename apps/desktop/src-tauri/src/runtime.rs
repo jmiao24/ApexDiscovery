@@ -616,6 +616,7 @@ pub fn new_dated_workspace(
     // (never `set_workspace` alone — switching to an existing session must not
     // re-plant the scaffold).
     crate::harness::seed_harness(&seed_app, std::path::Path::new(&canon));
+    crate::git_snapshot::commit_best_effort(std::path::Path::new(&canon), "Initialize workspace");
     Ok(canon)
 }
 

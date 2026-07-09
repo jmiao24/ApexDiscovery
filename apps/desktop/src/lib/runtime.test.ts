@@ -197,6 +197,15 @@ describe("foldEvent", () => {
     ]);
     expect(s.blocks.map((b) => b.kind)).toEqual(["agent", "tool-call", "agent", "status-line"]);
   });
+
+  it("deduplicates repeated session idle events", () => {
+    const s = foldAll([
+      { type: "text.updated", sessionId: S, partId: "p1", text: "done" },
+      { type: "session.idle", sessionId: S },
+      { type: "session.idle", sessionId: S },
+    ]);
+    expect(s.blocks.filter((b) => b.kind === "status-line" && b.tone === "done")).toHaveLength(1);
+  });
 });
 
 describe("subagent activity", () => {

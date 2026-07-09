@@ -13,6 +13,8 @@
 - This repo is your entire workspace.
 - Code, data, drafts, and results may all live in this repo.
 - Temporary files, generated files, and local noise must be listed in `.gitignore`.
+- This workspace is a local git repo. Commit meaningful file changes locally as
+  checkpoints; do not configure a remote or push unless the user explicitly asks.
 
 ## Remote compute
 - Remote machines the user configured (SSH servers, GPU boxes, Slurm clusters)

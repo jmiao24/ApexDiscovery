@@ -61,6 +61,8 @@ export class OpenCodeClient {
   private abort: AbortController | null = null;
   private es: EventSource | null = null;
   private readonly customFetch: boolean;
+  private readonly connectTimeoutMs: number;
+  private readonly requestTimeoutMs: number;
   private readonly eventListeners = new Set<EventListener>();
   private readonly statusListeners = new Set<StatusListener>();
   /** messageID → role, learned from message.updated, to skip echoed user parts. */
@@ -79,6 +81,8 @@ export class OpenCodeClient {
     this.authToken = opts.password ? btoa(`${opts.username ?? "opencode"}:${opts.password}`) : null;
     this.authHeader = this.authToken ? `Basic ${this.authToken}` : null;
     this.directory = opts.directory ?? null;
+    this.connectTimeoutMs = opts.connectTimeoutMs ?? 5000;
+    this.requestTimeoutMs = opts.requestTimeoutMs ?? 15000;
   }
 
   getStatus(): RuntimeStatus {
@@ -100,6 +104,19 @@ export class OpenCodeClient {
     return h;
   }
 
+  private async fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs = this.requestTimeoutMs): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await this.fetchImpl(input, { ...init, signal: controller.signal });
+    } catch (err) {
+      if (controller.signal.aborted) throw new Error("Timed out waiting for OpenCode");
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Open the SSE event stream. Resolves once the server acknowledges. */
   connect(): Promise<void> {
     this.setStatus("connecting");
@@ -111,10 +128,22 @@ export class OpenCodeClient {
     if (canUseEventSource) {
       return new Promise((resolve, reject) => {
         let opened = false;
+        let finished = false;
         const es = new EventSource(this.eventUrl());
         this.es = es;
+        const timer = setTimeout(() => {
+          if (opened || finished) return;
+          finished = true;
+          this.setStatus("error");
+          es.close();
+          if (this.es === es) this.es = null;
+          reject(new Error("Timed out opening OpenCode event stream"));
+        }, this.connectTimeoutMs);
         es.onopen = () => {
+          if (finished) return;
           opened = true;
+          finished = true;
+          clearTimeout(timer);
           this.setStatus("ready");
           resolve();
         };
@@ -127,6 +156,9 @@ export class OpenCodeClient {
         };
         es.onerror = () => {
           if (!opened) {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
             this.setStatus("error");
             es.close();
             this.es = null;
@@ -142,11 +174,16 @@ export class OpenCodeClient {
     this.abort = new AbortController();
     return new Promise((resolve, reject) => {
       let opened = false;
+      const abort = this.abort!;
+      const timer = setTimeout(() => {
+        if (!opened) abort.abort(new Error("Timed out opening OpenCode event stream"));
+      }, this.connectTimeoutMs);
       this.fetchImpl(this.eventUrl(), {
         headers: { Accept: "text/event-stream", ...this.headers() },
-        signal: this.abort!.signal,
+        signal: abort.signal,
       })
         .then(async (res) => {
+          clearTimeout(timer);
           if (!res.ok || !res.body) {
             this.setStatus("error");
             reject(new Error(`OpenCode /event returned ${res.status}`));
@@ -158,6 +195,7 @@ export class OpenCodeClient {
           await this.readStream(res.body);
         })
         .catch((err) => {
+          clearTimeout(timer);
           if (!opened) {
             this.setStatus("error");
             reject(err instanceof Error ? err : new Error(String(err)));
@@ -182,7 +220,7 @@ export class OpenCodeClient {
   async createSession(): Promise<string> {
     // The directory decides where the session lives and works — without it the
     // server would put it in the process's boot folder, not the active one.
-    const res = await this.fetchImpl(`${this.baseUrl}/session${this.dirQuery()}`, {
+    const res = await this.fetchWithTimeout(`${this.baseUrl}/session${this.dirQuery()}`, {
       method: "POST",
       headers: this.headers(true),
       body: "{}",
@@ -200,11 +238,11 @@ export class OpenCodeClient {
    *  so the experimental route is stable for us; fall back to `/session` if a
    *  server ever lacks it. */
   async listSessions(): Promise<SessionMeta[]> {
-    let res = await this.fetchImpl(`${this.baseUrl}/experimental/session`, {
+    let res = await this.fetchWithTimeout(`${this.baseUrl}/experimental/session`, {
       headers: this.headers(),
     });
     if (!res.ok) {
-      res = await this.fetchImpl(`${this.baseUrl}/session`, { headers: this.headers() });
+      res = await this.fetchWithTimeout(`${this.baseUrl}/session`, { headers: this.headers() });
     }
     if (!res.ok) throw await this.apiError(res, "Failed to list sessions");
     const arr = (await res.json()) as Array<{
@@ -234,7 +272,7 @@ export class OpenCodeClient {
 
   /** Load a session's message history. */
   async getMessages(sessionId: string): Promise<HistoryMessage[]> {
-    const res = await this.fetchImpl(
+    const res = await this.fetchWithTimeout(
       `${this.baseUrl}/session/${encodeURIComponent(sessionId)}/message`,
       { headers: this.headers() },
     );
@@ -540,7 +578,7 @@ export class OpenCodeClient {
 
   /** Send a prompt into a session; output streams back via onEvent (SSE). */
   async sendPrompt(sessionId: string, text: string): Promise<void> {
-    const res = await this.fetchImpl(
+    const res = await this.fetchWithTimeout(
       `${this.baseUrl}/session/${encodeURIComponent(sessionId)}/prompt_async`,
       {
         method: "POST",
@@ -574,7 +612,7 @@ export class OpenCodeClient {
 
   /** Pending questions in the workspace (recovery on open — an ask can predate connect). */
   async listQuestions(_sessionId?: string): Promise<QuestionAskedEvent[]> {
-    const res = await this.fetchImpl(`${this.baseUrl}/question${this.dirQuery()}`, {
+    const res = await this.fetchWithTimeout(`${this.baseUrl}/question${this.dirQuery()}`, {
       headers: this.headers(),
     });
     if (!res.ok) return [];
@@ -611,7 +649,7 @@ export class OpenCodeClient {
 
   /** Pending permission requests in the workspace (recovery on open). */
   async listPermissions(_sessionId?: string): Promise<PermissionAskedEvent[]> {
-    const res = await this.fetchImpl(`${this.baseUrl}/permission${this.dirQuery()}`, {
+    const res = await this.fetchWithTimeout(`${this.baseUrl}/permission${this.dirQuery()}`, {
       headers: this.headers(),
     });
     if (!res.ok) return [];

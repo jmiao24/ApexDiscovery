@@ -55,6 +55,11 @@
       "addFiles": "Dateien konnten nicht hinzugefügt werden: {{message}}"
     }
   },
+  "localCommand": {
+    "newDescription": "Chat-Kontext in diesem Ordner leeren",
+    "clearDescription": "Wie /new; Dateien bleiben in diesem Ordner",
+    "cleared": "Chat-Kontext geleert. Dateien bleiben im selben Ordner."
+  },
   "starters": {
     "newSession": "Neue Sitzung",
     "heading": "Was sollen wir untersuchen?",

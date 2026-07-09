@@ -55,6 +55,11 @@
       "addFiles": "Could not add files: {{message}}"
     }
   },
+  "localCommand": {
+    "newDescription": "Clear chat context in this folder",
+    "clearDescription": "Same as /new; files stay in this folder",
+    "cleared": "Chat context cleared. Files stay in the same folder."
+  },
   "starters": {
     "newSession": "New session",
     "heading": "What should we look into?",
