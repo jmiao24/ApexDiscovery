@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { renderAt } from "@/test/render";
@@ -6,16 +6,16 @@ import { useUiStore } from "@/lib/store";
 import { shippedLocales } from "@/i18n/config";
 
 describe("Settings language selector", () => {
-  it("shows a Language control with one option per shipped locale", async () => {
+  it("shows a Language control with one button per shipped locale", async () => {
     renderAt("/settings");
-    const select = await screen.findByLabelText("Language");
-    expect(select.querySelectorAll("option")).toHaveLength(shippedLocales().length);
+    const group = await screen.findByRole("group", { name: "Language" });
+    expect(within(group).getAllByRole("button")).toHaveLength(shippedLocales().length);
   });
 
   it("updates the store locale on change", async () => {
     renderAt("/settings");
-    const select = await screen.findByLabelText("Language");
-    await userEvent.selectOptions(select, "ja");
+    const group = await screen.findByRole("group", { name: "Language" });
+    await userEvent.click(within(group).getByRole("button", { name: /日本語/ }));
     expect(useUiStore.getState().locale).toBe("ja");
     useUiStore.getState().setLocale("en");
   });

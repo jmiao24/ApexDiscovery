@@ -20,6 +20,27 @@
     "disconnect": "Disconnect",
     "serverUrlPlaceholder": "http://127.0.0.1:4096"
   },
+  "updates": {
+    "title": "App updates",
+    "hint": "Checks GitHub Releases at most once every 24 hours",
+    "available": "Update available",
+    "checking": "Checking",
+    "failed": "Check failed",
+    "upToDate": "Up to date",
+    "currentVersion": "Current: {{version}}",
+    "latestVersion": "Latest: {{version}}",
+    "publishedAt": "Published {{date}}",
+    "lastChecked": "Last checked {{date}}",
+    "checkFailed": "Check failed: {{message}}",
+    "checkNow": "Check now",
+    "openRelease": "Open release",
+    "hideBadge": "Hide badge",
+    "autoCheck": "Check automatically",
+    "autoCheckHint": "Enabled by default. The app checks at most once per day.",
+    "showBadge": "Show Settings badge",
+    "showBadgeHint": "Show a red dot on Settings when a newer release is found.",
+    "privacy": "Only the public GitHub Releases API is contacted. No workspace files or API keys are sent."
+  },
   "model": {
     "title": "Model",
     "hint": "Providers below supply the models you can pick here",

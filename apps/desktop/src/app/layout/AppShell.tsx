@@ -11,6 +11,7 @@ import { useRuntimeStore } from "@/lib/runtime";
 import { ensureSetupProgressListener } from "@/lib/setup";
 import { useOverlayTitlebar, useUiStore } from "@/lib/store";
 import { ensureJupyter, openExternal, watchFullscreen } from "@/lib/tauri";
+import { useUpdateStore } from "@/lib/update";
 
 export function AppShell() {
   const { t } = useTranslation("nav");
@@ -35,6 +36,9 @@ export function AppShell() {
     // One app-lifetime listener for uv provisioning progress, so a running
     // download's live output survives navigating between pages.
     ensureSetupProgressListener();
+    if (!import.meta.env.TEST) {
+      void useUpdateStore.getState().maybeAutoCheck();
+    }
   }, []);
 
   // Track native fullscreen: macOS hides the traffic lights there, so headers

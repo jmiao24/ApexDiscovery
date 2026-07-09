@@ -6,6 +6,7 @@ import type { Project } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 import { useRuntimeStore } from "@/lib/runtime";
 import { SIDEBAR_MAX, SIDEBAR_MIN, useOverlayTitlebar, useUiStore } from "@/lib/store";
+import { useUpdateStore } from "@/lib/update";
 import { StatusPills } from "./StatusPills";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import logo from "@/assets/logo.webp";
@@ -26,6 +27,7 @@ export function Sidebar({ project }: { project: Project }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { sessions, hiddenExamples, startDraft, deleteSession, hideExample } = useRuntimeStore();
+  const showUpdateBadge = useUpdateStore((s) => s.showBadge);
   const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar } =
     useUiStore();
   // While dragging, the live width lives here; the store (and localStorage)
@@ -187,12 +189,18 @@ export function Sidebar({ project }: { project: Project }) {
       <div className="border-t border-border px-3 py-3">
         <StatusPills />
         <button
-          className="mt-2 flex items-center gap-2 rounded-input px-2 py-1 text-[13px] text-muted hover:bg-surface-2 hover:text-text"
+          className="relative mt-2 flex items-center gap-2 rounded-input px-2 py-1 text-[13px] text-muted hover:bg-surface-2 hover:text-text"
           onClick={() => navigate("/settings")}
           aria-label={t("sidebar.settings")}
         >
           <Settings size={15} />
           <span>{t("sidebar.settings")}</span>
+          {showUpdateBadge && (
+            <span
+              aria-hidden="true"
+              className="ml-auto h-2 w-2 rounded-full bg-error shadow-[0_0_0_2px_var(--color-surface)]"
+            />
+          )}
         </button>
       </div>
 

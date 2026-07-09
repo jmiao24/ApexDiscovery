@@ -17,6 +17,7 @@ mod runs_index;
 mod runtime;
 mod science_mcp;
 mod tools;
+mod updates;
 mod uv;
 
 use jupyter::JupyterState;
@@ -104,6 +105,7 @@ pub fn run() {
             preview_server::preview_url,
             large_file::probe_large_file,
             tools::detect_tools,
+            updates::latest_release,
             debug_log::log_debug
         ])
         .build(tauri::generate_context!())

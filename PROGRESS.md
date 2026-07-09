@@ -1,5 +1,9 @@
 # Progress
 
+2026-07-09 08:53 · fix(updates): moved the update card to the bottom of Settings, made failed checks display as failed instead of "up to date", and switched desktop checks to the GitHub Releases Atom feed to avoid anonymous API rate limits.
+
+2026-07-09 08:14 · feat(updates): added 24-hour-throttled GitHub Release update checks with manual checking, dismissible Settings badge, improved language switching UI, tests, and verified web/Tauri builds.
+
 2026-07-09 06:00 · release(v0.1.8): bumped version to 0.1.8 and tagged; CI builds macOS/Windows/Linux installers into a draft GitHub Release. Covers the full i18n rollout (7 UI languages) and Open Science Desktop rebrand since v0.1.7.
 
 2026-07-09 05:40 · docs(brand): updated the Open Science Desktop tagline and GitHub description/topics to include Linux alongside macOS and Windows.

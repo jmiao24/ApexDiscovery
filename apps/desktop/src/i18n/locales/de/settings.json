@@ -20,6 +20,27 @@
     "disconnect": "Trennen",
     "serverUrlPlaceholder": "http://127.0.0.1:4096"
   },
+  "updates": {
+    "title": "App-Updates",
+    "hint": "Prüft GitHub Releases höchstens einmal alle 24 Stunden",
+    "available": "Update verfügbar",
+    "checking": "Wird geprüft",
+    "failed": "Prüfung fehlgeschlagen",
+    "upToDate": "Aktuell",
+    "currentVersion": "Aktuell: {{version}}",
+    "latestVersion": "Neueste: {{version}}",
+    "publishedAt": "Veröffentlicht {{date}}",
+    "lastChecked": "Zuletzt geprüft {{date}}",
+    "checkFailed": "Prüfung fehlgeschlagen: {{message}}",
+    "checkNow": "Jetzt prüfen",
+    "openRelease": "Release öffnen",
+    "hideBadge": "Punkt ausblenden",
+    "autoCheck": "Automatisch prüfen",
+    "autoCheckHint": "Standardmäßig aktiv. Die App prüft höchstens einmal pro Tag.",
+    "showBadge": "Punkt in Einstellungen anzeigen",
+    "showBadgeHint": "Zeigt einen roten Punkt in den Einstellungen, wenn ein neues Release gefunden wurde.",
+    "privacy": "Es wird nur die öffentliche GitHub-Releases-API kontaktiert. Workspace-Dateien und API-Schlüssel werden nicht gesendet."
+  },
   "model": {
     "title": "Modell",
     "hint": "Die unten aufgeführten Anbieter stellen die hier wählbaren Modelle bereit",

@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Loader2,
   NotebookPen,
+  RefreshCw,
   Search,
 } from "lucide-react";
 import type {
@@ -21,6 +22,7 @@ import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/lib/store";
 import { shippedLocales } from "@/i18n/config";
 import { getClient, useRuntimeStore } from "@/lib/runtime";
+import { useUpdateStore } from "@/lib/update";
 import {
   importOpenCodeLogin,
   isTauri,
@@ -67,6 +69,28 @@ export function SettingsPage() {
   const defaultModel = useRuntimeStore((s) => s.defaultModel);
   const loadCatalog = useRuntimeStore((s) => s.loadCatalog);
   const connected = status === "ready";
+  const updateEnabled = useUpdateStore((s) => s.enabled);
+  const setUpdateEnabled = useUpdateStore((s) => s.setEnabled);
+  const updateBadgeEnabled = useUpdateStore((s) => s.badgeEnabled);
+  const setUpdateBadgeEnabled = useUpdateStore((s) => s.setBadgeEnabled);
+  const updateStatus = useUpdateStore((s) => s.status);
+  const updateError = useUpdateStore((s) => s.error);
+  const currentVersion = useUpdateStore((s) => s.currentVersion);
+  const latestUpdate = useUpdateStore((s) => s.latest);
+  const hasUpdate = useUpdateStore((s) => s.hasUpdate);
+  const showUpdateBadge = useUpdateStore((s) => s.showBadge);
+  const lastCheckedAt = useUpdateStore((s) => s.lastCheckedAt);
+  const checkForUpdates = useUpdateStore((s) => s.check);
+  const dismissUpdateBadge = useUpdateStore((s) => s.dismissBadge);
+  const updateTone =
+    hasUpdate || updateStatus === "error" ? "error" : updateStatus === "checking" ? "accent" : "ok";
+  const updateLabel = hasUpdate
+    ? t("updates.available")
+    : updateStatus === "checking"
+      ? t("updates.checking")
+      : updateStatus === "error"
+        ? t("updates.failed")
+        : t("updates.upToDate");
 
   // Long-running uv provisioning lives in a store, not here: navigating away
   // must not discard the "setting up…" state or sever the progress stream.
@@ -985,22 +1009,139 @@ export function SettingsPage() {
             ))}
           </div>
           <div className="mt-4">
-            <label htmlFor="ui-language" className="mb-1.5 block text-xs text-muted">
-              {t("language.label")}
-            </label>
-            <select
-              id="ui-language"
-              value={locale}
-              onChange={(e) => setLocale(e.target.value)}
-              className={inputCls("w-56")}
+            <div className="mb-2 text-xs font-medium text-muted">{t("language.label")}</div>
+            <div
+              role="group"
+              aria-label={t("language.label")}
+              className="grid grid-cols-2 gap-1.5 sm:grid-cols-4"
             >
-              {shippedLocales().map((l) => (
-                <option key={l.code} value={l.code}>
-                  {l.nativeName}
-                </option>
-              ))}
-            </select>
+              {shippedLocales().map((l) => {
+                const active = locale === l.code;
+                return (
+                  <button
+                    key={l.code}
+                    onClick={() => setLocale(l.code)}
+                    className={cn(
+                      "rounded-input border px-2.5 py-2 text-left text-[13px] transition-colors",
+                      active
+                        ? "border-accent bg-accent/10 text-text shadow-sm"
+                        : "border-border bg-surface text-muted hover:bg-surface-2 hover:text-text",
+                    )}
+                    aria-pressed={active}
+                  >
+                    <span className="block truncate font-medium">{l.nativeName}</span>
+                    <span className="block truncate text-[10.5px] text-muted">{l.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+        </Card>
+
+        {/* ---- App updates ---- */}
+        <Card title={t("updates.title")} hint={t("updates.hint")}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1",
+                updateTone === "error"
+                  ? "bg-error/10 text-error ring-error/20"
+                  : updateTone === "accent"
+                    ? "bg-accent/10 text-accent ring-accent/20"
+                    : "bg-ok/10 text-ok ring-ok/20",
+              )}
+            >
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  updateTone === "error" ? "bg-error" : updateTone === "accent" ? "bg-accent" : "bg-ok",
+                )}
+              />
+              {updateLabel}
+            </span>
+            <span className="text-xs text-muted">
+              {t("updates.currentVersion", { version: currentVersion })}
+            </span>
+            {latestUpdate && (
+              <span className="text-xs text-muted">
+                {t("updates.latestVersion", { version: latestUpdate.version })}
+              </span>
+            )}
+          </div>
+
+          {latestUpdate?.publishedAt && (
+            <div className="mt-2 text-xs text-muted">
+              {t("updates.publishedAt", {
+                date: new Date(latestUpdate.publishedAt).toLocaleString(locale),
+              })}
+            </div>
+          )}
+          {lastCheckedAt && (
+            <div className="mt-1 text-xs text-muted">
+              {t("updates.lastChecked", { date: new Date(lastCheckedAt).toLocaleString(locale) })}
+            </div>
+          )}
+          {updateStatus === "error" && updateError && (
+            <div className="mt-2 text-xs text-error">
+              {t("updates.checkFailed", { message: updateError })}
+            </div>
+          )}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className={btnAccent("gap-1.5")}
+              onClick={() => void checkForUpdates({ manual: true })}
+              disabled={updateStatus === "checking"}
+            >
+              {updateStatus === "checking" ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <RefreshCw size={13} />
+              )}
+              {t("updates.checkNow")}
+            </button>
+            {latestUpdate?.url && (
+              <button
+                className={btnGhost("gap-1.5")}
+                onClick={() => void openExternal(latestUpdate.url)}
+              >
+                <ExternalLink size={13} /> {t("updates.openRelease")}
+              </button>
+            )}
+            {showUpdateBadge && (
+              <button className={btnGhost()} onClick={dismissUpdateBadge}>
+                {t("updates.hideBadge")}
+              </button>
+            )}
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <label className="flex items-start gap-2 rounded-input border border-border bg-surface-2 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={updateEnabled}
+                onChange={(e) => setUpdateEnabled(e.target.checked)}
+                className="mt-0.5 accent-[var(--color-accent)]"
+              />
+              <span>
+                <span className="block text-[13px] font-medium text-text">{t("updates.autoCheck")}</span>
+                <span className="block text-xs leading-relaxed text-muted">{t("updates.autoCheckHint")}</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 rounded-input border border-border bg-surface-2 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={updateBadgeEnabled}
+                onChange={(e) => setUpdateBadgeEnabled(e.target.checked)}
+                className="mt-0.5 accent-[var(--color-accent)]"
+              />
+              <span>
+                <span className="block text-[13px] font-medium text-text">{t("updates.showBadge")}</span>
+                <span className="block text-xs leading-relaxed text-muted">{t("updates.showBadgeHint")}</span>
+              </span>
+            </label>
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-muted">{t("updates.privacy")}</p>
         </Card>
       </div>
     </div>
