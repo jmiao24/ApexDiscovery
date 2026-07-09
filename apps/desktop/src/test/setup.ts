@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest";
+import "@/i18n";
 
 // DOM stubs — only in a browser-like (jsdom) environment. The node-env tests
 // (e.g. the OpenCode integration test) skip these.
