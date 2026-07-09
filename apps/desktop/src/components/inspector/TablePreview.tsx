@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 // Shared tabular preview: first row of data is the header (csv and xlsx alike).
 export interface TableData {
   columns: string[];
@@ -6,6 +8,7 @@ export interface TableData {
 }
 
 export function TablePreview({ table }: { table: TableData }) {
+  const { t } = useTranslation(["inspector", "common"]);
   return (
     <div className="p-3">
       <div className="overflow-x-auto rounded-input border border-border bg-surface">
@@ -33,7 +36,9 @@ export function TablePreview({ table }: { table: TableData }) {
         </table>
       </div>
       {table.truncated && (
-        <div className="py-2 text-center text-xs text-muted">Showing the first {table.rows.length} rows</div>
+        <div className="py-2 text-center text-xs text-muted">
+          {t("table.showingFirstRows", { count: table.rows.length })}
+        </div>
       )}
     </div>
   );

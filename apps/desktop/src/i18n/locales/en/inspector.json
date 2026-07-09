@@ -1,1 +1,122 @@
-{}
+{
+  "shell": {
+    "maximizePanel": "Maximize panel",
+    "restorePanel": "Restore panel",
+    "closeInspector": "Close inspector"
+  },
+  "artifact": {
+    "previousVersionAria": "Previous version",
+    "nextVersionAria": "Next version",
+    "downloadAria": "Download",
+    "downloadScript": "Download script",
+    "inputsLabel": "Inputs",
+    "noExecutionLog": "No execution log.",
+    "noMessages": "No messages for this version.",
+    "noEnvironmentInfo": "No environment info.",
+    "reviewPassed": "Review passed — {{version}} traces to code and inputs.",
+    "reviewNotPassed": "{{version}} has not passed review yet.",
+    "tabs": {
+      "Code": "Code",
+      "Execution Log": "Execution Log",
+      "Messages": "Messages",
+      "Environment": "Environment",
+      "Review": "Review"
+    }
+  },
+  "notebook": {
+    "title": "Notebook",
+    "sharedWithAgent": "Shared with the agent",
+    "live": "Live",
+    "outputLabel": "> output",
+    "running": "running…",
+    "sentToKernel": "→ sent to the agent's kernel",
+    "localOnly": "(local kernel available only in the desktop app)",
+    "kernelError": "kernel error: {{message}}",
+    "exprPlaceholder": "Type an expression and press Enter",
+    "exprAria": "Notebook expression",
+    "runAria": "Run expression"
+  },
+  "provenance": {
+    "loadingHistory": "Loading history…",
+    "emptyPrefix": "No versions recorded yet. Each time the agent writes",
+    "emptySuffix": ", a version is added here with the code, model, and conversation that produced it.",
+    "envTitle": "Environment this version was produced in",
+    "lockfileTitle": "View the captured pip freeze lockfile for this version",
+    "packageCount_one": "{{count}} package",
+    "packageCount_other": "{{count}} packages",
+    "pipFreezePrefix": "pip freeze · ",
+    "reproduce": "Reproduce",
+    "reproduceRunTitle": "Draft a prompt that re-runs this file's run and compares the outputs",
+    "reproduceVersionTitle": "Draft a prompt that re-runs this version's code and compares the result",
+    "openConversation": "Open conversation",
+    "openConversationTitle": "Open the conversation this version came from",
+    "loadingLockfile": "Loading…",
+    "openRunTitle": "Open this run in the Runs view",
+    "producedByRunPrefix": "Produced by run",
+    "commandSeparator": " — ",
+    "producedByRunSuffix": ". This file is an output of running code; Reproduce re-runs that command and compares the result.",
+    "contentNotCaptured": "Content not captured for this version (a binary write, or an edit that recorded only a diff)."
+  },
+  "filePreview": {
+    "historyAria": "History",
+    "historyTitle": "History — every recorded version with its code and conversation",
+    "openExternally": "Open externally",
+    "openExternallyTitle": "Open in the default app",
+    "tabs": {
+      "preview": "Preview",
+      "code": "Code"
+    },
+    "loading": "Loading {{filename}}…",
+    "desktopOnly": "Preview is available in the desktop app.",
+    "sourceDesktopOnly": "Source is available in the desktop app.",
+    "binaryNoPreview": "This file is binary and has no preview — open it externally.",
+    "artifactKind": {
+      "figure": "figure",
+      "script": "script",
+      "report": "report",
+      "table": "table",
+      "notebook": "notebook",
+      "model": "model",
+      "data": "data"
+    },
+    "htmlPreviewTitle": "HTML preview",
+    "pdfPreviewTitle": "PDF preview",
+    "tableView": {
+      "table": "Table",
+      "chart": "Chart"
+    },
+    "tooLarge": "{{filename}} is too large to preview",
+    "tooLargeBody": "Previews are capped so a large file can't freeze the app. Inspect it without loading — the large-file probe reads its schema, shape, a sample, and key numbers by streaming, never loading the whole file — or open it in your system app.",
+    "inspectWithoutLoading": "Inspect without loading",
+    "pointer": {
+      "format": "Format",
+      "size": "Size",
+      "gzipped": "(gzipped)",
+      "approxRows": "Rows (approx.)",
+      "rows": "Rows",
+      "approxReads": "Reads (approx.)",
+      "approxSequences": "Sequences (approx.)",
+      "approxVariants": "Variants (approx.)",
+      "columns": "Columns",
+      "readLength": "Read length",
+      "readLengthValue": "{{min}}–{{max}} (mean {{mean}})",
+      "samples": "Samples",
+      "schema": "Schema",
+      "datasets": "Datasets",
+      "sampleIds": "Sample ids"
+    }
+  },
+  "office": {
+    "rendering": "Rendering…",
+    "docxRenderError": "Could not render this document: {{message}}",
+    "xlsxReadError": "Could not read this workbook: {{message}}",
+    "pptxRenderError": "Could not render this presentation: {{message}}",
+    "noSheets": "This workbook has no sheets.",
+    "truncatedPrefix": "Truncated preview · ",
+    "embeddedChartsNote": "Embedded charts are not rendered."
+  },
+  "table": {
+    "showingFirstRows_one": "Showing the first {{count}} row",
+    "showingFirstRows_other": "Showing the first {{count}} rows"
+  }
+}

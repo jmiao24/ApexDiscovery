@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Code2, Eye, ExternalLink, FileSearch, History, Loader2, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { FilePreviewInspector as FilePreviewInspectorT, FileRoot } from "@ai4s/shared";
 import { previewKindForName, type PreviewKind } from "@/lib/artifacts";
 import {
@@ -49,6 +50,7 @@ export function FilePreviewInspector({
   /** Pane-level header buttons (e.g. maximize), rendered before Close. */
   controls?: React.ReactNode;
 }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const kind = previewKindForName(data.filename);
   const needsUrl = kind === "pdf" || kind === "image" || kind === "html" || kind === "video";
   const needsText =
@@ -86,7 +88,7 @@ export function FilePreviewInspector({
           setUrl(u);
           // Browser dev has no local server; html can still preview inline content.
           if (!u && kind !== "html") {
-            setError("Preview is available in the desktop app.");
+            setError(t("filePreview.desktopOnly"));
           }
         }
         if (needsText && data.content === undefined) {
@@ -95,15 +97,15 @@ export function FilePreviewInspector({
           if (f && f.encoding === "utf8") setText(f.data);
           // The file was read but isn't text — say so instead of falling
           // through to the "desktop app" note while inside the desktop app.
-          else if (f) setError("This file is binary and has no preview — open it externally.");
+          else if (f) setError(t("filePreview.binaryNoPreview"));
           else if (kind !== "html" && kind !== "markdown")
-            setError("Preview is available in the desktop app.");
+            setError(t("filePreview.desktopOnly"));
         }
         if (needsBytes) {
           const f = await readArtifact(data.path, data.root);
           if (cancelled) return;
           if (f && f.encoding === "base64") setBytes(base64ToBytes(f.data));
-          else setError("Preview is available in the desktop app.");
+          else setError(t("filePreview.desktopOnly"));
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -114,6 +116,9 @@ export function FilePreviewInspector({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `t` intentionally
+    // excluded: this effect loads a file, not a UI label; a locale switch mid-load
+    // doesn't need to re-trigger a network/disk read to refresh an error string.
   }, [data.path, data.content, data.root, kind, needsUrl, needsText, needsBytes]);
 
   const canToggle =
@@ -133,22 +138,24 @@ export function FilePreviewInspector({
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <PaneTitlebarInset />
         <span className="truncate text-sm font-medium text-text">{data.filename}</span>
-        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted">{data.artifact}</span>
+        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted">
+          {t(`filePreview.artifactKind.${data.artifact}`)}
+        </span>
         {canToggle && (
           <div className="ml-2 flex items-center gap-1 rounded-input bg-surface-2 p-0.5">
             <ToggleBtn active={tab === "preview"} onClick={() => setTab("preview")}>
-              <Eye size={13} /> Preview
+              <Eye size={13} /> {t("filePreview.tabs.preview")}
             </ToggleBtn>
             <ToggleBtn active={tab === "code"} onClick={() => setTab("code")}>
-              <Code2 size={13} /> Code
+              <Code2 size={13} /> {t("filePreview.tabs.code")}
             </ToggleBtn>
           </div>
         )}
         <div className="flex-1" />
         <button
           className={cn(showHistory ? "text-accent" : "text-text hover:opacity-60")}
-          aria-label="History"
-          title="History — every recorded version with its code and conversation"
+          aria-label={t("filePreview.historyAria")}
+          title={t("filePreview.historyTitle")}
           aria-pressed={showHistory}
           onClick={() => setShowHistory((v) => !v)}
         >
@@ -156,14 +163,14 @@ export function FilePreviewInspector({
         </button>
         <button
           className="text-text hover:opacity-60"
-          aria-label="Open externally"
-          title="Open in the default app"
+          aria-label={t("filePreview.openExternally")}
+          title={t("filePreview.openExternallyTitle")}
           onClick={() => void openArtifactExternally(data.path, data.root)}
         >
           <ExternalLink size={14} strokeWidth={1.5} />
         </button>
         {controls}
-        <button className="text-text hover:opacity-60" aria-label="Close inspector" onClick={onClose}>
+        <button className="text-text hover:opacity-60" aria-label={t("shell.closeInspector")} onClick={onClose}>
           <X size={14} strokeWidth={1.5} />
         </button>
       </header>
@@ -172,7 +179,7 @@ export function FilePreviewInspector({
         {showHistory && <ProvenancePanel path={data.path} language={data.language} />}
         {!showHistory && loading && (
           <div className="flex items-center gap-2 p-4 text-sm text-muted">
-            <Loader2 size={15} className="animate-spin" /> Loading {data.filename}…
+            <Loader2 size={15} className="animate-spin" /> {t("filePreview.loading", { filename: data.filename })}
           </div>
         )}
         {!showHistory && !loading && error && (
@@ -220,10 +227,11 @@ function Body({
   path: string;
   language?: string;
 }) {
+  const { t } = useTranslation(["inspector", "common"]);
   if (kind === "docx" || kind === "xlsx" || kind === "pptx") {
     // Office views scroll internally (the outer pane never does), so they
     // carry their own scroll memory, keyed apart from the outer container's.
-    if (!bytes) return <Note text="Preview is available in the desktop app." />;
+    if (!bytes) return <Note text={t("filePreview.desktopOnly")} />;
     if (kind === "docx") return <DocxView bytes={bytes} scrollKey={`office:${path}`} />;
     if (kind === "xlsx") return <XlsxView bytes={bytes} scrollKey={`office:${path}`} />;
     return <PptxView bytes={bytes} scrollKey={`office:${path}`} />;
@@ -232,49 +240,49 @@ function Body({
     return bytes !== null ? (
       <MeshView filename={filename} bytes={bytes} />
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "fits") {
     return bytes !== null ? (
       <FitsView filename={filename} bytes={bytes} />
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "dos") {
     return bytes !== null ? (
       <DosView filename={filename} bytes={bytes} />
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "bands") {
     return bytes !== null ? (
       <BandView filename={filename} bytes={bytes} />
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "qcode") {
     return text !== null ? (
       <QCodeView filename={filename} text={text} />
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "anomaly") {
     return text !== null ? (
       <AnomalyMapView filename={filename} text={text} />
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "phase") {
     return text !== null ? (
       <PhaseView filename={filename} text={text} />
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "molecule") {
@@ -284,13 +292,13 @@ function Body({
           <CodeViewer code={text} language={language} />
         </div>
       ) : (
-        <Note text="Source is available in the desktop app." />
+        <Note text={t("filePreview.sourceDesktopOnly")} />
       );
     }
     return text !== null ? (
       <MoleculeView filename={filename} text={text} />
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "genome") {
@@ -300,13 +308,13 @@ function Body({
           <CodeViewer code={text} language={language} />
         </div>
       ) : (
-        <Note text="Source is available in the desktop app." />
+        <Note text={t("filePreview.sourceDesktopOnly")} />
       );
     }
     return text !== null ? (
       <GenomeView filename={filename} text={text} />
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "markdown") {
@@ -316,7 +324,7 @@ function Body({
           <CodeViewer code={text} language="markdown" />
         </div>
       ) : (
-        <Note text="Source is available in the desktop app." />
+        <Note text={t("filePreview.sourceDesktopOnly")} />
       );
     }
     // A document reads as a page: white paper, black text, whatever the app
@@ -328,7 +336,7 @@ function Body({
         </div>
       </div>
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "html" && showCode) {
@@ -337,25 +345,39 @@ function Body({
         <CodeViewer code={text} language="html" />
       </div>
     ) : (
-      <Note text="Source is available in the desktop app." />
+      <Note text={t("filePreview.sourceDesktopOnly")} />
     );
   }
   if (kind === "html") {
     // Served URL preferred (relative assets resolve); srcdoc as browser fallback.
     if (url) {
-      return <iframe title="HTML preview" src={url} sandbox="allow-scripts" className="h-full min-h-[480px] w-full bg-white" />;
+      return (
+        <iframe
+          title={t("filePreview.htmlPreviewTitle")}
+          src={url}
+          sandbox="allow-scripts"
+          className="h-full min-h-[480px] w-full bg-white"
+        />
+      );
     }
     if (text !== null) {
-      return <iframe title="HTML preview" srcDoc={text} sandbox="allow-scripts" className="h-full min-h-[480px] w-full bg-white" />;
+      return (
+        <iframe
+          title={t("filePreview.htmlPreviewTitle")}
+          srcDoc={text}
+          sandbox="allow-scripts"
+          className="h-full min-h-[480px] w-full bg-white"
+        />
+      );
     }
-    return <Note text="Preview is available in the desktop app." />;
+    return <Note text={t("filePreview.desktopOnly")} />;
   }
   if (kind === "pdf") {
     // The webview's native PDF viewer (WKWebView / WebView2) renders the served URL.
     return url ? (
-      <iframe title="PDF preview" src={url} className="h-full min-h-[480px] w-full" />
+      <iframe title={t("filePreview.pdfPreviewTitle")} src={url} className="h-full min-h-[480px] w-full" />
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "image") {
@@ -364,7 +386,7 @@ function Body({
         <img src={url} alt={filename} className="max-w-full rounded-sm bg-white shadow-card" />
       </div>
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "video") {
@@ -379,14 +401,14 @@ function Body({
         />
       </div>
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   if (kind === "table") {
     return text !== null ? (
       <TableView table={parseTableFile(filename, text)} />
     ) : (
-      <Note text="Preview is available in the desktop app." />
+      <Note text={t("filePreview.desktopOnly")} />
     );
   }
   return text !== null ? (
@@ -394,7 +416,7 @@ function Body({
       <CodeViewer code={text} language={language} />
     </div>
   ) : (
-    <Note text="Preview is available in the desktop app." />
+    <Note text={t("filePreview.desktopOnly")} />
   );
 }
 
@@ -405,6 +427,7 @@ function Note({ text }: { text: string }) {
 /** Tabular file preview with a Table ↔ Chart toggle. The Chart tab appears only
  *  when the data has a numeric column to plot (P1-5 native chart surface). */
 function TableView({ table }: { table: import("@/lib/csv").ParsedTable }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const [view, setView] = useState<"table" | "chart">("table");
   const chartable = canChart(table);
   return (
@@ -412,10 +435,10 @@ function TableView({ table }: { table: import("@/lib/csv").ParsedTable }) {
       {chartable && (
         <div className="flex items-center gap-1 border-b border-border px-3 py-1.5">
           <ToggleBtn active={view === "table"} onClick={() => setView("table")}>
-            Table
+            {t("filePreview.tableView.table")}
           </ToggleBtn>
           <ToggleBtn active={view === "chart"} onClick={() => setView("chart")}>
-            Chart
+            {t("filePreview.tableView.chart")}
           </ToggleBtn>
         </div>
       )}
@@ -448,6 +471,7 @@ export function PreviewError({
   root?: FileRoot;
   onOpenExternally: () => void;
 }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const tooLarge = /too large/i.test(error);
   const [pointer, setPointer] = useState<LargeFilePointer | null>(null);
   const [probing, setProbing] = useState(false);
@@ -470,13 +494,8 @@ export function PreviewError({
   return (
     <div className="p-4">
       <div className="rounded-card border border-border bg-surface p-4 text-sm text-muted">
-        <div className="mb-1 font-medium text-text">{filename} is too large to preview</div>
-        <p className="mb-3">
-          Previews are capped so a large file can't freeze the app. Inspect it
-          without loading — the large-file probe reads its schema, shape, a
-          sample, and key numbers by streaming, never loading the whole file —
-          or open it in your system app.
-        </p>
+        <div className="mb-1 font-medium text-text">{t("filePreview.tooLarge", { filename })}</div>
+        <p className="mb-3">{t("filePreview.tooLargeBody")}</p>
         <div className="flex flex-wrap gap-2">
           {path && (
             <button
@@ -485,14 +504,14 @@ export function PreviewError({
               disabled={probing}
             >
               {probing ? <Loader2 size={13} className="animate-spin" /> : <FileSearch size={13} />}
-              Inspect without loading
+              {t("filePreview.inspectWithoutLoading")}
             </button>
           )}
           <button
             className="inline-flex items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-1.5 text-[13px] text-text hover:bg-surface"
             onClick={onOpenExternally}
           >
-            <ExternalLink size={13} /> Open externally
+            <ExternalLink size={13} /> {t("filePreview.openExternally")}
           </button>
         </div>
         {probeError && <div className="mt-3 text-[13px] text-error">{probeError}</div>}
@@ -504,19 +523,28 @@ export function PreviewError({
 
 /** Render the probe's memory pointer as a compact, readable fact sheet. */
 function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
+  const { t } = useTranslation(["inspector", "common"]);
   if (p.error) return <div className="mt-3 text-[13px] text-error">{p.error}</div>;
   const fmt = (n: number) => formatNumber(n);
   const rows: [string, string][] = [];
-  if (p.format) rows.push(["Format", p.format]);
-  if (p.size) rows.push(["Size", p.size + (p.gzipped ? " (gzipped)" : "")]);
-  if (p.approx_rows !== undefined) rows.push(["Rows (approx.)", fmt(p.approx_rows)]);
-  if (p.num_rows !== undefined) rows.push(["Rows", fmt(p.num_rows)]);
-  if (p.approx_reads !== undefined) rows.push(["Reads (approx.)", fmt(p.approx_reads)]);
-  if (p.approx_sequences !== undefined) rows.push(["Sequences (approx.)", fmt(p.approx_sequences)]);
-  if (p.approx_variants !== undefined) rows.push(["Variants (approx.)", fmt(p.approx_variants)]);
-  if (p.n_columns !== undefined) rows.push(["Columns", fmt(p.n_columns)]);
-  if (p.read_length) rows.push(["Read length", `${p.read_length.min}–${p.read_length.max} (mean ${p.read_length.mean})`]);
-  if (p.samples?.length) rows.push(["Samples", p.samples.join(", ")]);
+  if (p.format) rows.push([t("filePreview.pointer.format"), p.format]);
+  if (p.size) rows.push([t("filePreview.pointer.size"), p.size + (p.gzipped ? ` ${t("filePreview.pointer.gzipped")}` : "")]);
+  if (p.approx_rows !== undefined) rows.push([t("filePreview.pointer.approxRows"), fmt(p.approx_rows)]);
+  if (p.num_rows !== undefined) rows.push([t("filePreview.pointer.rows"), fmt(p.num_rows)]);
+  if (p.approx_reads !== undefined) rows.push([t("filePreview.pointer.approxReads"), fmt(p.approx_reads)]);
+  if (p.approx_sequences !== undefined) rows.push([t("filePreview.pointer.approxSequences"), fmt(p.approx_sequences)]);
+  if (p.approx_variants !== undefined) rows.push([t("filePreview.pointer.approxVariants"), fmt(p.approx_variants)]);
+  if (p.n_columns !== undefined) rows.push([t("filePreview.pointer.columns"), fmt(p.n_columns)]);
+  if (p.read_length)
+    rows.push([
+      t("filePreview.pointer.readLength"),
+      t("filePreview.pointer.readLengthValue", {
+        min: p.read_length.min,
+        max: p.read_length.max,
+        mean: p.read_length.mean,
+      }),
+    ]);
+  if (p.samples?.length) rows.push([t("filePreview.pointer.samples"), p.samples.join(", ")]);
 
   return (
     <div className="mt-3 rounded-input border border-border bg-surface-2 p-3">
@@ -533,7 +561,7 @@ function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
       )}
       {p.columns && p.columns.length > 0 && (
         <div className="mt-2">
-          <div className="mb-1 text-[12px] text-muted">Schema</div>
+          <div className="mb-1 text-[12px] text-muted">{t("filePreview.pointer.schema")}</div>
           <div className="flex flex-wrap gap-1">
             {p.columns.slice(0, 40).map((c) => (
               <span key={c.name} className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11.5px] text-text">
@@ -545,7 +573,7 @@ function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
       )}
       {p.datasets && p.datasets.length > 0 && (
         <div className="mt-2">
-          <div className="mb-1 text-[12px] text-muted">Datasets</div>
+          <div className="mb-1 text-[12px] text-muted">{t("filePreview.pointer.datasets")}</div>
           <div className="flex flex-col gap-0.5 font-mono text-[11.5px] text-text">
             {p.datasets.slice(0, 20).map((d) => (
               <span key={d.path}>{d.path} <span className="text-muted">[{d.shape.join("×")}] {d.dtype}</span></span>
@@ -555,7 +583,7 @@ function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
       )}
       {p.sample_ids && p.sample_ids.length > 0 && (
         <div className="mt-2">
-          <div className="mb-1 text-[12px] text-muted">Sample ids</div>
+          <div className="mb-1 text-[12px] text-muted">{t("filePreview.pointer.sampleIds")}</div>
           <div className="font-mono text-[11.5px] text-text">{p.sample_ids.slice(0, 5).join(", ")}</div>
         </div>
       )}

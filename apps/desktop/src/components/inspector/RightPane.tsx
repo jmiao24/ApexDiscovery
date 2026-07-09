@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { INSPECTOR_MAX, INSPECTOR_MIN, useOverlayTitlebar, useUiStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
 
@@ -113,9 +114,10 @@ export function PaneTitlebarInset() {
 /** Maximize / restore toggle for the pane's header row (session pages only —
  *  full-page viewers like the Files page have nothing to maximize over). */
 export function MaximizePaneButton() {
+  const { t } = useTranslation(["inspector", "common"]);
   const inspectorMaximized = useUiStore((s) => s.inspectorMaximized);
   const setInspectorMaximized = useUiStore((s) => s.setInspectorMaximized);
-  const label = inspectorMaximized ? "Restore panel" : "Maximize panel";
+  const label = inspectorMaximized ? t("shell.restorePanel") : t("shell.maximizePanel");
   return (
     <button
       className="text-text hover:opacity-60"

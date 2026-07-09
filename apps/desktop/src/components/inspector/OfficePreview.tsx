@@ -10,6 +10,7 @@
 // stylesheets; the base style below resets what still inherits.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 import { useScrollMemory } from "@/lib/scrollMemory";
 import type { SheetHtml } from "@/lib/xlsx";
@@ -53,11 +54,12 @@ function useShadowPage(extraCss = "") {
 }
 
 function RenderState({ error, loading }: { error: string | null; loading: boolean }) {
+  const { t } = useTranslation(["inspector", "common"]);
   if (error) return <div className="p-4 text-sm text-muted">{error}</div>;
   if (loading)
     return (
       <div className="flex items-center gap-2 p-4 text-sm text-muted">
-        <Loader2 size={15} className="animate-spin" /> Rendering…
+        <Loader2 size={15} className="animate-spin" /> {t("office.rendering")}
       </div>
     );
   return null;
@@ -66,6 +68,7 @@ function RenderState({ error, loading }: { error: string | null; loading: boolea
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function DocxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: string }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const { hostRef, page } = useShadowPage();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
@@ -106,7 +109,7 @@ export function DocxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
           observer.observe(wrapRef.current);
         }
       } catch (e) {
-        if (!cancelled) setError(`Could not render this document: ${message(e)}`);
+        if (!cancelled) setError(t("office.docxRenderError", { message: message(e) }));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -116,6 +119,9 @@ export function DocxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
       observer?.disconnect();
       page.replaceChildren();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `t` intentionally
+    // excluded: this effect renders the document, not a UI label; it shouldn't
+    // re-render the whole doc just because the locale changed.
   }, [bytes, page]);
 
   return (
@@ -140,6 +146,7 @@ const SHEET_CSS = `
 `;
 
 export function XlsxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: string }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const { hostRef, page } = useShadowPage(SHEET_CSS);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [sheets, setSheets] = useState<SheetHtml[] | null>(null);
@@ -157,12 +164,14 @@ export function XlsxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
         setSheets(parsed);
         setActive(0);
       } catch (e) {
-        if (!cancelled) setError(`Could not read this workbook: ${message(e)}`);
+        if (!cancelled) setError(t("office.xlsxReadError", { message: message(e) }));
       }
     })();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `t` intentionally
+    // excluded, same reasoning as DocxView above.
   }, [bytes]);
 
   const sheet = sheets?.[Math.min(active, sheets.length - 1)];
@@ -174,7 +183,7 @@ export function XlsxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
   const onScroll = useScrollMemory(wrapRef, scrollKey, !!(page && sheet));
 
   if (error || !sheets) return <RenderState error={error} loading={!sheets} />;
-  if (sheets.length === 0) return <div className="p-4 text-sm text-muted">This workbook has no sheets.</div>;
+  if (sheets.length === 0) return <div className="p-4 text-sm text-muted">{t("office.noSheets")}</div>;
   return (
     <div className="flex h-full flex-col">
       {sheets.length > 1 && (
@@ -197,7 +206,7 @@ export function XlsxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
         <div ref={hostRef} />
       </div>
       <div className="border-t border-border px-4 py-1.5 text-xs text-muted">
-        {sheet?.truncated ? "Truncated preview · " : ""}Embedded charts are not rendered.
+        {sheet?.truncated ? t("office.truncatedPrefix") : ""}{t("office.embeddedChartsNote")}
       </div>
     </div>
   );
@@ -212,6 +221,7 @@ const SLIDES_CSS = `
 `;
 
 export function PptxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: string }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const { hostRef, page } = useShadowPage(SLIDES_CSS);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
@@ -239,7 +249,7 @@ export function PptxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
         previewer = init(page, { width, mode: "list" });
         await (previewer as ReturnType<typeof init>).preview(normalized);
       } catch (e) {
-        if (!cancelled) setError(`Could not render this presentation: ${message(e)}`);
+        if (!cancelled) setError(t("office.pptxRenderError", { message: message(e) }));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -249,6 +259,8 @@ export function PptxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
       previewer?.destroy();
       page.replaceChildren();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `t` intentionally
+    // excluded, same reasoning as DocxView above.
   }, [bytes, page]);
 
   return (

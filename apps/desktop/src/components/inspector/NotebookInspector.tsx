@@ -1,5 +1,6 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 import { ChevronDown, CornerDownLeft, NotebookPen, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { NotebookCell, NotebookInspector as NotebookInspectorT } from "@ai4s/shared";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { PaneTitlebarInset } from "./RightPane";
@@ -19,6 +20,7 @@ export function NotebookInspector({
   /** Pane-level header buttons (e.g. maximize), rendered before Close. */
   controls?: React.ReactNode;
 }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const [cells, setCells] = useState<NotebookCell[]>(data.cells);
   const [expr, setExpr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,7 +32,7 @@ export function NotebookInspector({
     const code = expr.trim();
     if (!code || busy) return;
     const nextIndex = (cells[cells.length - 1]?.index ?? 0) + 1;
-    setCells((c) => [...c, { index: nextIndex, language: "python", code, output: "running…" }]);
+    setCells((c) => [...c, { index: nextIndex, language: "python", code, output: t("notebook.running") }]);
     setExpr("");
 
     const setOutput = (output: string) =>
@@ -43,12 +45,12 @@ export function NotebookInspector({
       if (res) setOutput(formatExecResult(res));
       else if (onEvaluate) {
         onEvaluate(code);
-        setOutput("→ sent to the agent's kernel");
+        setOutput(t("notebook.sentToKernel"));
       } else {
-        setOutput("(local kernel available only in the desktop app)");
+        setOutput(t("notebook.localOnly"));
       }
     } catch (e) {
-      setOutput(`kernel error: ${e instanceof Error ? e.message : String(e)}`);
+      setOutput(t("notebook.kernelError", { message: e instanceof Error ? e.message : String(e) }));
     } finally {
       setBusy(false);
     }
@@ -66,10 +68,10 @@ export function NotebookInspector({
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <PaneTitlebarInset />
         <NotebookPen size={14} strokeWidth={1.5} className="text-text" />
-        <span className="text-sm font-medium text-text">Notebook</span>
+        <span className="text-sm font-medium text-text">{t("notebook.title")}</span>
         <div className="flex-1" />
         {controls}
-        <button className="text-text hover:opacity-60" aria-label="Close inspector" onClick={onClose}>
+        <button className="text-text hover:opacity-60" aria-label={t("shell.closeInspector")} onClick={onClose}>
           <X size={14} strokeWidth={1.5} />
         </button>
       </header>
@@ -78,11 +80,11 @@ export function NotebookInspector({
         <span className="rounded-input bg-surface-2 px-2 py-1 text-sm font-medium text-text">
           {data.name}
         </span>
-        <span className="text-sm text-muted">Shared with the agent</span>
+        <span className="text-sm text-muted">{t("notebook.sharedWithAgent")}</span>
         <div className="flex-1" />
         {data.live && (
           <span className="flex items-center gap-1 text-sm text-ok">
-            <span className="h-1.5 w-1.5 rounded-full bg-ok" /> Live
+            <span className="h-1.5 w-1.5 rounded-full bg-ok" /> {t("notebook.live")}
             <ChevronDown size={14} />
           </span>
         )}
@@ -98,7 +100,7 @@ export function NotebookInspector({
             <CodeViewer code={cell.code} language={cell.language} startLine={1} />
             {cell.output && (
               <div className="mt-2">
-                <div className="mb-1 text-xs text-muted">&gt; output</div>
+                <div className="mb-1 text-xs text-muted">{t("notebook.outputLabel")}</div>
                 <pre className="whitespace-pre-wrap rounded-input border border-border bg-surface-2 p-3 font-mono text-[12.5px] text-text">
                   {cell.output}
                 </pre>
@@ -117,13 +119,13 @@ export function NotebookInspector({
             value={expr}
             onChange={(e) => setExpr(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Type an expression and press Enter"
+            placeholder={t("notebook.exprPlaceholder")}
             className="flex-1 bg-transparent font-mono text-[13px] text-text outline-none placeholder:text-muted"
-            aria-label="Notebook expression"
+            aria-label={t("notebook.exprAria")}
           />
           <button
             className="text-muted hover:text-text disabled:opacity-30"
-            aria-label="Run expression"
+            aria-label={t("notebook.runAria")}
             onClick={() => void evaluate()}
             disabled={!expr.trim() || busy}
           >
