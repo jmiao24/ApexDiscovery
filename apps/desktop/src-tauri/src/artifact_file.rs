@@ -252,20 +252,61 @@ pub fn open_path(app: AppHandle, path: String, root: Option<String>) -> Result<(
 
 /// Reveal a workspace file/dir in the OS file manager (Finder on macOS,
 /// Explorer on Windows, the file-manager portal/DBus with a folder-open
-/// fallback on Linux). Via the `opener` crate's `reveal`, so no shelling out.
+/// fallback on Linux).
 #[tauri::command]
 pub fn reveal_path(app: AppHandle, path: String, root: Option<String>) -> Result<(), String> {
     let full = resolve_under(&scope_root(&app, root.as_deref())?, &path)?;
-    opener::reveal(&full).map_err(|e| format!("reveal failed: {e}"))
+    reveal_impl(&full)
 }
 
-/// The absolute filesystem path of a workspace file/dir, for "Copy path". The
-/// path is resolved under (and sandboxed to) the chosen root, then returned in
-/// the OS-native form (backslashes on Windows).
+// Windows: opener's reveal uses SHOpenFolderAndSelectItems (COM), which can
+// return a spurious IO error even when it would work. `explorer /select,<path>`
+// is the reliable path — but explorer returns a NON-ZERO exit code even on
+// success, so we spawn and don't wait; and it rejects the `\\?\` verbatim form
+// that canonicalize() produces, so we pass the plain path. `raw_arg` keeps
+// explorer's non-standard `/select,"…"` token intact (Rust must not re-quote).
+#[cfg(target_os = "windows")]
+fn reveal_impl(full: &Path) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    let arg = format!("/select,\"{}\"", display_path(full));
+    std::process::Command::new("explorer")
+        .raw_arg(arg)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("reveal failed: {e}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn reveal_impl(full: &Path) -> Result<(), String> {
+    opener::reveal(full).map_err(|e| format!("reveal failed: {e}"))
+}
+
+/// The path in OS-native display form. On Windows, `canonicalize()` yields a
+/// `\\?\` verbatim path that Explorer and most apps don't accept — strip it back
+/// to the plain `C:\…` (and `\\server\share` for UNC). No-op elsewhere.
+#[cfg(target_os = "windows")]
+fn display_path(full: &Path) -> String {
+    let s = full.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        rest.to_owned()
+    } else {
+        s.into_owned()
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn display_path(full: &Path) -> String {
+    full.to_string_lossy().into_owned()
+}
+
+/// The absolute filesystem path of a workspace file/dir, for "Copy path" — in
+/// OS-native form (plain `C:\…` on Windows, not the `\\?\` verbatim path).
 #[tauri::command]
 pub fn absolute_path(app: AppHandle, path: String, root: Option<String>) -> Result<String, String> {
     let full = resolve_under(&scope_root(&app, root.as_deref())?, &path)?;
-    Ok(full.to_string_lossy().into_owned())
+    Ok(display_path(&full))
 }
 
 #[derive(serde::Serialize)]
