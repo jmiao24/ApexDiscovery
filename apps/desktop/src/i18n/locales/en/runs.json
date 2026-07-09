@@ -35,7 +35,8 @@
     "packageCount_other": "{{count}} packages"
   },
   "host": {
-    "title": "Cluster host / Modal app"
+    "title": "Cluster host / Modal app",
+    "jobLabel": "job"
   },
   "action": {
     "reproduce": "Reproduce",

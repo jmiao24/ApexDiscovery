@@ -389,7 +389,7 @@ function RunRow({
             {r.host && (
               <Chip title={t("host.title")}>
                 {r.host}
-                {r.jobId && ` · job ${r.jobId}`}
+                {r.jobId && ` · ${t("host.jobLabel")} ${r.jobId}`}
               </Chip>
             )}
           </div>
