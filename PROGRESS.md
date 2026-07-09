@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-09 03:25 · chore(ignore): removed tracked docs/superpowers planning artifacts and ignored docs/superpowers/ to keep local superpowers files out of git.
+
 2026-07-09 02:36 · docs(readme): folded language support into the capability tables, restored emoji in README tables of contents, and added the Open Science Discord invite.
 
 2026-07-09 01:14 · docs(readme): refreshed README for v0.1.7 current capabilities and added README translations for all seven shipped UI languages.

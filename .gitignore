@@ -36,6 +36,7 @@ venv/
 .cache/
 .eslintcache
 .superpowers/
+docs/superpowers/
 
 # Local runtime & secrets (never commit)
 .ai4s-workbench/
