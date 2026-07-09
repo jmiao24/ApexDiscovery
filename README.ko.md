@@ -4,7 +4,7 @@
 
 # Open Science Desktop
 
-**macOS & Windows용 로컬 우선, 모델 독립 AI 연구 워크벤치.**
+**macOS, Windows & Linux용 로컬 우선, 모델 독립 AI 연구 워크벤치.**
 
 Formerly Open Science. Claude Science 및 유사한 AI-for-science 워크벤치의 오픈소스 데스크톱 대안으로, Tauri, MCP, agent skills, 재현 가능한 산출물을 기반으로 합니다. 에이전트, 노트북, 파일, 그림, 보고서, 실행 기록, 리뷰를 하나의 감사 가능한 데스크톱 워크플로로 연결합니다.
 

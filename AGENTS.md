@@ -1,7 +1,7 @@
 # Open Science Desktop
 
 Brand name: **Open Science Desktop** — "Local-first, model-agnostic AI research
-workbench for macOS & Windows." Formerly Open Science. Bundle identifier stays
+workbench for macOS, Windows & Linux." Formerly Open Science. Bundle identifier stays
 `com.ai4s.workbench` and internal `@ai4s/*` package names are unchanged.
 
 Project rules and working context for AI agents (Claude Code, Cursor, Codex, etc.).
@@ -19,7 +19,8 @@ Keep it **simple, explicit, clear, complete**.
 ## What this project is
 
 An open-source, local-first, model-agnostic, reproducible AI research desktop
-for macOS and Windows. See `README.md`, `docs/PRD.md`, and `docs/TECHNICAL_DESIGN.md`.
+for macOS, Windows, and Linux. See `README.md`, `docs/PRD.md`, and
+`docs/TECHNICAL_DESIGN.md`.
 
 Recommended stack: **Tauri 2 + React + TypeScript + Vite**, Tailwind + Radix UI,
 **OpenCode** as the agent runtime (bundled single-binary sidecar; HTTP + SSE API),

@@ -4,7 +4,7 @@
 
 # Open Science Desktop
 
-**Local-first, model-agnostic AI research workbench for macOS & Windows.**
+**Local-first, model-agnostic AI research workbench for macOS, Windows & Linux.**
 
 Formerly Open Science. An open-source desktop alternative to Claude Science and
 similar AI-for-science workbenches — built with Tauri, MCP, agent skills, and
@@ -97,7 +97,7 @@ PDF, and audit citations, unsourced numbers, and figure/code consistency.
 
 | Area | Current state |
 | --- | --- |
-| Desktop shell | Tauri 2 + React + TypeScript + Vite, with primary macOS and Windows desktop builds plus Linux packages. |
+| Desktop shell | Tauri 2 + React + TypeScript + Vite, with macOS, Windows, and Linux desktop builds. |
 | Runtime | Bundled OpenCode sidecar, auto-started by the app, isolated from the user's own OpenCode config/data. |
 | Sessions | Multi-session chat/history, dated workspace folders, global history across workspaces, `/` commands, and `!` shell mode. |
 | Files | Global and per-session file browsing, context menu actions, external open/reveal, copy path, and local preview server. |

@@ -4,7 +4,7 @@
 
 # Open Science Desktop
 
-**Atelier de recherche IA local-first et agnostique au modèle pour macOS & Windows.**
+**Atelier de recherche IA local-first et agnostique au modèle pour macOS, Windows & Linux.**
 
 Formerly Open Science. Une alternative desktop open source à Claude Science et aux workbenches AI-for-science similaires, construite avec Tauri, MCP, agent skills et des artefacts reproductibles. Elle relie agents, notebooks, fichiers, figures, rapports, exécutions et revue dans un flux desktop auditable.
 

@@ -4,7 +4,7 @@
 
 # Open Science Desktop
 
-**Banco de trabajo de investigación con IA, local-first y agnóstico al modelo, para macOS & Windows.**
+**Banco de trabajo de investigación con IA, local-first y agnóstico al modelo, para macOS, Windows & Linux.**
 
 Formerly Open Science. Una alternativa desktop open source a Claude Science y workbenches AI-for-science similares, construida con Tauri, MCP, agent skills y artefactos reproducibles. Conecta agentes, notebooks, archivos, figuras, informes, ejecuciones y revisión en un flujo de escritorio auditable.
 

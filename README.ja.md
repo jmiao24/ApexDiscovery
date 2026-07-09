@@ -4,7 +4,7 @@
 
 # Open Science Desktop
 
-**macOS & Windows 向けのローカルファースト、モデル非依存 AI 研究ワークベンチ。**
+**macOS、Windows & Linux 向けのローカルファースト、モデル非依存 AI 研究ワークベンチ。**
 
 Formerly Open Science. Claude Science などの AI-for-science ワークベンチに対するオープンソースのデスクトップ代替です。Tauri、MCP、agent skills、再現可能な成果物を基盤に、エージェント、ノートブック、ファイル、図、レポート、実行記録、レビューを 1 つの監査可能なデスクトップワークフローにまとめます。
 

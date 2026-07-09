@@ -4,7 +4,7 @@
 
 # Open Science Desktop
 
-**本地优先、模型无关的 macOS & Windows AI 科研桌面工作台。**
+**本地优先、模型无关的 macOS、Windows & Linux AI 科研桌面工作台。**
 
 原名 Open Science。它是 Claude Science 及同类 AI-for-science 工作台的开源桌面替代：
 基于 Tauri、MCP、agent skills 和可复现工件构建。它把智能体、笔记本、文件、图表、

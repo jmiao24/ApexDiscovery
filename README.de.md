@@ -4,7 +4,7 @@
 
 # Open Science Desktop
 
-**Local-first, modellunabhängige KI-Forschungs-Workbench für macOS & Windows.**
+**Local-first, modellunabhängige KI-Forschungs-Workbench für macOS, Windows & Linux.**
 
 Formerly Open Science. Eine quelloffene Desktop-Alternative zu Claude Science und ähnlichen AI-for-science-Workbenches, gebaut mit Tauri, MCP, agent skills und reproduzierbaren Artefakten. Agenten, Notebooks, Dateien, Abbildungen, Berichte, Läufe und Reviews werden zu einem auditierbaren Desktop-Workflow verbunden.
 

@@ -46,7 +46,7 @@ criticized for lacking: **multi-discipline breadth** and **Windows support**.
 
 Do **not** market as "open-source Claude Science" or "zero hallucination."
 Market as: *"Open Science Desktop — local-first, model-agnostic AI research
-workbench for macOS & Windows."* Sell **traceable / verifiable**, not **perfect**.
+workbench for macOS, Windows & Linux."* Sell **traceable / verifiable**, not **perfect**.
 
 ---
 
