@@ -70,6 +70,7 @@ export function ModalCard() {
               {ok && (
                 <div className="mt-0.5 text-xs text-muted">
                   {t("modal.readyHint.prefix")}{" "}
+                  {/* eslint-disable-next-line i18next/no-literal-string -- literal CLI command name, not prose */}
                   <span className="font-mono">modal-run</span> {t("modal.readyHint.suffix")}
                 </div>
               )}

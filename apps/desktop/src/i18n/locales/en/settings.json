@@ -17,7 +17,8 @@
     "title": "Agent runtime",
     "hint": "opencode serve, driven over its HTTP + SSE API",
     "connect": "Connect",
-    "disconnect": "Disconnect"
+    "disconnect": "Disconnect",
+    "serverUrlPlaceholder": "http://127.0.0.1:4096"
   },
   "model": {
     "title": "Model",

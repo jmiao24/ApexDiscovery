@@ -1,5 +1,6 @@
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { Copy, ExternalLink, FolderOpen } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { FileRoot } from "@ai4s/shared";
 import {
   absoluteArtifactPath,
@@ -41,6 +42,8 @@ export function FileContextMenu({
   root: FileRoot;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation(["pages", "common"]);
+
   const copyAbsolute = async () => {
     const abs = await absoluteArtifactPath(entry.path, root).catch(() => null);
     if (abs) await copy(abs, "Path");
@@ -64,14 +67,17 @@ export function FileContextMenu({
             {REVEAL_LABEL}
           </Item>
           <Item icon={<Copy size={14} />} onSelect={() => void copyAbsolute()}>
-            Copy path
+            {t("files.contextMenu.copyPath")}
           </Item>
-          <Item icon={<Copy size={14} />} onSelect={() => void copy(entry.path, "Relative path")}>
-            Copy relative path
+          <Item
+            icon={<Copy size={14} />}
+            onSelect={() => void copy(entry.path, t("files.contextMenu.relativePathLabel"))}
+          >
+            {t("files.contextMenu.copyRelativePath")}
           </Item>
           {!entry.isDir && (
             <Item icon={<ExternalLink size={14} />} onSelect={() => void openArtifactExternally(entry.path, root)}>
-              Open in default app
+              {t("files.contextMenu.openInDefaultApp")}
             </Item>
           )}
         </ContextMenu.Content>

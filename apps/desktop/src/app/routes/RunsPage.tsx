@@ -158,7 +158,9 @@ function RunsView({ sessionId }: { sessionId?: string }) {
                 className="w-full rounded-input border border-border bg-surface py-1.5 pl-8 pr-3 text-sm text-text outline-none placeholder:text-muted focus:border-accent"
               />
             </div>
+            {/* eslint-disable-next-line i18next/no-literal-string -- "status"/"ok" are internal filter keys, not display text (the visible label is t("filter.ok")) */}
             <FacetChip label={t("filter.ok")} count={okN} active={filter.status === "ok"} onClick={() => toggle("status", "ok")} dot="bg-ok" />
+            {/* eslint-disable-next-line i18next/no-literal-string -- "status"/"failed" are internal filter keys, not display text (the visible label is t("filter.failed")) */}
             <FacetChip label={t("filter.failed")} count={failedN} active={filter.status === "failed"} onClick={() => toggle("status", "failed")} dot="bg-error" />
             {remoteSurfaces.map((f) => (
               <FacetChip
@@ -166,11 +168,13 @@ function RunsView({ sessionId }: { sessionId?: string }) {
                 label={f.value.toUpperCase()}
                 count={f.count}
                 active={filter.surface === f.value}
+                // eslint-disable-next-line i18next/no-literal-string -- "surface" is an internal filter key, not display text
                 onClick={() => toggle("surface", f.value)}
                 accent
               />
             ))}
             <div className="flex shrink-0 items-center rounded-full border border-border bg-surface p-0.5 text-xs">
+              {/* eslint-disable-next-line i18next/no-literal-string -- internal filter-window keys; "24h"/"7d"/"30d" are displayed verbatim as time-unit shorthand (consistent with existing convention, e.g. "eV"/"GB" units elsewhere), only "all" is display-translated via t("filter.anytime") */}
               {(["all", "24h", "7d", "30d"] as const).map((k) => {
                 const active = (filter.since ?? "all") === k;
                 return (

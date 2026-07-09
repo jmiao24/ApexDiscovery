@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   ExternalLink,
@@ -52,6 +53,7 @@ export function NotebookEditor({
   /** Pane-level header buttons (e.g. maximize), rendered before Close. */
   controls?: React.ReactNode;
 }) {
+  const { t } = useTranslation(["pages", "common"]);
   const [cells, setCells] = useState<NotebookCell[] | null>(null);
   const [language, setLanguage] = useState<KernelLanguage>("python");
   const [error, setError] = useState<string | null>(null);
@@ -246,14 +248,18 @@ export function NotebookEditor({
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <PaneTitlebarInset />
         {onBack && (
-          <button className="text-text hover:opacity-60" aria-label="Back to notebooks" onClick={onBack}>
+          <button
+            className="text-text hover:opacity-60"
+            aria-label={t("notebooks.editor.backAria")}
+            onClick={onBack}
+          >
             <ArrowLeft size={14} strokeWidth={1.5} />
           </button>
         )}
         <NotebookPen size={14} strokeWidth={1.5} className="shrink-0 text-text" />
         <h1 className="truncate text-[13px] font-medium text-text">{path}</h1>
         <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
-          {language === "r" ? "R" : "Python"}
+          {language === "r" ? t("notebooks.editor.languageR") : t("notebooks.editor.languagePython")}
         </span>
         {pyInfo && (
           <span
@@ -266,16 +272,16 @@ export function NotebookEditor({
             {pyInfo.label}
           </span>
         )}
-        <span className="shrink-0 text-xs text-muted">{saved ? "Saved" : "Unsaved"}</span>
-        <div className="flex-1" />
-        <span className="hidden shrink-0 text-xs text-muted xl:inline">
-          Shift/⌘+Enter runs a cell · shared with the agent
+        <span className="shrink-0 text-xs text-muted">
+          {saved ? t("notebooks.editor.saved") : t("notebooks.editor.unsaved")}
         </span>
+        <div className="flex-1" />
+        <span className="hidden shrink-0 text-xs text-muted xl:inline">{t("notebooks.editor.shortcutHint")}</span>
         {isTauri && jupyterInstalled && (
           <button
             className="flex items-center gap-1 text-text hover:opacity-60 disabled:opacity-40"
-            aria-label="Open in JupyterLab"
-            title="Open the full JupyterLab (same env and files) in your browser"
+            aria-label={t("notebooks.editor.openJupyterLabAria")}
+            title={t("notebooks.openJupyterLabTitle")}
             disabled={openingLab}
             onClick={() => void openLab()}
           >
@@ -284,8 +290,8 @@ export function NotebookEditor({
         )}
         <button
           className={cn(showHistory ? "text-accent" : "text-text hover:opacity-60")}
-          aria-label="History"
-          title="History — every recorded version with its code and conversation"
+          aria-label={t("notebooks.editor.historyAria")}
+          title={t("notebooks.editor.historyTitle")}
           aria-pressed={showHistory}
           onClick={() => setShowHistory((v) => !v)}
         >
@@ -293,15 +299,19 @@ export function NotebookEditor({
         </button>
         <button
           className="text-text hover:opacity-60"
-          aria-label="Reload from disk"
-          title="Reload (pick up the agent's changes)"
+          aria-label={t("notebooks.editor.reloadAria")}
+          title={t("notebooks.editor.reloadTitle")}
           onClick={() => void load()}
         >
           <RefreshCw size={14} strokeWidth={1.5} />
         </button>
         {controls}
         {onClose && (
-          <button className="text-text hover:opacity-60" aria-label="Close inspector" onClick={onClose}>
+          <button
+            className="text-text hover:opacity-60"
+            aria-label={t("notebooks.editor.closeAria")}
+            onClick={onClose}
+          >
             <X size={14} strokeWidth={1.5} />
           </button>
         )}
@@ -317,7 +327,7 @@ export function NotebookEditor({
           {error && <div className="text-sm text-error">{error}</div>}
           {!error && !cells && (
             <div className="flex items-center gap-2 text-sm text-muted">
-              <Loader2 size={14} className="animate-spin" /> Loading…
+              <Loader2 size={14} className="animate-spin" /> {t("files.loading")}
             </div>
           )}
           {cells?.map((cell) => (
@@ -332,11 +342,11 @@ export function NotebookEditor({
                     <button
                       className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-error hover:bg-surface-2"
                       aria-label={`Stop cell ${cell.index}`}
-                      title="Stop — restarts this notebook's kernel (variables reset)"
+                      title={t("notebooks.editor.stopCellTitle")}
                       onClick={() => void stop()}
                     >
                       <Square size={10} fill="currentColor" />
-                      Stop
+                      {t("notebooks.editor.stopLabel")}
                     </button>
                   ) : (
                     <button
@@ -346,7 +356,7 @@ export function NotebookEditor({
                       disabled={running !== null}
                     >
                       <Play size={11} />
-                      Run
+                      {t("notebooks.editor.runLabel")}
                     </button>
                   ))}
                 <button
@@ -388,7 +398,7 @@ export function NotebookEditor({
               className="flex items-center gap-1.5 rounded-input border border-dashed border-border px-3 py-1.5 text-xs text-muted hover:bg-surface-2 hover:text-text"
               onClick={addCell}
             >
-              <Plus size={12} /> Add cell
+              <Plus size={12} /> {t("notebooks.editor.addCellLabel")}
             </button>
           )}
         </div>

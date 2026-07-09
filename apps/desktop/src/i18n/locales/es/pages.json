@@ -16,6 +16,24 @@
       "setUpJupyterFirst": "Configura Jupyter primero — Configuración → Servidores MCP → Jupyter.",
       "couldNotOpenJupyterLab": "No se pudo abrir JupyterLab",
       "couldNotCreateNotebook": "No se pudo crear el cuaderno"
+    },
+    "editor": {
+      "backAria": "Volver a los cuadernos",
+      "languageR": "R",
+      "languagePython": "Python",
+      "saved": "Guardado",
+      "unsaved": "Sin guardar",
+      "shortcutHint": "Mayús/⌘+Intro ejecuta una celda · compartido con el agente",
+      "openJupyterLabAria": "Abrir en JupyterLab",
+      "historyAria": "Historial",
+      "historyTitle": "Historial — cada versión registrada con su código y conversación",
+      "reloadAria": "Recargar desde el disco",
+      "reloadTitle": "Recargar (incorporar los cambios del agente)",
+      "closeAria": "Cerrar inspector",
+      "stopCellTitle": "Detener — reinicia el kernel de este cuaderno (las variables se restablecen)",
+      "stopLabel": "Detener",
+      "runLabel": "Ejecutar",
+      "addCellLabel": "Añadir celda"
     }
   },
   "files": {
@@ -26,6 +44,12 @@
     "pane": {
       "subtitle": "carpeta de esta sesión",
       "closeAria": "Cerrar archivos"
+    },
+    "contextMenu": {
+      "copyPath": "Copiar ruta",
+      "copyRelativePath": "Copiar ruta relativa",
+      "relativePathLabel": "Ruta relativa",
+      "openInDefaultApp": "Abrir en la app predeterminada"
     }
   },
   "skills": {

@@ -307,6 +307,7 @@ export function LiveSessionPage() {
                 <div className="text-sm font-medium text-text">{t("live.runtime.title")}</div>
                 <p className="mt-1 text-sm text-muted">
                   {t("live.runtime.bodyPrefix")}{" "}
+                  {/* eslint-disable-next-line i18next/no-literal-string -- literal shell command, not prose */}
                   <span className="font-mono">opencode serve</span>
                   {t("live.runtime.bodySuffix")}
                 </p>

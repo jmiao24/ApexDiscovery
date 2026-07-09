@@ -128,7 +128,8 @@
     "rendering": "正在渲染模型…",
     "fileProblem": "文件问题",
     "noGeometry": "此三维文件没有可见几何体——导出内容似乎不完整或已损坏。",
-    "unsupportedFormat": "不支持的三维格式：.{{ext}}"
+    "unsupportedFormat": "不支持的三维格式：.{{ext}}",
+    "badge3D": "三维"
   },
   "fits": {
     "readError": "无法读取此 FITS 文件 — {{error}}。",
@@ -175,7 +176,8 @@
     "noStructuresFound": "此文件中未找到化学结构。",
     "resetView": "重置视图",
     "atomCount_other": "{{count}} 个原子",
-    "renderingStructure": "正在渲染结构…"
+    "renderingStructure": "正在渲染结构…",
+    "badge3D": "三维"
   },
   "dos": {
     "readError": "无法读取此 DOSCAR 文件 — {{error}}。",

@@ -183,7 +183,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
         data-molecule-controls="true"
       >
         <div className="flex items-center gap-1 px-1.5 text-xs font-medium text-muted">
-          <Atom size={13} /> 3D
+          <Atom size={13} /> {t("molecule.badge3D")}
         </div>
         <div className="flex rounded bg-surface-2 p-0.5">
           {styleOptions.map((o) => (

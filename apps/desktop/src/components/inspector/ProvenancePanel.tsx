@@ -136,6 +136,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
               ) : (
                 <ChevronRight size={14} className="shrink-0 text-muted" />
               )}
+              {/* eslint-disable-next-line i18next/no-literal-string -- "v" version-number prefix, not prose */}
               <span className="rounded bg-surface-2 px-1.5 text-xs font-medium text-text">
                 v{r.version}
               </span>

@@ -128,7 +128,8 @@
     "rendering": "모델 렌더링 중…",
     "fileProblem": "파일 문제",
     "noGeometry": "이 3D 파일에는 표시할 지오메트리가 없습니다 — 내보내기가 불완전하거나 손상된 것으로 보입니다.",
-    "unsupportedFormat": "지원되지 않는 3D 형식: .{{ext}}"
+    "unsupportedFormat": "지원되지 않는 3D 형식: .{{ext}}",
+    "badge3D": "3D"
   },
   "fits": {
     "readError": "이 FITS 파일을 읽을 수 없습니다 — {{error}}.",
@@ -175,7 +176,8 @@
     "noStructuresFound": "이 파일에서 화학 구조를 찾을 수 없습니다.",
     "resetView": "보기 초기화",
     "atomCount_other": "원자 {{count}}개",
-    "renderingStructure": "구조 렌더링 중…"
+    "renderingStructure": "구조 렌더링 중…",
+    "badge3D": "3D"
   },
   "dos": {
     "readError": "이 DOSCAR를 읽을 수 없습니다 — {{error}}.",

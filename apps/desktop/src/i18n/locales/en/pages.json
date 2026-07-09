@@ -16,6 +16,24 @@
       "setUpJupyterFirst": "Set up Jupyter first — Settings → MCP servers → Jupyter.",
       "couldNotOpenJupyterLab": "Could not open JupyterLab",
       "couldNotCreateNotebook": "Could not create notebook"
+    },
+    "editor": {
+      "backAria": "Back to notebooks",
+      "languageR": "R",
+      "languagePython": "Python",
+      "saved": "Saved",
+      "unsaved": "Unsaved",
+      "shortcutHint": "Shift/⌘+Enter runs a cell · shared with the agent",
+      "openJupyterLabAria": "Open in JupyterLab",
+      "historyAria": "History",
+      "historyTitle": "History — every recorded version with its code and conversation",
+      "reloadAria": "Reload from disk",
+      "reloadTitle": "Reload (pick up the agent's changes)",
+      "closeAria": "Close inspector",
+      "stopCellTitle": "Stop — restarts this notebook's kernel (variables reset)",
+      "stopLabel": "Stop",
+      "runLabel": "Run",
+      "addCellLabel": "Add cell"
     }
   },
   "files": {
@@ -26,6 +44,12 @@
     "pane": {
       "subtitle": "this session's folder",
       "closeAria": "Close files"
+    },
+    "contextMenu": {
+      "copyPath": "Copy path",
+      "copyRelativePath": "Copy relative path",
+      "relativePathLabel": "Relative path",
+      "openInDefaultApp": "Open in default app"
     }
   },
   "skills": {

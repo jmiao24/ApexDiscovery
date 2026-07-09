@@ -17,7 +17,8 @@
     "title": "エージェントランタイム",
     "hint": "opencode serve を、その HTTP + SSE API 経由で操作します",
     "connect": "接続",
-    "disconnect": "切断"
+    "disconnect": "切断",
+    "serverUrlPlaceholder": "http://127.0.0.1:4096"
   },
   "model": {
     "title": "モデル",

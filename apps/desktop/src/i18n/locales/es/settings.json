@@ -17,7 +17,8 @@
     "title": "Entorno de ejecución del agente",
     "hint": "opencode serve, controlado mediante su API HTTP + SSE",
     "connect": "Conectar",
-    "disconnect": "Desconectar"
+    "disconnect": "Desconectar",
+    "serverUrlPlaceholder": "http://127.0.0.1:4096"
   },
   "model": {
     "title": "Modelo",

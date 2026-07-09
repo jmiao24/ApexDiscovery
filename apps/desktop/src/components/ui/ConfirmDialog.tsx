@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 /**
  * Minimal in-app confirmation dialog. `window.confirm` is unreliable inside
@@ -17,6 +18,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation("common");
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCancel();
@@ -44,7 +46,7 @@ export function ConfirmDialog({
             className="rounded-input border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-2"
             onClick={onCancel}
           >
-            Cancel
+            {t("actions.cancel")}
           </button>
           <button
             className="rounded-input bg-error px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"

@@ -384,7 +384,7 @@ export function SettingsPage() {
             <input
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
-              placeholder="http://127.0.0.1:4096"
+              placeholder={t("runtime.serverUrlPlaceholder")}
               className={inputCls("flex-1 font-mono")}
             />
             {connected ? (
@@ -970,6 +970,7 @@ export function SettingsPage() {
         {/* ---- Appearance ---- */}
         <Card title={t("appearance.title")}>
           <div className="inline-flex rounded-input border border-border bg-surface-2 p-0.5">
+            {/* eslint-disable-next-line i18next/no-literal-string -- internal theme-mode keys, not display text (the visible label is t(`appearance.theme.${mode}`)) */}
             {(["light", "dark"] as const).map((mode) => (
               <button
                 key={mode}

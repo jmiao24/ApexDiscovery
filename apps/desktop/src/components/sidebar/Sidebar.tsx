@@ -120,6 +120,7 @@ export function Sidebar({ project }: { project: Project }) {
       <div className={cn("px-4 pb-3", overlayTitlebar ? "pt-1" : "pt-4")}>
         <div className="flex items-baseline gap-1.5">
           <img src={logo} alt="" className="h-[18px] w-auto self-center" />
+          {/* eslint-disable-next-line i18next/no-literal-string -- product brand name, not translated across locales (see AGENTS.md) */}
           <div className="font-serif text-[17px] font-semibold leading-none tracking-tight text-text">
             Open Science
           </div>

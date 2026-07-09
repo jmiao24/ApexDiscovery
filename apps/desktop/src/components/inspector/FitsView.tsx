@@ -301,6 +301,7 @@ function SpectrumView({ filename, spec }: { filename: string; spec: import("@/li
       <div className="border-t border-border px-3 py-2 text-right font-mono text-[11px] text-muted">
         {hover ? (
           <>
+            {/* eslint-disable-next-line i18next/no-literal-string -- "x" is a default axis-name fallback (scientific notation), not prose */}
             {ctype1 ?? "x"} = {(x0 + dx * hover.i).toPrecision(6)} · {t("fits.value")} ={" "}
             {data[hover.i].toPrecision(5)}
           </>

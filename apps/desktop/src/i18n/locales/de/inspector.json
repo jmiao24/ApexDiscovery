@@ -131,7 +131,8 @@
     "rendering": "Modell wird gerendert…",
     "fileProblem": "Dateiproblem",
     "noGeometry": "Diese 3D-Datei hat keine sichtbare Geometrie — der Export scheint unvollständig oder beschädigt zu sein.",
-    "unsupportedFormat": "Nicht unterstütztes 3D-Format: .{{ext}}"
+    "unsupportedFormat": "Nicht unterstütztes 3D-Format: .{{ext}}",
+    "badge3D": "3D"
   },
   "fits": {
     "readError": "Diese FITS-Datei konnte nicht gelesen werden — {{error}}.",
@@ -180,7 +181,8 @@
     "resetView": "Ansicht zurücksetzen",
     "atomCount_one": "{{count}} Atom",
     "atomCount_other": "{{count}} Atome",
-    "renderingStructure": "Struktur wird gerendert…"
+    "renderingStructure": "Struktur wird gerendert…",
+    "badge3D": "3D"
   },
   "dos": {
     "readError": "Diese DOSCAR-Datei konnte nicht gelesen werden — {{error}}.",

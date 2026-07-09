@@ -128,6 +128,7 @@ export function PhaseView({ filename, text }: { filename: string; text: string }
             const e = pd.entries.find((x) => x.formula === hover)!;
             return (
               <span>
+                {/* eslint-disable-next-line i18next/no-literal-string -- physics notation/units ("E_f =", "eV/atom"), not prose; consistent with the rest of this inspector family */}
                 <span className="text-text">{e.formula}</span> · E_f = {e.y.toFixed(3)} eV/atom ·{" "}
                 {e.stable
                   ? t("phase.stableOnHull")

@@ -16,6 +16,24 @@
       "setUpJupyterFirst": "Richten Sie zuerst Jupyter ein — Einstellungen → MCP-Server → Jupyter.",
       "couldNotOpenJupyterLab": "JupyterLab konnte nicht geöffnet werden",
       "couldNotCreateNotebook": "Notebook konnte nicht erstellt werden"
+    },
+    "editor": {
+      "backAria": "Zurück zu Notebooks",
+      "languageR": "R",
+      "languagePython": "Python",
+      "saved": "Gespeichert",
+      "unsaved": "Nicht gespeichert",
+      "shortcutHint": "Umschalt/⌘+Eingabe führt eine Zelle aus · mit dem Agenten geteilt",
+      "openJupyterLabAria": "In JupyterLab öffnen",
+      "historyAria": "Verlauf",
+      "historyTitle": "Verlauf — jede aufgezeichnete Version mit Code und Unterhaltung",
+      "reloadAria": "Von der Festplatte neu laden",
+      "reloadTitle": "Neu laden (Änderungen des Agenten übernehmen)",
+      "closeAria": "Inspektor schließen",
+      "stopCellTitle": "Stopp — startet den Kernel dieses Notebooks neu (Variablen werden zurückgesetzt)",
+      "stopLabel": "Stopp",
+      "runLabel": "Ausführen",
+      "addCellLabel": "Zelle hinzufügen"
     }
   },
   "files": {
@@ -26,6 +44,12 @@
     "pane": {
       "subtitle": "Ordner dieser Sitzung",
       "closeAria": "Dateien schließen"
+    },
+    "contextMenu": {
+      "copyPath": "Pfad kopieren",
+      "copyRelativePath": "Relativen Pfad kopieren",
+      "relativePathLabel": "Relativer Pfad",
+      "openInDefaultApp": "In Standard-App öffnen"
     }
   },
   "skills": {

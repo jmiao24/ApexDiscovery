@@ -262,7 +262,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
 
       <div className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border/70 bg-surface/90 p-1 shadow-card backdrop-blur">
         <div className="flex items-center gap-1 px-1.5 text-xs font-medium text-muted">
-          <Box size={13} /> 3D
+          <Box size={13} /> {t("mesh.badge3D")}
         </div>
         <div className="flex rounded bg-surface-2 p-0.5">
           {[

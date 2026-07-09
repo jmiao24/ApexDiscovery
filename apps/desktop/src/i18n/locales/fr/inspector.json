@@ -131,7 +131,8 @@
     "rendering": "Rendu du modèle…",
     "fileProblem": "Problème de fichier",
     "noGeometry": "Ce fichier 3D ne contient aucune géométrie visible — l'export semble incomplet ou corrompu.",
-    "unsupportedFormat": "Format 3D non pris en charge : .{{ext}}"
+    "unsupportedFormat": "Format 3D non pris en charge : .{{ext}}",
+    "badge3D": "3D"
   },
   "fits": {
     "readError": "Impossible de lire ce fichier FITS — {{error}}.",
@@ -180,7 +181,8 @@
     "resetView": "Réinitialiser la vue",
     "atomCount_one": "{{count}} atome",
     "atomCount_other": "{{count}} atomes",
-    "renderingStructure": "Rendu de la structure…"
+    "renderingStructure": "Rendu de la structure…",
+    "badge3D": "3D"
   },
   "dos": {
     "readError": "Impossible de lire ce DOSCAR — {{error}}.",

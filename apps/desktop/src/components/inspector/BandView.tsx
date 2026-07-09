@@ -114,6 +114,7 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
 
       <div className="border-t border-border px-3 py-2 text-right font-mono text-[11px] text-muted">
         {hover ? (
+          // eslint-disable-next-line i18next/no-literal-string -- physics notation/units ("k =", "E ≈", "eV"), not prose; consistent with the rest of this inspector family
           <>k = {hover.k} · E ≈ {hover.e.toFixed(2)} eV</>
         ) : (
           <span className="text-muted/50">{t("band.hoverHint")}</span>

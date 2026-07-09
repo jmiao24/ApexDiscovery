@@ -284,6 +284,7 @@ function UsageSnapshot({ p }: { p: ComputeProbe }) {
       )}
       {p.gpus.map((g, i) => (
         <div key={i}>
+          {/* eslint-disable-next-line i18next/no-literal-string -- unit/format glue ("%", "/", "GB"), not prose; consistent with the rest of this card */}
           <span className="text-text">{g.name}</span> {g.util_pct}% ·{" "}
           {Math.round(g.mem_used_mib / 1024)} / {Math.round(g.mem_total_mib / 1024)} GB
         </div>

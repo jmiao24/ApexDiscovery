@@ -143,9 +143,11 @@ export function FilePreviewInspector({
         </span>
         {canToggle && (
           <div className="ml-2 flex items-center gap-1 rounded-input bg-surface-2 p-0.5">
+            {/* eslint-disable-next-line i18next/no-literal-string -- "preview" is an internal tab id, not display text (the visible label is t("filePreview.tabs.preview")) */}
             <ToggleBtn active={tab === "preview"} onClick={() => setTab("preview")}>
               <Eye size={13} /> {t("filePreview.tabs.preview")}
             </ToggleBtn>
+            {/* eslint-disable-next-line i18next/no-literal-string -- "code" is an internal tab id, not display text (the visible label is t("filePreview.tabs.code")) */}
             <ToggleBtn active={tab === "code"} onClick={() => setTab("code")}>
               <Code2 size={13} /> {t("filePreview.tabs.code")}
             </ToggleBtn>
@@ -434,9 +436,11 @@ function TableView({ table }: { table: import("@/lib/csv").ParsedTable }) {
     <div className="flex h-full flex-col">
       {chartable && (
         <div className="flex items-center gap-1 border-b border-border px-3 py-1.5">
+          {/* eslint-disable-next-line i18next/no-literal-string -- "table" is an internal view id, not display text (the visible label is t("filePreview.tableView.table")) */}
           <ToggleBtn active={view === "table"} onClick={() => setView("table")}>
             {t("filePreview.tableView.table")}
           </ToggleBtn>
+          {/* eslint-disable-next-line i18next/no-literal-string -- "chart" is an internal view id, not display text (the visible label is t("filePreview.tableView.chart")) */}
           <ToggleBtn active={view === "chart"} onClick={() => setView("chart")}>
             {t("filePreview.tableView.chart")}
           </ToggleBtn>

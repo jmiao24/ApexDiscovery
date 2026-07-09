@@ -39,6 +39,7 @@ export function SkillsPage() {
         <h1 className="font-serif text-xl text-text">{t("skills.title")}</h1>
         <p className="mt-1 text-sm text-muted">
           {t("skills.description.prefix")}
+          {/* eslint-disable-next-line i18next/no-literal-string -- literal filesystem path, not prose */}
           <span className="font-mono">.opencode/skills/</span>
           {t("skills.description.suffix")}
         </p>

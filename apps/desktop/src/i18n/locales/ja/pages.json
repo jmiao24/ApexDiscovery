@@ -16,6 +16,24 @@
       "setUpJupyterFirst": "先に Jupyter を設定してください — 設定 → MCP サーバー → Jupyter。",
       "couldNotOpenJupyterLab": "JupyterLab を開けませんでした",
       "couldNotCreateNotebook": "ノートブックを作成できませんでした"
+    },
+    "editor": {
+      "backAria": "ノートブック一覧に戻る",
+      "languageR": "R",
+      "languagePython": "Python",
+      "saved": "保存済み",
+      "unsaved": "未保存",
+      "shortcutHint": "Shift/⌘+Enter でセルを実行 · エージェントと共有",
+      "openJupyterLabAria": "JupyterLab で開く",
+      "historyAria": "履歴",
+      "historyTitle": "履歴 — 記録された各バージョンのコードと会話",
+      "reloadAria": "ディスクから再読み込み",
+      "reloadTitle": "再読み込み（エージェントの変更を取り込む）",
+      "closeAria": "インスペクターを閉じる",
+      "stopCellTitle": "停止 — このノートブックのカーネルを再起動します（変数はリセットされます）",
+      "stopLabel": "停止",
+      "runLabel": "実行",
+      "addCellLabel": "セルを追加"
     }
   },
   "files": {
@@ -26,6 +44,12 @@
     "pane": {
       "subtitle": "このセッションのフォルダ",
       "closeAria": "ファイルを閉じる"
+    },
+    "contextMenu": {
+      "copyPath": "パスをコピー",
+      "copyRelativePath": "相対パスをコピー",
+      "relativePathLabel": "相対パス",
+      "openInDefaultApp": "デフォルトのアプリで開く"
     }
   },
   "skills": {

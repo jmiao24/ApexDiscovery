@@ -16,6 +16,24 @@
       "setUpJupyterFirst": "请先设置 Jupyter — 设置 → MCP 服务器 → Jupyter。",
       "couldNotOpenJupyterLab": "无法打开 JupyterLab",
       "couldNotCreateNotebook": "无法创建笔记本"
+    },
+    "editor": {
+      "backAria": "返回笔记本列表",
+      "languageR": "R",
+      "languagePython": "Python",
+      "saved": "已保存",
+      "unsaved": "未保存",
+      "shortcutHint": "Shift/⌘+Enter 运行单元格 · 与代理共享",
+      "openJupyterLabAria": "在 JupyterLab 中打开",
+      "historyAria": "历史记录",
+      "historyTitle": "历史记录 — 每个已记录版本及其代码和对话",
+      "reloadAria": "从磁盘重新加载",
+      "reloadTitle": "重新加载（获取代理的更改）",
+      "closeAria": "关闭检查器",
+      "stopCellTitle": "停止 — 重启此笔记本的内核（变量将被重置）",
+      "stopLabel": "停止",
+      "runLabel": "运行",
+      "addCellLabel": "添加单元格"
     }
   },
   "files": {
@@ -26,6 +44,12 @@
     "pane": {
       "subtitle": "此会话的文件夹",
       "closeAria": "关闭文件"
+    },
+    "contextMenu": {
+      "copyPath": "复制路径",
+      "copyRelativePath": "复制相对路径",
+      "relativePathLabel": "相对路径",
+      "openInDefaultApp": "用默认应用打开"
     }
   },
   "skills": {

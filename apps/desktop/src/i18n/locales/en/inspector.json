@@ -131,7 +131,8 @@
     "rendering": "Rendering model…",
     "fileProblem": "File problem",
     "noGeometry": "This 3D file has no visible geometry — the export looks incomplete or corrupt.",
-    "unsupportedFormat": "Unsupported 3D format: .{{ext}}"
+    "unsupportedFormat": "Unsupported 3D format: .{{ext}}",
+    "badge3D": "3D"
   },
   "fits": {
     "readError": "Could not read this FITS file — {{error}}.",
@@ -180,7 +181,8 @@
     "resetView": "Reset view",
     "atomCount_one": "{{count}} atom",
     "atomCount_other": "{{count}} atoms",
-    "renderingStructure": "Rendering structure…"
+    "renderingStructure": "Rendering structure…",
+    "badge3D": "3D"
   },
   "dos": {
     "readError": "Could not read this DOSCAR — {{error}}.",

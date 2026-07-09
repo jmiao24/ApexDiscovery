@@ -128,7 +128,8 @@
     "rendering": "モデルをレンダリング中…",
     "fileProblem": "ファイルの問題",
     "noGeometry": "この 3D ファイルには表示可能な形状がありません — 書き出しが不完全か破損している可能性があります。",
-    "unsupportedFormat": "サポートされていない 3D 形式です: .{{ext}}"
+    "unsupportedFormat": "サポートされていない 3D 形式です: .{{ext}}",
+    "badge3D": "3D"
   },
   "fits": {
     "readError": "この FITS ファイルを読み込めませんでした — {{error}}。",
@@ -175,7 +176,8 @@
     "noStructuresFound": "このファイルに化学構造が見つかりません。",
     "resetView": "表示をリセット",
     "atomCount_other": "{{count}} 個の原子",
-    "renderingStructure": "構造をレンダリング中…"
+    "renderingStructure": "構造をレンダリング中…",
+    "badge3D": "3D"
   },
   "dos": {
     "readError": "この DOSCAR を読み込めませんでした — {{error}}。",

@@ -149,10 +149,12 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
 
       <div className="border-t border-border px-3 py-2 text-right font-mono text-[11px] text-muted">
         {hover ? (
+          /* eslint-disable i18next/no-literal-string -- physics notation/units ("E =", "(rel. E_F)", "eV", "DOS↑/↓ ="), not prose; consistent with the rest of this inspector family. Scoped to this one hover-notation fragment only, re-enabled right below. */
           <>
             E = {xs[hover.i].toFixed(3)}{alignFermi ? " (rel. E_F)" : ""} eV · DOS↑ = {dos.up[hover.i].toPrecision(4)}
             {dos.down ? ` · DOS↓ = ${dos.down[hover.i].toPrecision(4)}` : ""}
           </>
+          /* eslint-enable i18next/no-literal-string */
         ) : (
           <span className="text-muted/50">{t("dos.emptyHint")}</span>
         )}

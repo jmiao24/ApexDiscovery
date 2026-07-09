@@ -17,7 +17,8 @@
     "title": "代理运行时",
     "hint": "opencode serve，通过其 HTTP + SSE API 驱动",
     "connect": "连接",
-    "disconnect": "断开连接"
+    "disconnect": "断开连接",
+    "serverUrlPlaceholder": "http://127.0.0.1:4096"
   },
   "model": {
     "title": "模型",
