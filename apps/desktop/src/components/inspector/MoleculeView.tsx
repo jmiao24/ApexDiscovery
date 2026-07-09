@@ -111,7 +111,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
       viewerRef.current = null;
       container.replaceChildren();
     };
-  }, [filename, text, format, styleMode, isMacromolecule]);
+  }, [filename, text, format, styleMode, isMacromolecule, t]);
 
   // Keep the scene sized to its container.
   useEffect(() => {

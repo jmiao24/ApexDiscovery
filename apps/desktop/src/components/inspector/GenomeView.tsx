@@ -277,16 +277,26 @@ function IconBtn({ label, onClick, children }: { label: string; onClick: () => v
   );
 }
 
+// Sentinel for "no type/strand on this feature" — distinct from any real data
+// value so a grouping key can never collide with a translated display string.
+const UNSPECIFIED = Symbol("genome-category-unspecified");
+type CategoryKey = string | typeof UNSPECIFIED;
+
 /** Assign each feature a stable palette color (1..8) by type (GFF/GTF) or strand. */
 function categorize(features: GenomeFeature[], format: string | null, t: TFunction<["inspector", "common"]>) {
-  const keyOf = (f: GenomeFeature): string =>
-    format === "gff" || format === "gtf"
-      ? f.type ?? t("genome.featureLabel")
-      : f.strand
-        ? t("genome.strandLabel", { strand: f.strand })
-        : t("genome.featureLabel");
-  const order: string[] = [];
-  const counts = new Map<string, number>();
+  // Grouping identity comes from the raw, untranslated data (feature type or
+  // strand symbol) — never from a t(...) display string, so a locale change
+  // can't merge or split groups.
+  const keyOf = (f: GenomeFeature): CategoryKey =>
+    format === "gff" || format === "gtf" ? f.type ?? UNSPECIFIED : f.strand ?? UNSPECIFIED;
+  const labelOf = (k: CategoryKey): string =>
+    k === UNSPECIFIED
+      ? t("genome.featureLabel")
+      : format === "gff" || format === "gtf"
+        ? k
+        : t("genome.strandLabel", { strand: k });
+  const order: CategoryKey[] = [];
+  const counts = new Map<CategoryKey, number>();
   for (const f of features) {
     const k = keyOf(f);
     if (!counts.has(k)) order.push(k);
@@ -295,7 +305,7 @@ function categorize(features: GenomeFeature[], format: string | null, t: TFuncti
   order.sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0));
   const index = new Map(order.map((k, i) => [k, (i % 8) + 1]));
   return {
-    list: order.map((label) => ({ label, color: index.get(label)! })),
+    list: order.map((k) => ({ label: labelOf(k), color: index.get(k)! })),
     colorOf: (f: GenomeFeature) => index.get(keyOf(f)) ?? 1,
   };
 }

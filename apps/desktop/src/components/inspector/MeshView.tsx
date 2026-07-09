@@ -248,7 +248,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
       renderer.dispose();
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
     };
-  }, [bytes, ext]);
+  }, [bytes, ext, t]);
 
   // Swap between each mesh's shaded material and the shared dark wire material.
   const applyWireframe = useCallback((wire: boolean) => {
