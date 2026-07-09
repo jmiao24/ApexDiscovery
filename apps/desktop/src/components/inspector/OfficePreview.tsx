@@ -119,9 +119,9 @@ export function DocxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
       observer?.disconnect();
       page.replaceChildren();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `t` intentionally
-    // excluded: this effect renders the document, not a UI label; it shouldn't
-    // re-render the whole doc just because the locale changed.
+    // `t` intentionally excluded: this effect renders the document, not a UI
+    // label; it shouldn't re-render the whole doc just because the locale changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bytes, page]);
 
   return (
@@ -170,8 +170,8 @@ export function XlsxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `t` intentionally
-    // excluded, same reasoning as DocxView above.
+    // `t` intentionally excluded, same reasoning as DocxView above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bytes]);
 
   const sheet = sheets?.[Math.min(active, sheets.length - 1)];
@@ -259,8 +259,8 @@ export function PptxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
       previewer?.destroy();
       page.replaceChildren();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `t` intentionally
-    // excluded, same reasoning as DocxView above.
+    // `t` intentionally excluded, same reasoning as DocxView above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bytes, page]);
 
   return (

@@ -116,9 +116,10 @@ export function FilePreviewInspector({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `t` intentionally
-    // excluded: this effect loads a file, not a UI label; a locale switch mid-load
-    // doesn't need to re-trigger a network/disk read to refresh an error string.
+    // `t` intentionally excluded: this effect loads a file, not a UI label; a
+    // locale switch mid-load shouldn't re-trigger a network/disk read to refresh
+    // an error string.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.path, data.content, data.root, kind, needsUrl, needsText, needsBytes]);
 
   const canToggle =
