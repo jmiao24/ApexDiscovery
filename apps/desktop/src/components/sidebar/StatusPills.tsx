@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { ModelStatus, RuntimeStatus } from "@ai4s/shared";
 import { useRuntimeStore } from "@/lib/runtime";
 import { cn } from "@/lib/cn";
@@ -16,6 +17,7 @@ const MODEL_TONE: Record<ModelStatus, string> = {
 };
 
 export function StatusPills() {
+  const { t } = useTranslation("nav");
   // Both live from the runtime: connection status + the configured default model.
   const runtime = useRuntimeStore((s) => s.status);
   const defaultModel = useRuntimeStore((s) => s.defaultModel);
@@ -23,11 +25,11 @@ export function StatusPills() {
 
   return (
     <div className="flex flex-col gap-1 text-xs text-muted">
-      <Pill dot={RUNTIME_TONE[runtime]} label="Runtime" value={runtime} />
+      <Pill dot={RUNTIME_TONE[runtime]} label={t("status.runtime")} value={runtime} />
       <Pill
         dot={MODEL_TONE[model]}
-        label="Model"
-        value={defaultModel ? defaultModel.split("/").pop()! : "not set"}
+        label={t("status.model")}
+        value={defaultModel ? defaultModel.split("/").pop()! : t("status.modelNotSet")}
       />
     </div>
   );

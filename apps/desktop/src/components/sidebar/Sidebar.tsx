@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Files, FlaskConical, FolderTree, NotebookPen, PanelLeft, Plus, Settings, Trash2 } from "lucide-react";
 import type { Project } from "@ai4s/shared";
@@ -21,6 +22,7 @@ interface Row {
 const COLLAPSE_BELOW = 140;
 
 export function Sidebar({ project }: { project: Project }) {
+  const { t } = useTranslation("nav");
   const navigate = useNavigate();
   const location = useLocation();
   const { sessions, hiddenExamples, startDraft, deleteSession, hideExample } = useRuntimeStore();
@@ -107,8 +109,8 @@ export function Sidebar({ project }: { project: Project }) {
         <div data-tauri-drag-region className="flex h-12 shrink-0 items-center pl-[78px]">
           <button
             onClick={toggleSidebar}
-            aria-label="Collapse sidebar"
-            title="Collapse sidebar (⌘B)"
+            aria-label={t("sidebar.collapse")}
+            title={t("sidebar.collapseTitle", { shortcut: "⌘B" })}
             className="rounded p-1 text-text hover:bg-surface-2"
           >
             <PanelLeft size={14} strokeWidth={1.5} />
@@ -121,12 +123,12 @@ export function Sidebar({ project }: { project: Project }) {
           <div className="font-serif text-[17px] font-semibold leading-none tracking-tight text-text">
             Open Science
           </div>
-          <span className="text-[10px] uppercase tracking-widest text-muted">Beta</span>
+          <span className="text-[10px] uppercase tracking-widest text-muted">{t("sidebar.betaBadge")}</span>
           {!overlayTitlebar && (
             <button
               onClick={toggleSidebar}
-              aria-label="Collapse sidebar"
-              title={`Collapse sidebar (${isMac ? "⌘B" : "Ctrl+B"})`}
+              aria-label={t("sidebar.collapse")}
+              title={t("sidebar.collapseTitle", { shortcut: isMac ? "⌘B" : "Ctrl+B" })}
               className="ml-auto self-center rounded p-1 text-text hover:bg-surface-2"
             >
               <PanelLeft size={14} strokeWidth={1.5} />
@@ -136,17 +138,17 @@ export function Sidebar({ project }: { project: Project }) {
       </div>
 
       <nav className="flex flex-col px-3">
-        <NavRow icon={<Plus size={16} />} label="New" onClick={startNew} />
-        <NavRow icon={<NotebookPen size={16} />} label="Notebooks" onClick={() => navigate("/notebooks")} />
-        <NavRow icon={<FolderTree size={16} />} label="Files" onClick={() => navigate("/files")} />
-        <NavRow icon={<FlaskConical size={16} />} label="Runs" onClick={() => navigate("/runs")} />
-        <NavRow icon={<Files size={16} />} label="Skills" onClick={() => navigate("/skills")} />
+        <NavRow icon={<Plus size={16} />} label={t("items.new")} onClick={startNew} />
+        <NavRow icon={<NotebookPen size={16} />} label={t("items.notebooks")} onClick={() => navigate("/notebooks")} />
+        <NavRow icon={<FolderTree size={16} />} label={t("items.files")} onClick={() => navigate("/files")} />
+        <NavRow icon={<FlaskConical size={16} />} label={t("items.runs")} onClick={() => navigate("/runs")} />
+        <NavRow icon={<Files size={16} />} label={t("items.skills")} onClick={() => navigate("/skills")} />
       </nav>
 
       <div className="mt-4 flex-1 overflow-y-auto px-3 pb-2">
-        <div className="px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted">History</div>
+        <div className="px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted">{t("history.heading")}</div>
         {rows.length === 0 && (
-          <div className="px-2 py-2 text-xs text-muted">No conversations yet.</div>
+          <div className="px-2 py-2 text-xs text-muted">{t("history.empty")}</div>
         )}
         {rows.map((row) => (
           <div key={row.to} className="group relative">
@@ -166,13 +168,13 @@ export function Sidebar({ project }: { project: Project }) {
               <span className="flex-1 truncate">{row.title}</span>
               {row.kind === "example" && (
                 <span className="shrink-0 rounded-full bg-surface-2 px-1.5 text-[10px] uppercase tracking-wide text-muted ring-1 ring-border">
-                  example
+                  {t("history.exampleTag")}
                 </span>
               )}
             </NavLink>
             <button
               onClick={() => setPendingDelete(row)}
-              aria-label={`Delete ${row.title}`}
+              aria-label={t("history.deleteAria", { title: row.title })}
               className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 rounded p-1 text-muted hover:bg-border hover:text-error group-hover:block"
             >
               <Trash2 size={13} />
@@ -186,22 +188,30 @@ export function Sidebar({ project }: { project: Project }) {
         <button
           className="mt-2 flex items-center gap-2 rounded-input px-2 py-1 text-[13px] text-muted hover:bg-surface-2 hover:text-text"
           onClick={() => navigate("/settings")}
-          aria-label="Settings"
+          aria-label={t("sidebar.settings")}
         >
           <Settings size={15} />
-          <span>Settings</span>
+          <span>{t("sidebar.settings")}</span>
         </button>
       </div>
 
       {pendingDelete && (
         <ConfirmDialog
-          title={pendingDelete.kind === "session" ? "Delete session?" : "Hide example?"}
+          title={
+            pendingDelete.kind === "session"
+              ? t("confirmDelete.sessionTitle")
+              : t("confirmDelete.exampleTitle")
+          }
           body={
             pendingDelete.kind === "session"
-              ? `"${pendingDelete.title}" and its messages will be deleted. This cannot be undone.`
-              : `"${pendingDelete.title}" will be hidden from the sidebar.`
+              ? t("confirmDelete.sessionBody", { title: pendingDelete.title })
+              : t("confirmDelete.exampleBody", { title: pendingDelete.title })
           }
-          confirmLabel={pendingDelete.kind === "session" ? "Delete" : "Hide"}
+          confirmLabel={
+            pendingDelete.kind === "session"
+              ? t("confirmDelete.deleteAction")
+              : t("confirmDelete.hideAction")
+          }
           onConfirm={confirmDelete}
           onCancel={() => setPendingDelete(null)}
         />

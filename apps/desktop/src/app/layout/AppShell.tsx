@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Outlet, useLocation } from "react-router-dom";
 import { PanelLeft } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -12,6 +13,7 @@ import { useOverlayTitlebar, useUiStore } from "@/lib/store";
 import { ensureJupyter, openExternal, watchFullscreen } from "@/lib/tauri";
 
 export function AppShell() {
+  const { t } = useTranslation("nav");
   const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
 
   // Cmd/Ctrl+B toggles the sidebar, matching the button's tooltip.
@@ -87,8 +89,8 @@ export function AppShell() {
           >
             <button
               onClick={() => setSidebarCollapsed(false)}
-              aria-label="Expand sidebar"
-              title={`Expand sidebar (${isMac ? "⌘B" : "Ctrl+B"})`}
+              aria-label={t("sidebar.expand")}
+              title={t("sidebar.expandTitle", { shortcut: isMac ? "⌘B" : "Ctrl+B" })}
               className="fade-in rounded p-1 text-text hover:bg-surface-2"
             >
               <PanelLeft size={14} strokeWidth={1.5} />

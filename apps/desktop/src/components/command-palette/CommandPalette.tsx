@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Command } from "cmdk";
 import { useNavigate } from "react-router-dom";
 import {
@@ -25,6 +26,7 @@ interface Action {
 const starterPrompt = (id: string) => WORKFLOW_STARTERS.find((s) => s.id === id)?.prompt ?? "";
 
 export function CommandPalette() {
+  const { t } = useTranslation("nav");
   const open = useUiStore((s) => s.paletteOpen);
   const setOpen = useUiStore((s) => s.setPaletteOpen);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
@@ -58,13 +60,13 @@ export function CommandPalette() {
   };
 
   const actions: Action[] = [
-    { id: "new", label: "New session", icon: <Plus size={16} />, run: () => { useRuntimeStore.getState().startDraft(); navigate("/live"); close(); } },
-    { id: "analyze", label: "Analyze my data (new workflow)", icon: <FileSearch size={16} />, run: () => void runWorkflow("analyze") },
-    { id: "review", label: "Audit a report (traceability review)", icon: <ShieldCheck size={16} />, run: () => void runWorkflow("audit") },
-    { id: "notebooks", label: "Open notebooks", icon: <NotebookPen size={16} />, run: () => { navigate("/notebooks"); close(); } },
-    { id: "skills", label: "Manage skills", icon: <PackagePlus size={16} />, run: () => { navigate("/skills"); close(); } },
-    { id: "settings", label: "Open settings", icon: <Settings size={16} />, run: () => { navigate("/settings"); close(); } },
-    { id: "theme", label: "Toggle light / dark theme", icon: <Moon size={16} />, run: () => { toggleTheme(); close(); } },
+    { id: "new", label: t("commandPalette.actions.newSession"), icon: <Plus size={16} />, run: () => { useRuntimeStore.getState().startDraft(); navigate("/live"); close(); } },
+    { id: "analyze", label: t("commandPalette.actions.analyzeData"), icon: <FileSearch size={16} />, run: () => void runWorkflow("analyze") },
+    { id: "review", label: t("commandPalette.actions.auditReport"), icon: <ShieldCheck size={16} />, run: () => void runWorkflow("audit") },
+    { id: "notebooks", label: t("commandPalette.actions.openNotebooks"), icon: <NotebookPen size={16} />, run: () => { navigate("/notebooks"); close(); } },
+    { id: "skills", label: t("commandPalette.actions.manageSkills"), icon: <PackagePlus size={16} />, run: () => { navigate("/skills"); close(); } },
+    { id: "settings", label: t("commandPalette.actions.openSettings"), icon: <Settings size={16} />, run: () => { navigate("/settings"); close(); } },
+    { id: "theme", label: t("commandPalette.actions.toggleTheme"), icon: <Moon size={16} />, run: () => { toggleTheme(); close(); } },
   ];
 
   if (!open) return null;
@@ -76,17 +78,17 @@ export function CommandPalette() {
     >
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg">
         <Command
-          label="Command palette"
+          label={t("commandPalette.ariaLabel")}
           className="overflow-hidden rounded-card border border-border bg-surface shadow-pop"
         >
           <Command.Input
             autoFocus
-            placeholder="Type a command…"
+            placeholder={t("commandPalette.placeholder")}
             className="w-full border-b border-border bg-transparent px-4 py-3 text-sm text-text outline-none placeholder:text-muted"
           />
           <Command.List className="max-h-80 overflow-y-auto p-2">
             <Command.Empty className="px-3 py-6 text-center text-sm text-muted">
-              No results.
+              {t("commandPalette.noResults")}
             </Command.Empty>
             {actions.map((a) => (
               <Command.Item
