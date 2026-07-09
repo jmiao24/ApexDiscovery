@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { analyzeColumns, defaultChartSpec, type ChartType } from "@/lib/tableChart";
 import type { ParsedTable } from "@/lib/csv";
 import { cn } from "@/lib/cn";
@@ -13,6 +14,7 @@ import { cn } from "@/lib/cn";
 const SERIES = Array.from({ length: 8 }, (_, i) => `var(--series-${i + 1})`);
 
 export function TableChart({ table }: { table: ParsedTable }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const cols = useMemo(() => analyzeColumns(table), [table]);
   const def = useMemo(() => defaultChartSpec(cols), [cols]);
   const [type, setType] = useState<ChartType>(def?.type ?? "line");
@@ -20,7 +22,7 @@ export function TableChart({ table }: { table: ParsedTable }) {
   const [ys, setYs] = useState<number[]>(def?.yIndexes ?? []);
 
   if (!def) {
-    return <div className="p-4 text-sm text-muted">No numeric columns to chart.</div>;
+    return <div className="p-4 text-sm text-muted">{t("tableChart.noNumericColumns")}</div>;
   }
 
   const numericCols = cols.filter((c) => c.numeric);
@@ -69,15 +71,20 @@ export function TableChart({ table }: { table: ParsedTable }) {
   return (
     <div className="flex h-full flex-col bg-surface">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-[12px]">
-        <Segmented value={type} onChange={(v) => setType(v as ChartType)} options={["line", "bar", "scatter"]} />
+        <Segmented
+          value={type}
+          onChange={(v) => setType(v as ChartType)}
+          options={["line", "bar", "scatter"]}
+          labelFor={(v) => t(`tableChart.chartType.${v as ChartType}`)}
+        />
         <label className="flex items-center gap-1 text-muted">
-          x:
+          {t("tableChart.xAxisFieldLabel")}
           <select
             value={xIndex}
             onChange={(e) => setXIndex(Number(e.target.value))}
             className="rounded-input border border-border bg-surface-2 px-1.5 py-1 text-[12px] text-text"
           >
-            <option value={-1}>row #</option>
+            <option value={-1}>{t("tableChart.rowIndexOption")}</option>
             {cols.map((c) => (
               <option key={c.index} value={c.index}>
                 {c.name}
@@ -97,7 +104,7 @@ export function TableChart({ table }: { table: ParsedTable }) {
                   on ? "text-text ring-border" : "text-muted/60 ring-transparent hover:text-muted",
                 )}
                 style={on ? { background: "var(--surface-2)" } : undefined}
-                title={on ? "Hide series" : "Show series"}
+                title={on ? t("tableChart.toggleSeries.hide") : t("tableChart.toggleSeries.show")}
               >
                 <span
                   className="h-2 w-2 rounded-full"
@@ -171,7 +178,7 @@ export function TableChart({ table }: { table: ParsedTable }) {
             );
           })}
           <text x={pad.l + plotW / 2} y={H - 6} textAnchor="middle" className="fill-muted font-mono text-[10px]">
-            {xIndex >= 0 ? cols[xIndex].name : "row"}
+            {xIndex >= 0 ? cols[xIndex].name : t("tableChart.rowLabel")}
           </text>
         </svg>
       </div>
@@ -185,7 +192,7 @@ export function TableChart({ table }: { table: ParsedTable }) {
             </span>
           ))}
         </div>
-        {ys.length === 0 && <span className="text-muted/50">select a series to plot</span>}
+        {ys.length === 0 && <span className="text-muted/50">{t("tableChart.selectSeriesHint")}</span>}
       </div>
     </div>
   );
@@ -195,10 +202,12 @@ function Segmented({
   value,
   onChange,
   options,
+  labelFor,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: string[];
+  labelFor?: (v: string) => string;
 }) {
   return (
     <div className="flex overflow-hidden rounded-md ring-1 ring-border">
@@ -211,7 +220,7 @@ function Segmented({
             value === o ? "bg-surface-2 text-text" : "text-muted hover:text-text",
           )}
         >
-          {o}
+          {labelFor ? labelFor(o) : o}
         </button>
       ))}
     </div>

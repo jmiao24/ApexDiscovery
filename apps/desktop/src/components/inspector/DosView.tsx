@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { parseDoscar, type DosData } from "@/lib/dos";
 import { cn } from "@/lib/cn";
 
@@ -10,6 +11,7 @@ import { cn } from "@/lib/cn";
  * Fermi level marked. Offline, from the file alone; uses the app chart palette.
  */
 export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuffer }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const parsed = useMemo<{ dos: DosData | null; error: string | null }>(() => {
     try {
       return { dos: parseDoscar(new TextDecoder().decode(bytes)), error: null };
@@ -26,7 +28,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
       <div className="flex h-full items-center justify-center p-6">
         <div className="flex max-w-sm items-start gap-2 rounded-card border border-border bg-surface p-4 text-sm text-muted">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" />
-          <span>Could not read this DOSCAR — {parsed.error ?? "unknown format"}.</span>
+          <span>{t("dos.readError", { error: parsed.error ?? t("dos.unknownFormat") })}</span>
         </div>
       </div>
     );
@@ -82,7 +84,8 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
     <div className="flex h-full flex-col bg-surface">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
-          {filename} · DOS · {dos.nedos} points{dos.spin ? " · spin-polarized" : ""}
+          {filename} · {t("dos.viewLabel")} · {t("dos.pointCount", { count: dos.nedos })}
+          {dos.spin ? t("dos.spinPolarizedSuffix") : ""}
         </span>
         <button
           onClick={() => setAlignFermi((v) => !v)}
@@ -93,7 +96,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
               : "bg-surface-2 text-muted ring-border hover:text-text",
           )}
         >
-          {alignFermi ? "E − E_F" : "absolute E"}
+          {alignFermi ? t("dos.axisToggle.relative") : t("dos.axisToggle.absolute")}
         </button>
       </div>
 
@@ -131,15 +134,15 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
           })}
           {dos.spin && (
             <>
-              <text x={pad.l + 4} y={pad.t + 10} className="fill-muted font-mono text-[10px]">↑ spin up</text>
-              <text x={pad.l + 4} y={H - pad.b - 4} className="fill-muted font-mono text-[10px]">↓ spin down</text>
+              <text x={pad.l + 4} y={pad.t + 10} className="fill-muted font-mono text-[10px]">{t("dos.spinUpLabel")}</text>
+              <text x={pad.l + 4} y={H - pad.b - 4} className="fill-muted font-mono text-[10px]">{t("dos.spinDownLabel")}</text>
             </>
           )}
           <text x={W / 2} y={H - 4} textAnchor="middle" className="fill-muted font-mono text-[10px]">
-            {alignFermi ? "E − E_F (eV)" : "Energy (eV)"}
+            {alignFermi ? t("dos.axisLabel.relative") : t("dos.axisLabel.absolute")}
           </text>
           <text x={14} y={H / 2} textAnchor="middle" transform={`rotate(-90 14 ${H / 2})`} className="fill-muted font-mono text-[10px]">
-            DOS (states/eV)
+            {t("dos.yAxisLabel")}
           </text>
         </svg>
       </div>
@@ -151,7 +154,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
             {dos.down ? ` · DOS↓ = ${dos.down[hover.i].toPrecision(4)}` : ""}
           </>
         ) : (
-          <span className="text-muted/50">Fermi at E_F · hover to read a point</span>
+          <span className="text-muted/50">{t("dos.emptyHint")}</span>
         )}
       </div>
     </div>

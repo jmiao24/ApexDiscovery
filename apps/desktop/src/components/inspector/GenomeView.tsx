@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Dna, Minus, Plus, RotateCcw } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { extOf } from "@/lib/artifacts";
 import {
   formatBp,
@@ -23,6 +25,7 @@ const MIN_SPAN = 20; // don't zoom past ~20 bp
  * palette and are theme-aware via CSS tokens.
  */
 export function GenomeView({ filename, text }: { filename: string; text: string }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const format = useMemo(() => genomeFormat(extOf(filename)), [filename]);
   const data = useMemo(
     () => (format ? parseGenome(text, format) : null),
@@ -40,7 +43,7 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
   }, [data, contig]);
 
   // Category → color index (by type for GFF/GTF, else by strand).
-  const categories = useMemo(() => categorize(contigFeatures, format), [contigFeatures, format]);
+  const categories = useMemo(() => categorize(contigFeatures, format, t), [contigFeatures, format, t]);
 
   const [view, setView] = useState<{ start: number; end: number } | null>(null);
   const [width, setWidth] = useState(760);
@@ -65,9 +68,13 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
     return () => ro.disconnect();
   }, []);
 
-  if (!format) return <div className="p-4 text-sm text-muted">Not a genome annotation file.</div>;
+  if (!format) return <div className="p-4 text-sm text-muted">{t("genome.notAnnotationFile")}</div>;
   if (!data || data.features.length === 0 || !contig || !view)
-    return <div className="p-4 text-sm text-muted">No features found in this {format.toUpperCase()} file.</div>;
+    return (
+      <div className="p-4 text-sm text-muted">
+        {t("genome.noFeaturesFound", { format: format.toUpperCase() })}
+      </div>
+    );
 
   const extent = { start: Math.max(0, contig.min - 1), end: contig.max + 1 };
   const span = Math.max(MIN_SPAN, view.end - view.start);
@@ -115,7 +122,7 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
             className="rounded-input border border-border bg-surface px-2 py-1 text-xs text-text outline-none focus:border-accent/50"
             value={contigIdx}
             onChange={(e) => setContigIdx(Number(e.target.value))}
-            aria-label="Contig"
+            aria-label={t("genome.contigAria")}
           >
             {data.contigs.map((c, i) => (
               <option key={c.name} value={i}>
@@ -127,18 +134,19 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
           <span className="font-mono text-text">{contig.name}</span>
         )}
         <span className="text-muted">
-          {formatBp(view.start)}–{formatBp(view.end)} · {contig.count} features
+          {formatBp(view.start)}–{formatBp(view.end)} ·{" "}
+          {t("genome.featureCount", { count: contig.count })}
         </span>
         <div className="flex-1" />
         <div className="flex items-center gap-1">
-          <IconBtn label="Zoom in" onClick={() => zoomAt(0.6, width / 2)}>
+          <IconBtn label={t("genome.zoomIn")} onClick={() => zoomAt(0.6, width / 2)}>
             <Plus size={13} />
           </IconBtn>
-          <IconBtn label="Zoom out" onClick={() => zoomAt(1.66, width / 2)}>
+          <IconBtn label={t("genome.zoomOut")} onClick={() => zoomAt(1.66, width / 2)}>
             <Minus size={13} />
           </IconBtn>
           <IconBtn
-            label="Reset view"
+            label={t("genome.resetView")}
             onClick={() => setView({ start: extent.start, end: extent.end })}
           >
             <RotateCcw size={12} />
@@ -186,11 +194,11 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
         <svg width={width} height={RULER_H + bodyH} className="block">
           {/* Ruler */}
           <line x1={0} y1={RULER_H - 0.5} x2={width} y2={RULER_H - 0.5} stroke="var(--border)" />
-          {ticks.map((t) => (
-            <g key={t}>
-              <line x1={xOf(t)} y1={RULER_H - 5} x2={xOf(t)} y2={RULER_H} stroke="var(--border)" />
-              <text x={xOf(t) + 3} y={RULER_H - 8} fontSize={10} fill="var(--muted)" fontFamily="ui-monospace, monospace">
-                {formatBp(t)}
+          {ticks.map((tick) => (
+            <g key={tick}>
+              <line x1={xOf(tick)} y1={RULER_H - 5} x2={xOf(tick)} y2={RULER_H} stroke="var(--border)" />
+              <text x={xOf(tick) + 3} y={RULER_H - 8} fontSize={10} fill="var(--muted)" fontFamily="ui-monospace, monospace">
+                {formatBp(tick)}
               </text>
             </g>
           ))}
@@ -232,7 +240,10 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
             </div>
             {(hover.f.type || hover.f.score !== undefined) && (
               <div className="text-muted">
-                {[hover.f.type, hover.f.score !== undefined ? `score ${hover.f.score}` : null]
+                {[
+                  hover.f.type,
+                  hover.f.score !== undefined ? t("genome.scoreLabel", { score: hover.f.score }) : null,
+                ]
                   .filter(Boolean)
                   .join(" · ")}
               </div>
@@ -242,9 +253,11 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
       </div>
 
       <div className="border-t border-border px-3 py-1 text-[11px] text-muted">
-        Drag to pan · scroll to zoom
-        {rows.length > 0 && Math.max(...rows) + 1 > MAX_ROWS && ` · showing ${MAX_ROWS} of ${Math.max(...rows) + 1} rows`}
-        {data.truncated && " · file truncated at 50,000 features"}
+        {t("genome.panZoomHint")}
+        {rows.length > 0 &&
+          Math.max(...rows) + 1 > MAX_ROWS &&
+          t("genome.showingRows", { shown: MAX_ROWS, total: Math.max(...rows) + 1 })}
+        {data.truncated && t("genome.truncatedNotice")}
       </div>
     </div>
   );
@@ -265,9 +278,13 @@ function IconBtn({ label, onClick, children }: { label: string; onClick: () => v
 }
 
 /** Assign each feature a stable palette color (1..8) by type (GFF/GTF) or strand. */
-function categorize(features: GenomeFeature[], format: string | null) {
+function categorize(features: GenomeFeature[], format: string | null, t: TFunction<["inspector", "common"]>) {
   const keyOf = (f: GenomeFeature): string =>
-    format === "gff" || format === "gtf" ? (f.type ?? "feature") : (f.strand ? `strand ${f.strand}` : "feature");
+    format === "gff" || format === "gtf"
+      ? f.type ?? t("genome.featureLabel")
+      : f.strand
+        ? t("genome.strandLabel", { strand: f.strand })
+        : t("genome.featureLabel");
   const order: string[] = [];
   const counts = new Map<string, number>();
   for (const f of features) {

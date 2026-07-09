@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { divergingColor, parseAnomaly, type AnomalyGrid } from "@/lib/anomaly";
 
 /**
@@ -10,6 +11,7 @@ import { divergingColor, parseAnomaly, type AnomalyGrid } from "@/lib/anomaly";
  * the file alone; theme-independent like the other scientific viewers.
  */
 export function AnomalyMapView({ filename, text }: { filename: string; text: string }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const parsed = useMemo<{ grid: AnomalyGrid | null; error: string | null }>(() => {
     try {
       return { grid: parseAnomaly(text), error: null };
@@ -23,7 +25,7 @@ export function AnomalyMapView({ filename, text }: { filename: string; text: str
       <div className="flex h-full items-center justify-center p-6">
         <div className="flex max-w-sm items-start gap-2 rounded-card border border-border bg-surface p-4 text-sm text-muted">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" />
-          <span>Could not read this anomaly grid — {parsed.error ?? "unknown format"}.</span>
+          <span>{t("anomaly.readError", { error: parsed.error ?? t("anomaly.unknownFormat") })}</span>
         </div>
       </div>
     );
@@ -44,6 +46,7 @@ function niceStep(span: number): number {
 }
 
 function Map({ filename, grid }: { filename: string; grid: AnomalyGrid }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hover, setHover] = useState<{ lat: number; lon: number; v: number } | null>(null);
 
@@ -110,7 +113,7 @@ function Map({ filename, grid }: { filename: string; grid: AnomalyGrid }) {
     <div className="flex h-full flex-col bg-[#0f1320]">
       <div className="flex items-center gap-2 border-b border-white/10 bg-black/20 px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/50">
-          {filename} · {cols}×{rows} grid{grid.unit ? ` · ${grid.unit}` : ""}
+          {filename} · {cols}×{rows} {t("anomaly.gridLabel")}{grid.unit ? ` · ${grid.unit}` : ""}
         </span>
       </div>
 
@@ -160,10 +163,10 @@ function Map({ filename, grid }: { filename: string; grid: AnomalyGrid }) {
           {hover ? (
             <>
               {fmtLat(hover.lat)}, {fmtLon(hover.lon)} ·{" "}
-              {Number.isFinite(hover.v) ? `${hover.v > 0 ? "+" : ""}${hover.v.toPrecision(3)}` : "no data"}
+              {Number.isFinite(hover.v) ? `${hover.v > 0 ? "+" : ""}${hover.v.toPrecision(3)}` : t("anomaly.noData")}
             </>
           ) : (
-            <span className="text-white/30">hover to read a grid cell</span>
+            <span className="text-white/30">{t("anomaly.hoverHint")}</span>
           )}
         </div>
       </div>

@@ -118,5 +118,153 @@
   "table": {
     "showingFirstRows_one": "Showing the first {{count}} row",
     "showingFirstRows_other": "Showing the first {{count}} rows"
+  },
+  "mesh": {
+    "mode": {
+      "shaded": "Shaded",
+      "wireframe": "Wireframe"
+    },
+    "modelViewerAria": "{{filename}} 3D model viewer",
+    "resetView": "Reset view",
+    "triangleCount_one": "{{formatted}} triangle",
+    "triangleCount_other": "{{formatted}} triangles",
+    "rendering": "Rendering model…",
+    "fileProblem": "File problem",
+    "noGeometry": "This 3D file has no visible geometry — the export looks incomplete or corrupt.",
+    "unsupportedFormat": "Unsupported 3D format: .{{ext}}"
+  },
+  "fits": {
+    "readError": "Could not read this FITS file — {{error}}.",
+    "colormap": {
+      "magma": "magma",
+      "viridis": "viridis",
+      "gray": "gray"
+    },
+    "stretch": {
+      "linear": "linear",
+      "log": "log",
+      "asinh": "asinh"
+    },
+    "hoverHintImage": "hover for pixel value & sky coordinate",
+    "pixelValue": "pixel ({{x}}, {{y}}) = {{value}}",
+    "value": "value",
+    "axisSampleFallback": "sample",
+    "spectrumSummary_one": "spectrum · {{count}} sample",
+    "spectrumSummary_other": "spectrum · {{count}} samples",
+    "hoverHintSpectrum": "hover to read a sample"
+  },
+  "genome": {
+    "notAnnotationFile": "Not a genome annotation file.",
+    "noFeaturesFound": "No features found in this {{format}} file.",
+    "contigAria": "Contig",
+    "featureCount": "{{count}} features",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetView": "Reset view",
+    "strandLabel": "strand {{strand}}",
+    "featureLabel": "feature",
+    "scoreLabel": "score {{score}}",
+    "panZoomHint": "Drag to pan · scroll to zoom",
+    "showingRows": " · showing {{shown}} of {{total}} rows",
+    "truncatedNotice": " · file truncated at 50,000 features"
+  },
+  "molecule": {
+    "style": {
+      "stick": "Stick",
+      "sphere": "Sphere",
+      "cartoon": "Cartoon"
+    },
+    "moleculeViewerAria": "{{filename}} 3D molecule viewer",
+    "notChemicalFile": "Not a chemical structure file.",
+    "noStructuresFound": "No chemical structures found in this file.",
+    "resetView": "Reset view",
+    "atomCount_one": "{{count}} atom",
+    "atomCount_other": "{{count}} atoms",
+    "renderingStructure": "Rendering structure…"
+  },
+  "dos": {
+    "readError": "Could not read this DOSCAR — {{error}}.",
+    "unknownFormat": "unknown format",
+    "viewLabel": "DOS",
+    "pointCount_one": "{{count}} point",
+    "pointCount_other": "{{count}} points",
+    "spinPolarizedSuffix": " · spin-polarized",
+    "axisToggle": {
+      "relative": "E − E_F",
+      "absolute": "absolute E"
+    },
+    "axisLabel": {
+      "relative": "E − E_F (eV)",
+      "absolute": "Energy (eV)"
+    },
+    "yAxisLabel": "DOS (states/eV)",
+    "spinUpLabel": "↑ spin up",
+    "spinDownLabel": "↓ spin down",
+    "emptyHint": "Fermi at E_F · hover to read a point"
+  },
+  "band": {
+    "readError": "Could not read this EIGENVAL — {{error}}.",
+    "unknownFormat": "unknown format",
+    "viewLabel": "bands",
+    "bandCount_one": "{{count}} band",
+    "bandCount_other": "{{count}} bands",
+    "kpointCount_one": "{{count}} k-point",
+    "kpointCount_other": "{{count}} k-points",
+    "spinPolarizedSuffix": " · spin-polarized",
+    "spinUpShort": "up",
+    "spinDownShort": "down",
+    "kpointIndexAxis": "k-point index (0…{{max}})",
+    "energyAxis": "Energy (eV)",
+    "hoverHint": "hover to read k-point & energy"
+  },
+  "phase": {
+    "readError": "Could not read this phase diagram — {{error}}.",
+    "unknownFormat": "unknown format",
+    "phaseCount_one": "{{count}} phase",
+    "phaseCount_other": "{{count}} phases",
+    "stableCount": "{{count}} stable",
+    "xAxisLabel": "composition (fraction {{element}})",
+    "yAxisLabel": "formation energy (eV/atom)",
+    "stableOnHull": "stable (on hull)",
+    "aboveHull": "+{{value}} eV/atom above hull",
+    "hoverDefaultHint": "hover a phase · filled = stable, open = metastable"
+  },
+  "anomaly": {
+    "readError": "Could not read this anomaly grid — {{error}}.",
+    "unknownFormat": "unknown format",
+    "gridLabel": "grid",
+    "hoverHint": "hover to read a grid cell",
+    "noData": "no data"
+  },
+  "qcode": {
+    "readError": "Could not read this coding file — {{error}}.",
+    "unknownFormat": "unknown format",
+    "sourceCount_one": "{{count}} source",
+    "sourceCount_other": "{{count}} sources",
+    "codeCount_one": "{{count}} code",
+    "codeCount_other": "{{count}} codes",
+    "exactSpansBadge": "quotes are exact source spans",
+    "exactSpansTitle": "Highlights are exact source spans — quotes are sliced from the source, never generated.",
+    "codebookHeading": "Codebook",
+    "clearFilter": "clear filter",
+    "warningsCount_one": "{{count}} annotation skipped or flagged:",
+    "warningsCount_other": "{{count}} annotations skipped or flagged:",
+    "hoverDefaultHint": "hover a highlight to see its codes · click a code to isolate its spans"
+  },
+  "tableChart": {
+    "chartType": {
+      "line": "line",
+      "bar": "bar",
+      "scatter": "scatter"
+    },
+    "rowIndexOption": "row #",
+    "rowLabel": "row",
+    "xAxisFieldLabel": "x:",
+    "toggleSeries": {
+      "hide": "Hide series",
+      "show": "Show series"
+    },
+    "selectSeriesHint": "select a series to plot",
+    "noNumericColumns": "No numeric columns to chart."
   }
 }

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { parseEigenval, type BandData } from "@/lib/bands";
 
 /**
@@ -9,6 +10,7 @@ import { parseEigenval, type BandData } from "@/lib/bands";
  * Offline, from the file alone; uses the app chart palette.
  */
 export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBuffer }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const parsed = useMemo<{ data: BandData | null; error: string | null }>(() => {
     try {
       return { data: parseEigenval(new TextDecoder().decode(bytes)), error: null };
@@ -24,7 +26,7 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
       <div className="flex h-full items-center justify-center p-6">
         <div className="flex max-w-sm items-start gap-2 rounded-card border border-border bg-surface p-4 text-sm text-muted">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" />
-          <span>Could not read this EIGENVAL — {parsed.error ?? "unknown format"}.</span>
+          <span>{t("band.readError", { error: parsed.error ?? t("band.unknownFormat") })}</span>
         </div>
       </div>
     );
@@ -57,16 +59,15 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
     <div className="flex h-full flex-col bg-surface">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
-          {filename} · bands · {d.nbands} bands × {d.nkpts} k-points
-          {d.spin ? " · spin-polarized" : ""}
+          {filename} · {t("band.viewLabel")} · {t("band.bandCount", { count: d.nbands })} × {t("band.kpointCount", { count: d.nkpts })}{d.spin ? t("band.spinPolarizedSuffix") : ""}
         </span>
         {d.spin && (
           <span className="flex items-center gap-2 text-[10px] text-muted">
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-3 rounded-sm" style={{ background: "var(--series-1)" }} /> up
+              <span className="h-2 w-3 rounded-sm" style={{ background: "var(--series-1)" }} /> {t("band.spinUpShort")}
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-3 rounded-sm" style={{ background: "var(--series-6)" }} /> down
+              <span className="h-2 w-3 rounded-sm" style={{ background: "var(--series-6)" }} /> {t("band.spinDownShort")}
             </span>
           </span>
         )}
@@ -103,10 +104,10 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
             <line x1={xAt(hover.k)} y1={pad.t} x2={xAt(hover.k)} y2={H - pad.b} stroke="currentColor" className="text-muted" strokeWidth={0.6} strokeDasharray="2 2" />
           )}
           <text x={W / 2} y={H - 4} textAnchor="middle" className="fill-muted font-mono text-[10px]">
-            k-point index (0…{d.nkpts - 1})
+            {t("band.kpointIndexAxis", { max: d.nkpts - 1 })}
           </text>
           <text x={14} y={H / 2} textAnchor="middle" transform={`rotate(-90 14 ${H / 2})`} className="fill-muted font-mono text-[10px]">
-            Energy (eV)
+            {t("band.energyAxis")}
           </text>
         </svg>
       </div>
@@ -115,7 +116,7 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
         {hover ? (
           <>k = {hover.k} · E ≈ {hover.e.toFixed(2)} eV</>
         ) : (
-          <span className="text-muted/50">hover to read k-point &amp; energy</span>
+          <span className="text-muted/50">{t("band.hoverHint")}</span>
         )}
       </div>
     </div>

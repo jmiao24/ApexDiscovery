@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { parsePhaseDiagram, type PhaseDiagram } from "@/lib/phase";
 
 /**
@@ -10,6 +11,7 @@ import { parsePhaseDiagram, type PhaseDiagram } from "@/lib/phase";
  * Offline, from the file alone; uses the app chart palette.
  */
 export function PhaseView({ filename, text }: { filename: string; text: string }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const parsed = useMemo<{ pd: PhaseDiagram | null; error: string | null }>(() => {
     try {
       return { pd: parsePhaseDiagram(text), error: null };
@@ -25,7 +27,7 @@ export function PhaseView({ filename, text }: { filename: string; text: string }
       <div className="flex h-full items-center justify-center p-6">
         <div className="flex max-w-sm items-start gap-2 rounded-card border border-border bg-surface p-4 text-sm text-muted">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" />
-          <span>Could not read this phase diagram — {parsed.error ?? "unknown format"}.</span>
+          <span>{t("phase.readError", { error: parsed.error ?? t("phase.unknownFormat") })}</span>
         </div>
       </div>
     );
@@ -50,8 +52,8 @@ export function PhaseView({ filename, text }: { filename: string; text: string }
     <div className="flex h-full flex-col bg-surface">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
-          {filename} · {pd.elements[0]}–{pd.elements[1]} · {pd.entries.length} phases ·{" "}
-          {pd.entries.filter((e) => e.stable).length} stable
+          {filename} · {pd.elements[0]}–{pd.elements[1]} · {t("phase.phaseCount", { count: pd.entries.length })} ·{" "}
+          {t("phase.stableCount", { count: pd.entries.filter((e) => e.stable).length })}
         </span>
       </div>
 
@@ -112,10 +114,10 @@ export function PhaseView({ filename, text }: { filename: string; text: string }
             {pd.elements[1]}
           </text>
           <text x={W / 2} y={H - 6} textAnchor="middle" className="fill-muted font-mono text-[10px]">
-            composition (fraction {pd.elements[1]})
+            {t("phase.xAxisLabel", { element: pd.elements[1] })}
           </text>
           <text x={16} y={H / 2} textAnchor="middle" transform={`rotate(-90 16 ${H / 2})`} className="fill-muted font-mono text-[10px]">
-            formation energy (eV/atom)
+            {t("phase.yAxisLabel")}
           </text>
         </svg>
       </div>
@@ -127,12 +129,14 @@ export function PhaseView({ filename, text }: { filename: string; text: string }
             return (
               <span>
                 <span className="text-text">{e.formula}</span> · E_f = {e.y.toFixed(3)} eV/atom ·{" "}
-                {e.stable ? "stable (on hull)" : `+${e.eAboveHull.toFixed(3)} eV/atom above hull`}
+                {e.stable
+                  ? t("phase.stableOnHull")
+                  : t("phase.aboveHull", { value: e.eAboveHull.toFixed(3) })}
               </span>
             );
           })()
         ) : (
-          <span className="text-muted/50">hover a phase · filled = stable, open = metastable</span>
+          <span className="text-muted/50">{t("phase.hoverDefaultHint")}</span>
         )}
       </div>
     </div>

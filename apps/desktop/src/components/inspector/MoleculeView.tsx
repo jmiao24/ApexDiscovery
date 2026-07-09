@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GLViewer } from "3dmol";
 import { Atom, RotateCcw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   defaultStyleMode,
   isSmilesFile,
@@ -11,10 +12,10 @@ import {
 } from "@/lib/molecule";
 import { cn } from "@/lib/cn";
 
-const STYLE_OPTIONS: Array<{ value: MoleculeStyleMode; label: string }> = [
-  { value: "stick", label: "Stick" },
-  { value: "sphere", label: "Sphere" },
-  { value: "cartoon", label: "Cartoon" },
+const STYLE_OPTIONS: Array<{ value: MoleculeStyleMode }> = [
+  { value: "stick" },
+  { value: "sphere" },
+  { value: "cartoon" },
 ];
 
 /**
@@ -25,6 +26,7 @@ const STYLE_OPTIONS: Array<{ value: MoleculeStyleMode; label: string }> = [
  * white stage (chemistry convention), consistent in light and dark themes.
  */
 export function MoleculeView({ filename, text }: { filename: string; text: string }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<GLViewer | null>(null);
   const dragRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
@@ -74,7 +76,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
         const model = isSmilesFile(filename) ? await smilesToMolblock(text) : text;
         if (cancelled) return;
         if (!model) {
-          setError("No chemical structures found in this file.");
+          setError(t("molecule.noStructuresFound"));
           return;
         }
 
@@ -159,7 +161,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
     v.render();
   }, []);
 
-  if (!format) return <div className="p-4 text-sm text-muted">Not a chemical structure file.</div>;
+  if (!format) return <div className="p-4 text-sm text-muted">{t("molecule.notChemicalFile")}</div>;
 
   return (
     <div
@@ -174,7 +176,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
       onPointerCancelCapture={endDrag}
       onWheel={onWheel}
     >
-      <div ref={containerRef} className="absolute inset-0" aria-label={`${filename} 3D molecule viewer`} />
+      <div ref={containerRef} className="absolute inset-0" aria-label={t("molecule.moleculeViewerAria", { filename })} />
 
       <div
         className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border/70 bg-surface/90 p-1 shadow-card backdrop-blur"
@@ -194,15 +196,15 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
                 styleMode === o.value ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text",
               )}
             >
-              {o.label}
+              {t(`molecule.style.${o.value}`)}
             </button>
           ))}
         </div>
         <button
           type="button"
           onClick={resetView}
-          aria-label="Reset view"
-          title="Reset view"
+          aria-label={t("molecule.resetView")}
+          title={t("molecule.resetView")}
           className="flex h-7 w-7 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
         >
           <RotateCcw size={13} />
@@ -211,12 +213,12 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
 
       <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border/70 bg-surface/90 px-3 py-1.5 text-xs text-muted shadow-card backdrop-blur">
         <span className="font-medium text-text">{format.toUpperCase()}</span>
-        {atomCount !== null && <span className="ml-2">{atomCount} atoms</span>}
+        {atomCount !== null && <span className="ml-2">{t("molecule.atomCount", { count: atomCount })}</span>}
       </div>
 
       {(rendering || error) && (
         <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border/70 bg-surface/95 px-3 py-1.5 text-xs text-muted shadow-card backdrop-blur">
-          {rendering ? "Rendering structure…" : error}
+          {rendering ? t("molecule.renderingStructure") : error}
         </div>
       )}
     </div>

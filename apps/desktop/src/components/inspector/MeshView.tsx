@@ -3,6 +3,8 @@ import { AlertTriangle, Box, RotateCcw } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 import { extOf } from "@/lib/artifacts";
 import { cn } from "@/lib/cn";
 
@@ -16,6 +18,7 @@ import { cn } from "@/lib/cn";
  * Drag to orbit, scroll to zoom, right-drag to pan.
  */
 export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBuffer }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const mountRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const homeRef = useRef<(() => void) | null>(null);
@@ -206,8 +209,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
         let drawn = 0;
         for (let i = 0; i < px.length; i += 4)
           if (!(px[i] > 250 && px[i + 1] < 5 && px[i + 2] > 250)) drawn++;
-        if (drawn < width * height * 0.0008)
-          setNotice("This 3D file has no visible geometry — the export looks incomplete or corrupt.");
+        if (drawn < width * height * 0.0008) setNotice(t("mesh.noGeometry"));
 
         if (!cancelled) {
           setRendering(false);
@@ -256,7 +258,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
 
   return (
     <div className="relative h-full min-h-[420px] w-full touch-none select-none overflow-hidden">
-      <div ref={mountRef} className="absolute inset-0" aria-label={`${filename} 3D model viewer`} />
+      <div ref={mountRef} className="absolute inset-0" aria-label={t("mesh.modelViewerAria", { filename })} />
 
       <div className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border/70 bg-surface/90 p-1 shadow-card backdrop-blur">
         <div className="flex items-center gap-1 px-1.5 text-xs font-medium text-muted">
@@ -264,8 +266,8 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
         </div>
         <div className="flex rounded bg-surface-2 p-0.5">
           {[
-            { v: true, label: "Shaded" },
-            { v: false, label: "Wireframe" },
+            { v: true, label: t("mesh.mode.shaded") },
+            { v: false, label: t("mesh.mode.wireframe") },
           ].map((o) => (
             <button
               key={o.label}
@@ -286,8 +288,8 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
         <button
           type="button"
           onClick={resetView}
-          aria-label="Reset view"
-          title="Reset view"
+          aria-label={t("mesh.resetView")}
+          title={t("mesh.resetView")}
           className="flex h-7 w-7 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
         >
           <RotateCcw size={13} />
@@ -296,19 +298,23 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
 
       <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border/70 bg-surface/90 px-3 py-1.5 text-xs text-muted shadow-card backdrop-blur">
         <span className="font-medium text-text">{ext.toUpperCase()}</span>
-        {meta && <span className="ml-2">{meta.tris.toLocaleString()} triangles</span>}
+        {meta && (
+          <span className="ml-2">
+            {t("mesh.triangleCount", { count: meta.tris, formatted: meta.tris.toLocaleString() })}
+          </span>
+        )}
       </div>
 
       {(rendering || error) && (
         <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border/70 bg-surface/95 px-3 py-1.5 text-xs text-muted shadow-card backdrop-blur">
-          {rendering ? "Rendering model…" : error}
+          {rendering ? t("mesh.rendering") : error}
         </div>
       )}
 
       {notice && !rendering && !error && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 max-w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-input border border-warn/40 bg-surface/95 px-4 py-3 text-center text-sm text-text shadow-card backdrop-blur">
           <div className="mb-1 flex items-center justify-center gap-1.5 font-medium text-warn">
-            <AlertTriangle size={14} /> File problem
+            <AlertTriangle size={14} /> {t("mesh.fileProblem")}
           </div>
           {notice}
         </div>
@@ -345,7 +351,7 @@ async function loadModel(ext: string, bytes: ArrayBuffer): Promise<THREE.Object3
       return gltf.scene;
     }
     default:
-      throw new Error(`Unsupported 3D format: .${ext}`);
+      throw new Error(i18n.t("inspector:mesh.unsupportedFormat", { ext }));
   }
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { parseFits, pixelToWorld, type FitsImage, type FitsResult } from "@/lib/fits";
 import { cn } from "@/lib/cn";
 
@@ -26,8 +27,8 @@ const CMAPS: Record<Cmap, [number, number, number][]> = {
   gray: [[0, 0, 0], [255, 255, 255]],
 };
 
-function sampleCmap(stops: [number, number, number][], t: number): [number, number, number] {
-  const x = Math.min(1, Math.max(0, t)) * (stops.length - 1);
+function sampleCmap(stops: [number, number, number][], frac: number): [number, number, number] {
+  const x = Math.min(1, Math.max(0, frac)) * (stops.length - 1);
   const i = Math.floor(x);
   const f = x - i;
   const a = stops[i];
@@ -35,8 +36,8 @@ function sampleCmap(stops: [number, number, number][], t: number): [number, numb
   return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
 }
 
-function applyStretch(t: number, mode: Stretch): number {
-  const c = Math.min(1, Math.max(0, t));
+function applyStretch(frac: number, mode: Stretch): number {
+  const c = Math.min(1, Math.max(0, frac));
   if (mode === "log") return Math.log1p(1000 * c) / Math.log1p(1000);
   if (mode === "asinh") return Math.asinh(10 * c) / Math.asinh(10);
   return c;
@@ -48,6 +49,7 @@ function fmtCoord(lon: number, lat: number): string {
 }
 
 export function FitsView({ filename, bytes }: { filename: string; bytes: ArrayBuffer }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const parsed = useMemo<{ result: FitsResult | null; error: string | null }>(() => {
     try {
       return { result: parseFits(bytes), error: null };
@@ -61,7 +63,7 @@ export function FitsView({ filename, bytes }: { filename: string; bytes: ArrayBu
       <div className="flex h-full items-center justify-center p-6">
         <div className="flex max-w-sm items-start gap-2 rounded-card border border-border bg-surface p-4 text-sm text-muted">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" />
-          <span>Could not read this FITS file — {parsed.error}.</span>
+          <span>{t("fits.readError", { error: parsed.error })}</span>
         </div>
       </div>
     );
@@ -74,6 +76,7 @@ export function FitsView({ filename, bytes }: { filename: string; bytes: ArrayBu
 }
 
 function ImageView({ filename, img }: { filename: string; img: FitsImage }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [cmap, setCmap] = useState<Cmap>("magma");
   const [stretch, setStretch] = useState<Stretch>("linear");
@@ -141,8 +144,14 @@ function ImageView({ filename, img }: { filename: string; img: FitsImage }) {
           value={stretch}
           onChange={(v) => setStretch(v as Stretch)}
           options={["linear", "log", "asinh"]}
+          labelFor={(v) => t(`fits.stretch.${v as Stretch}`)}
         />
-        <Segmented value={cmap} onChange={(v) => setCmap(v as Cmap)} options={["magma", "viridis", "gray"]} />
+        <Segmented
+          value={cmap}
+          onChange={(v) => setCmap(v as Cmap)}
+          options={["magma", "viridis", "gray"]}
+          labelFor={(v) => t(`fits.colormap.${v as Cmap}`)}
+        />
       </Toolbar>
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center p-4">
@@ -161,12 +170,12 @@ function ImageView({ filename, img }: { filename: string; img: FitsImage }) {
           {hover ? (
             <>
               <div>
-                pixel ({hover.x}, {hover.y}) = {hover.v.toPrecision(5)}
+                {t("fits.pixelValue", { x: hover.x, y: hover.y, value: hover.v.toPrecision(5) })}
               </div>
               {world && <div className="text-white/45">{fmtCoord(world.lon, world.lat)}</div>}
             </>
           ) : (
-            <span className="text-white/30">hover for pixel value &amp; sky coordinate</span>
+            <span className="text-white/30">{t("fits.hoverHintImage")}</span>
           )}
         </div>
       </div>
@@ -222,6 +231,7 @@ function Colorbar({
 }
 
 function SpectrumView({ filename, spec }: { filename: string; spec: import("@/lib/fits").FitsSpectrum }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const { data, x0, dx, length, ctype1, bunit } = spec;
   const W = 640;
   const H = 320;
@@ -250,7 +260,7 @@ function SpectrumView({ filename, spec }: { filename: string; spec: import("@/li
       <Toolbar
         left={
           <span className="truncate font-mono text-[11px] text-muted">
-            {filename} · spectrum · {length} samples
+            {filename} · {t("fits.spectrumSummary", { count: length })}
           </span>
         }
       />
@@ -281,20 +291,21 @@ function SpectrumView({ filename, spec }: { filename: string; spec: import("@/li
             </g>
           )}
           <text x={(W) / 2} y={H - 6} textAnchor="middle" className="fill-muted font-mono text-[10px]">
-            {ctype1 ?? "sample"} {dx !== 1 ? `(${x0.toPrecision(4)} + ${dx}·i)` : ""}
+            {ctype1 ?? t("fits.axisSampleFallback")} {dx !== 1 ? `(${x0.toPrecision(4)} + ${dx}·i)` : ""}
           </text>
           <text x={14} y={H / 2} textAnchor="middle" transform={`rotate(-90 14 ${H / 2})`} className="fill-muted font-mono text-[10px]">
-            {bunit ?? "value"}
+            {bunit ?? t("fits.value")}
           </text>
         </svg>
       </div>
       <div className="border-t border-border px-3 py-2 text-right font-mono text-[11px] text-muted">
         {hover ? (
           <>
-            {ctype1 ?? "x"} = {(x0 + dx * hover.i).toPrecision(6)} · value = {data[hover.i].toPrecision(5)}
+            {ctype1 ?? "x"} = {(x0 + dx * hover.i).toPrecision(6)} · {t("fits.value")} ={" "}
+            {data[hover.i].toPrecision(5)}
           </>
         ) : (
-          <span className="text-muted/50">hover to read a sample</span>
+          <span className="text-muted/50">{t("fits.hoverHintSpectrum")}</span>
         )}
       </div>
     </div>
@@ -314,10 +325,12 @@ function Segmented({
   value,
   onChange,
   options,
+  labelFor,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: string[];
+  labelFor?: (v: string) => string;
 }) {
   return (
     <div className="flex overflow-hidden rounded-md ring-1 ring-white/15">
@@ -330,7 +343,7 @@ function Segmented({
             value === o ? "bg-white/20 text-white" : "bg-transparent text-white/50 hover:text-white/80",
           )}
         >
-          {o}
+          {labelFor ? labelFor(o) : o}
         </button>
       ))}
     </div>

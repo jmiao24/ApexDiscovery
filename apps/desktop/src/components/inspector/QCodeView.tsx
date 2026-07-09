@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, ShieldCheck } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { parseQCode, segmentsFor, type QCodeParsed } from "@/lib/qcode";
 import { cn } from "@/lib/cn";
 
@@ -21,6 +22,7 @@ function colorFor(doc: QCodeParsed, name: string): string {
 }
 
 export function QCodeView({ filename, text }: { filename: string; text: string }) {
+  const { t } = useTranslation(["inspector", "common"]);
   const parsed = useMemo<{ doc: QCodeParsed | null; error: string | null }>(() => {
     try {
       return { doc: parseQCode(text), error: null };
@@ -37,7 +39,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
       <div className="flex h-full items-center justify-center p-6">
         <div className="flex max-w-sm items-start gap-2 rounded-card border border-border bg-surface p-4 text-sm text-muted">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" />
-          <span>Could not read this coding file — {parsed.error ?? "unknown format"}.</span>
+          <span>{t("qcode.readError", { error: parsed.error ?? t("qcode.unknownFormat") })}</span>
         </div>
       </div>
     );
@@ -48,11 +50,11 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
     <div className="flex h-full flex-col bg-surface">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
-          {filename} · {doc.sources.length} source{doc.sources.length === 1 ? "" : "s"} ·{" "}
-          {doc.codes.length} codes
+          {filename} · {t("qcode.sourceCount", { count: doc.sources.length })} ·{" "}
+          {t("qcode.codeCount", { count: doc.codes.length })}
         </span>
-        <span className="inline-flex items-center gap-1 text-[11px] text-ok" title="Highlights are exact source spans — quotes are sliced from the source, never generated.">
-          <ShieldCheck size={13} /> quotes are exact source spans
+        <span className="inline-flex items-center gap-1 text-[11px] text-ok" title={t("qcode.exactSpansTitle")}>
+          <ShieldCheck size={13} /> {t("qcode.exactSpansBadge")}
         </span>
       </div>
 
@@ -60,7 +62,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
         {/* Codebook */}
         <div className="w-52 shrink-0 overflow-y-auto border-r border-border p-2">
           <div className="px-1 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted">
-            Codebook
+            {t("qcode.codebookHeading")}
           </div>
           {doc.codes.map((c) => {
             const n = doc.countByCode[c.name] ?? 0;
@@ -89,7 +91,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
               onClick={() => setActive(null)}
               className="mt-1 w-full rounded-md px-2 py-1 text-[11px] text-muted hover:text-text"
             >
-              clear filter
+              {t("qcode.clearFilter")}
             </button>
           )}
         </div>
@@ -100,7 +102,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
             <div className="mb-3 flex items-start gap-2 rounded-card border border-warn/30 bg-warn/10 p-2 text-[12px] text-muted">
               <AlertTriangle size={13} className="mt-0.5 shrink-0 text-warn" />
               <div>
-                {doc.warnings.length} annotation{doc.warnings.length === 1 ? "" : "s"} skipped or flagged:
+                {t("qcode.warningsCount", { count: doc.warnings.length })}
                 <ul className="mt-1 list-inside list-disc">
                   {doc.warnings.slice(0, 5).map((w, i) => (
                     <li key={i}>{w}</li>
@@ -145,9 +147,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
             <span className="text-text">“{hoverSeg.text}”</span> → {hoverSeg.codes.join(", ")}
           </span>
         ) : (
-          <span className="text-muted/50">
-            hover a highlight to see its codes · click a code to isolate its spans
-          </span>
+          <span className="text-muted/50">{t("qcode.hoverDefaultHint")}</span>
         )}
       </div>
     </div>
