@@ -1,15 +1,15 @@
 <div align="center">
 
-[![Open Science — An open AI workbench for scientists](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+[![Open Science Desktop — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
 
-# Open Science
+# Open Science Desktop
 
-**An open AI workbench for scientists.** Your research partner for rigorous science.
+**Local-first, model-agnostic AI research workbench for macOS & Windows.**
 
-Open Science is an open-source, **local-first**, **model-agnostic**, and
-**reproducible** AI research workbench. It is not just a chat box: it connects
-agents, notebooks, files, figures, reports, runs, and review into one auditable
-desktop workflow. The desktop UI currently ships in seven selectable languages.
+Formerly Open Science. An open-source desktop alternative to Claude Science and
+similar AI-for-science workbenches — built with Tauri, MCP, agent skills, and
+reproducible artifacts. It connects agents, notebooks, files, figures, reports,
+runs, and review into one auditable desktop workflow.
 
 <p>
   <b>English</b> ·
@@ -97,7 +97,7 @@ PDF, and audit citations, unsourced numbers, and figure/code consistency.
 
 | Area | Current state |
 | --- | --- |
-| Desktop shell | Tauri 2 + React + TypeScript + Vite, with macOS, Windows, and Linux build targets. |
+| Desktop shell | Tauri 2 + React + TypeScript + Vite, with primary macOS and Windows desktop builds plus Linux packages. |
 | Runtime | Bundled OpenCode sidecar, auto-started by the app, isolated from the user's own OpenCode config/data. |
 | Sessions | Multi-session chat/history, dated workspace folders, global history across workspaces, `/` commands, and `!` shell mode. |
 | Files | Global and per-session file browsing, context menu actions, external open/reveal, copy path, and local preview server. |
@@ -133,6 +133,9 @@ One-click science MCP connectors currently include:
 
 You can also add any local or remote MCP server from Settings. See
 [`docs/CONNECT_YOUR_TOOLS.md`](./docs/CONNECT_YOUR_TOOLS.md).
+
+For a neutral positioning note, see
+[`Open Science Desktop vs OpenScience`](./docs/open-science-desktop-vs-openscience.md).
 
 ## Install
 
@@ -246,5 +249,5 @@ join the [Open Science Discord](https://discord.gg/fWNMDKcd5P) or the
 
 [MIT](./LICENSE). Bundled third-party skills and connectors keep their own licenses.
 
-> Open Science is beta research tooling. Treat outputs as drafts: verify numbers,
+> Open Science Desktop is beta research tooling. Treat outputs as drafts: verify numbers,
 > citations, code, and conclusions before publication or decision-making.

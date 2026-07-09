@@ -1,12 +1,12 @@
 <div align="center">
 
-[![Open Science — An open AI workbench for scientists](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+[![Open Science Desktop — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
 
-# Open Science
+# Open Science Desktop
 
-**Eine offene KI-Workbench für Wissenschaftlerinnen und Wissenschaftler.** Dein Forschungspartner für rigorose Wissenschaft.
+**Local-first, modellunabhängige KI-Forschungs-Workbench für macOS & Windows.**
 
-Open Science ist eine quelloffene, **local-first**, **modellunabhängige** und **reproduzierbare** KI-Forschungs-Workbench. Es ist nicht nur ein Chat: Agenten, Notebooks, Dateien, Abbildungen, Berichte, Läufe und Reviews werden zu einem auditierbaren Desktop-Workflow verbunden. Die Desktop-UI wird derzeit in sieben auswählbaren Sprachen ausgeliefert.
+Formerly Open Science. Eine quelloffene Desktop-Alternative zu Claude Science und ähnlichen AI-for-science-Workbenches, gebaut mit Tauri, MCP, agent skills und reproduzierbaren Artefakten. Agenten, Notebooks, Dateien, Abbildungen, Berichte, Läufe und Reviews werden zu einem auditierbaren Desktop-Workflow verbunden.
 
 <p>
   <a href="./README.md">English</a> ·
@@ -151,4 +151,4 @@ Workspace-Dateien, Rohdaten, Sitzungsverlauf, Provenance, Notebooks und Run Reco
 
 Aktuelle App-Version: **v0.1.7**. Das verlässlichste Implementierungslog ist [`PROGRESS.md`](./PROGRESS.md). Nahe Arbeiten: signierte/notarisierte Releases, breitere Windows/Linux-Verifikation, Auto-Update, robustere Konnektoren und weitere Reproduzierbarkeits-Reviews. Für Diskussionen gibt es den [Open Science Discord](https://discord.gg/fWNMDKcd5P).
 
-[MIT](./LICENSE). Open Science ist Beta-Forschungstooling. Ausgaben sind Entwürfe: Zahlen, Zitate, Code und Schlussfolgerungen vor Veröffentlichung oder Entscheidung prüfen.
+[MIT](./LICENSE). Open Science Desktop ist Beta-Forschungstooling. Ausgaben sind Entwürfe: Zahlen, Zitate, Code und Schlussfolgerungen vor Veröffentlichung oder Entscheidung prüfen.

@@ -1,14 +1,14 @@
 <div align="center">
 
-[![Open Science — 面向科研人员的开源 AI 工作台](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+[![Open Science Desktop — 本地优先 AI 科研桌面工作台](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
 
-# Open Science
+# Open Science Desktop
 
-**面向科研人员的开源 AI 工作台。** 你做严谨科研的研究伙伴。
+**本地优先、模型无关的 macOS & Windows AI 科研桌面工作台。**
 
-Open Science 是一个开源、**本地优先**、**模型无关**、**可复现**的 AI 科研工作台。
-它不是单纯的聊天框，而是把智能体、笔记本、文件、图表、报告、运行记录和审查连接成
-一条可审计的桌面工作流。桌面 UI 当前发布 7 种可选择语言。
+原名 Open Science。它是 Claude Science 及同类 AI-for-science 工作台的开源桌面替代：
+基于 Tauri、MCP、agent skills 和可复现工件构建。它把智能体、笔记本、文件、图表、
+报告、运行记录和审查连接成一条可审计的桌面工作流。
 
 <p>
   <a href="./README.md">English</a> ·
@@ -89,7 +89,7 @@ Open Science 是一个开源、**本地优先**、**模型无关**、**可复现
 
 | 范围 | 当前状态 |
 | --- | --- |
-| 桌面外壳 | Tauri 2 + React + TypeScript + Vite，具备 macOS、Windows、Linux 构建目标。 |
+| 桌面外壳 | Tauri 2 + React + TypeScript + Vite，主打 macOS 和 Windows 桌面构建，同时提供 Linux 包。 |
 | 运行时 | 内置 OpenCode sidecar，由应用自动启动，并与用户自己的 OpenCode 配置/数据隔离。 |
 | 会话 | 多会话聊天与历史、按时间创建的工作区文件夹、跨工作区全局历史、`/` 命令和 `!` shell 模式。 |
 | 文件 | 全局和会话内文件浏览、右键菜单、系统打开/定位、复制路径、本地预览服务。 |
@@ -121,6 +121,9 @@ Open Science 是一个开源、**本地优先**、**模型无关**、**可复现
 
 你也可以在 Settings 中添加任意本地或远程 MCP 服务器。参见
 [`docs/CONNECT_YOUR_TOOLS.md`](./docs/CONNECT_YOUR_TOOLS.md)。
+
+中立定位对比见
+[`Open Science Desktop vs OpenScience`](./docs/open-science-desktop-vs-openscience.md)。
 
 ## 安装
 
@@ -220,4 +223,4 @@ pnpm lint
 
 [MIT](./LICENSE)。随附的第三方技能和连接器保留各自许可证。
 
-> Open Science 仍是 beta 阶段科研工具。产出应视为草稿：发表或决策前请核对数字、引用、代码和结论。
+> Open Science Desktop 仍是 beta 阶段科研工具。产出应视为草稿：发表或决策前请核对数字、引用、代码和结论。

@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-09 04:02 · docs(brand): repositioned the project as Open Science Desktop in README/agent metadata, added a neutral OpenScience comparison page, and updated the GitHub repo description/topics.
+
 2026-07-09 03:25 · chore(ignore): removed tracked docs/superpowers planning artifacts and ignored docs/superpowers/ to keep local superpowers files out of git.
 
 2026-07-09 02:36 · docs(readme): folded language support into the capability tables, restored emoji in README tables of contents, and added the Open Science Discord invite.

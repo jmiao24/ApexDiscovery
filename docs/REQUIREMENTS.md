@@ -1,7 +1,7 @@
-# Open Science — Prioritized Requirements (Community-Informed)
+# Open Science Desktop — Prioritized Requirements (Community-Informed)
 
 > **Purpose.** This document turns real community evidence into concrete,
-> prioritized requirements for **Open Science**, our open-source, local-first,
+> prioritized requirements for **Open Science Desktop**, our open-source, local-first,
 > reproducible AI research workbench. It complements `PRD.md`: the PRD says
 > *what the product is*; this file says *what to build first and why*, tied to
 > evidence.
@@ -41,12 +41,12 @@ The moat of an AI research workbench is **not the model**. It is:
 4. **domain-correctness gates** — because across *every* field the top complaint
    is code that **runs but is scientifically wrong** (see P0-5).
 
-Open Science must win on those four axes — plus two things competitors are
+Open Science Desktop must win on those four axes — plus two things competitors are
 criticized for lacking: **multi-discipline breadth** and **Windows support**.
 
 Do **not** market as "open-source Claude Science" or "zero hallucination."
-Market as: *"Open Science — an open AI research workbench for reproducible
-science."* Sell **traceable / verifiable**, not **perfect**.
+Market as: *"Open Science Desktop — local-first, model-agnostic AI research
+workbench for macOS & Windows."* Sell **traceable / verifiable**, not **perfect**.
 
 ---
 

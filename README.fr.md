@@ -1,12 +1,12 @@
 <div align="center">
 
-[![Open Science — An open AI workbench for scientists](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+[![Open Science Desktop — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
 
-# Open Science
+# Open Science Desktop
 
-**Un atelier IA ouvert pour les scientifiques.** Votre partenaire de recherche pour une science rigoureuse.
+**Atelier de recherche IA local-first et agnostique au modèle pour macOS & Windows.**
 
-Open Science est un atelier de recherche IA open source, **local-first**, **agnostique au modèle** et orienté **reproductibilité**. Ce n'est pas seulement un chat : il relie agents, notebooks, fichiers, figures, rapports, exécutions et revue dans un flux desktop auditable. L'UI desktop est actuellement livrée en sept langues sélectionnables.
+Formerly Open Science. Une alternative desktop open source à Claude Science et aux workbenches AI-for-science similaires, construite avec Tauri, MCP, agent skills et des artefacts reproductibles. Elle relie agents, notebooks, fichiers, figures, rapports, exécutions et revue dans un flux desktop auditable.
 
 <p>
   <a href="./README.md">English</a> ·
@@ -151,4 +151,4 @@ Les fichiers du workspace, données brutes, historique, provenance, notebooks et
 
 Version actuelle : **v0.1.7**. Le journal d'implémentation le plus fiable est [`PROGRESS.md`](./PROGRESS.md). Les prochains travaux portent sur les releases signées/notarisées, la vérification Windows/Linux, l'auto-update, le durcissement des connecteurs et la revue de reproductibilité. Pour discuter du projet, rejoignez le [Discord Open Science](https://discord.gg/fWNMDKcd5P).
 
-[MIT](./LICENSE). Open Science est un outil de recherche beta : traitez les sorties comme des brouillons et vérifiez nombres, citations, code et conclusions avant publication ou décision.
+[MIT](./LICENSE). Open Science Desktop est un outil de recherche beta : traitez les sorties comme des brouillons et vérifiez nombres, citations, code et conclusions avant publication ou décision.

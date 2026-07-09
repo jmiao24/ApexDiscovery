@@ -2,7 +2,7 @@
   "name": "ai4s-workbench",
   "version": "0.1.7",
   "private": true,
-  "description": "Open-source AI research workbench for reproducible science.",
+  "description": "Open Science Desktop — local-first, model-agnostic AI research workbench for macOS and Windows.",
   "license": "MIT",
   "scripts": {
     "dev": "pnpm --filter @ai4s/desktop dev",

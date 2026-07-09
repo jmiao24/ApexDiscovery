@@ -1,8 +1,8 @@
-# Open Science (desktop)
+# Open Science Desktop
 
-Brand name: **Open Science** — "An open AI workbench for scientists. Your research
-partner for rigorous science." (Bundle identifier stays `com.ai4s.workbench` and
-internal `@ai4s/*` package names are unchanged — display branding only.)
+Brand name: **Open Science Desktop** — "Local-first, model-agnostic AI research
+workbench for macOS & Windows." Formerly Open Science. Bundle identifier stays
+`com.ai4s.workbench` and internal `@ai4s/*` package names are unchanged.
 
 Project rules and working context for AI agents (Claude Code, Cursor, Codex, etc.).
 `CLAUDE.md` is a symlink to this file — edit only `AGENTS.md`.
@@ -18,7 +18,7 @@ Keep it **simple, explicit, clear, complete**.
 
 ## What this project is
 
-An open-source, local-first, model-agnostic, reproducible AI research workbench
+An open-source, local-first, model-agnostic, reproducible AI research desktop
 for macOS and Windows. See `README.md`, `docs/PRD.md`, and `docs/TECHNICAL_DESIGN.md`.
 
 Recommended stack: **Tauri 2 + React + TypeScript + Vite**, Tailwind + Radix UI,

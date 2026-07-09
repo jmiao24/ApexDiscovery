@@ -1,12 +1,12 @@
 <div align="center">
 
-[![Open Science — An open AI workbench for scientists](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+[![Open Science Desktop — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
 
-# Open Science
+# Open Science Desktop
 
-**研究者のためのオープンな AI ワークベンチ。** 厳密な科学研究のための研究パートナーです。
+**macOS & Windows 向けのローカルファースト、モデル非依存 AI 研究ワークベンチ。**
 
-Open Science は、オープンソース、**ローカルファースト**、**モデル非依存**、**再現性重視**の AI 研究ワークベンチです。単なるチャットではなく、エージェント、ノートブック、ファイル、図、レポート、実行記録、レビューを 1 つの監査可能なデスクトップワークフローにまとめます。デスクトップ UI は現在 7 言語で提供されています。
+Formerly Open Science. Claude Science などの AI-for-science ワークベンチに対するオープンソースのデスクトップ代替です。Tauri、MCP、agent skills、再現可能な成果物を基盤に、エージェント、ノートブック、ファイル、図、レポート、実行記録、レビューを 1 つの監査可能なデスクトップワークフローにまとめます。
 
 <p>
   <a href="./README.md">English</a> ·
@@ -151,4 +151,4 @@ pnpm lint
 
 現在のアプリバージョンは **v0.1.7** です。現在の実装ログは [`PROGRESS.md`](./PROGRESS.md) を参照してください。近い作業は署名済みリリース、Windows/Linux 検証、自動更新、コネクタの堅牢化、再現性レビューの継続です。議論には [Open Science Discord](https://discord.gg/fWNMDKcd5P) も使えます。
 
-[MIT](./LICENSE). Open Science は beta の研究ツールです。出力は草稿として扱い、公開や意思決定の前に数字、引用、コード、結論を検証してください。
+[MIT](./LICENSE). Open Science Desktop は beta の研究ツールです。出力は草稿として扱い、公開や意思決定の前に数字、引用、コード、結論を検証してください。
