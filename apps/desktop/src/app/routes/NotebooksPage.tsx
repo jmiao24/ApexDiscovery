@@ -6,6 +6,7 @@ import { emptyIpynb } from "@/lib/notebook-file";
 import type { KernelLanguage } from "@/lib/kernel";
 import { NotebookEditor } from "@/components/notebook/NotebookEditor";
 import { toast } from "@/lib/toast";
+import i18n from "@/i18n";
 
 /**
  * Notebooks live in session workspaces as real .ipynb files: the user runs
@@ -163,7 +164,7 @@ export function NotebooksPage() {
                   </span>
                 )}
                 <span className="ml-auto shrink-0 text-xs text-muted">
-                  {new Date(e.modified * 1000).toLocaleString()}
+                  {new Date(e.modified * 1000).toLocaleString(i18n.language)}
                 </span>
               </button>
             );

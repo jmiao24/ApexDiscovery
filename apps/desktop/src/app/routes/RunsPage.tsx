@@ -25,6 +25,7 @@ import { copyText } from "@/lib/clipboard";
 import { PaneTitlebarInset } from "@/components/inspector/RightPane";
 import { useUiStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
+import i18n from "@/i18n";
 
 type SincePreset = "24h" | "7d" | "30d";
 const SINCE_SECONDS: Record<SincePreset, number> = { "24h": 86_400, "7d": 604_800, "30d": 2_592_000 };
@@ -562,8 +563,8 @@ function dayLabel(ts: number): string {
   const days = Math.round((startOf(now) - startOf(d)) / 86_400_000);
   if (days <= 0) return "Today";
   if (days === 1) return "Yesterday";
-  if (days < 7) return d.toLocaleDateString(undefined, { weekday: "long" });
-  return d.toLocaleDateString(undefined, { month: "long", day: "numeric", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+  if (days < 7) return d.toLocaleDateString(i18n.language, { weekday: "long" });
+  return d.toLocaleDateString(i18n.language, { month: "long", day: "numeric", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
 }
 
 function relativeTs(ts: number): string {
@@ -571,11 +572,11 @@ function relativeTs(ts: number): string {
   if (secs < 60) return "just now";
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
   if (secs < 86_400) return `${Math.floor(secs / 3600)}h ago`;
-  return new Date(ts * 1000).toLocaleDateString(undefined, { hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" });
+  return new Date(ts * 1000).toLocaleDateString(i18n.language, { hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" });
 }
 
 function absoluteTs(ts: number): string {
-  return new Date(ts * 1000).toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(ts * 1000).toLocaleString(i18n.language, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function formatDuration(ms: number): string {

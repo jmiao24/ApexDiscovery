@@ -11,6 +11,7 @@ import {
   type LargeFilePointer,
 } from "@/lib/artifactFile";
 import { parseTableFile } from "@/lib/csv";
+import { formatNumber } from "@/i18n/format";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { ProvenancePanel } from "./ProvenancePanel";
@@ -504,7 +505,7 @@ export function PreviewError({
 /** Render the probe's memory pointer as a compact, readable fact sheet. */
 function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
   if (p.error) return <div className="mt-3 text-[13px] text-error">{p.error}</div>;
-  const fmt = (n: number) => n.toLocaleString("en-US");
+  const fmt = (n: number) => formatNumber(n);
   const rows: [string, string][] = [];
   if (p.format) rows.push(["Format", p.format]);
   if (p.size) rows.push(["Size", p.size + (p.gzipped ? " (gzipped)" : "")]);

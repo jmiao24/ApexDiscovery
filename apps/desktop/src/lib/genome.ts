@@ -4,6 +4,8 @@
 // alone. All coordinates are normalized to 1-based inclusive so the ruler and
 // tooltips are consistent regardless of the source format's convention.
 
+import { formatNumber } from "@/i18n/format";
+
 export type GenomeFormat = "bed" | "bedgraph" | "gff" | "gtf" | "vcf";
 
 export interface GenomeFeature {
@@ -215,5 +217,5 @@ export function packRows(features: GenomeFeature[]): number[] {
 
 /** Human-readable base-pair position, e.g. 1_500_000 → "1,500,000". */
 export function formatBp(n: number): string {
-  return Math.round(n).toLocaleString("en-US");
+  return formatNumber(Math.round(n));
 }
