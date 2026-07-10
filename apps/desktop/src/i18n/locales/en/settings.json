@@ -18,7 +18,15 @@
     "hint": "opencode serve, driven over its HTTP + SSE API",
     "connect": "Connect",
     "disconnect": "Disconnect",
-    "serverUrlPlaceholder": "http://127.0.0.1:4096"
+    "serverUrlPlaceholder": "http://127.0.0.1:4096",
+    "proxyLabel": "Network proxy",
+    "proxySystem": "Follow system",
+    "proxyCustom": "Custom…",
+    "proxyNone": "Direct (no proxy)",
+    "proxyPlaceholder": "http://127.0.0.1:7890 / socks5://host:port",
+    "proxyDirectHint": "All agent-runtime connections go direct.",
+    "proxyEffective": "Routing through {{url}}",
+    "proxyNoneDetected": "No system proxy detected — connections go direct."
   },
   "updates": {
     "title": "App updates",
@@ -132,7 +140,9 @@
     "mcpRemoved": "MCP server {{name}} removed",
     "importFailed": "Import failed",
     "noOpenCodeLoginFound": "No OpenCode CLI login found on this machine.",
-    "importedLogin": "Imported your OpenCode CLI login."
+    "importedLogin": "Imported your OpenCode CLI login.",
+    "couldNotSetProxy": "Could not apply the proxy setting",
+    "proxyApplied": "Proxy setting applied"
   },
   "dataFlow": {
     "title": "Privacy & data flow",

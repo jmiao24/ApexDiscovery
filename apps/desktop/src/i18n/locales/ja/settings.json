@@ -18,7 +18,15 @@
     "hint": "opencode serve を、その HTTP + SSE API 経由で操作します",
     "connect": "接続",
     "disconnect": "切断",
-    "serverUrlPlaceholder": "http://127.0.0.1:4096"
+    "serverUrlPlaceholder": "http://127.0.0.1:4096",
+    "proxyLabel": "ネットワークプロキシ",
+    "proxySystem": "システムに従う",
+    "proxyCustom": "カスタム…",
+    "proxyNone": "直接接続(プロキシなし)",
+    "proxyPlaceholder": "http://127.0.0.1:7890 / socks5://host:port",
+    "proxyDirectHint": "エージェントランタイムの通信はすべて直接接続されます。",
+    "proxyEffective": "{{url}} 経由で接続",
+    "proxyNoneDetected": "システムプロキシが見つかりません — 直接接続されます。"
   },
   "updates": {
     "title": "アプリの更新",
@@ -131,7 +139,9 @@
     "mcpRemoved": "MCP サーバー {{name}} を削除しました",
     "importFailed": "インポートに失敗しました",
     "noOpenCodeLoginFound": "このマシンで OpenCode CLI のログインが見つかりませんでした。",
-    "importedLogin": "OpenCode CLI のログインをインポートしました。"
+    "importedLogin": "OpenCode CLI のログインをインポートしました。",
+    "couldNotSetProxy": "プロキシ設定を適用できませんでした",
+    "proxyApplied": "プロキシ設定を適用しました"
   },
   "dataFlow": {
     "title": "プライバシーとデータフロー",

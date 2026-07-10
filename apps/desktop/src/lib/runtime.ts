@@ -24,10 +24,12 @@ import {
   newDatedWorkspace,
   runtimePassword,
   setApprovalMode as persistApprovalMode,
+  setProxySetting as persistProxySetting,
   setWorkspace,
   startRuntime,
   workspacePath,
   type ApprovalMode,
+  type ProxyMode,
   type ToolStatus,
 } from "./tauri";
 import { kernelReset } from "./kernel";
@@ -89,6 +91,8 @@ interface RuntimeState {
   approvalMode: ApprovalMode;
   /** Persist a new approval mode (restarts the sidecar) and reconnect. */
   setApprovalMode: (mode: ApprovalMode) => Promise<void>;
+  /** Persist the network-proxy setting (restarts the sidecar) and reconnect. */
+  setProxySetting: (mode: ProxyMode, url: string) => Promise<void>;
   tools: ToolStatus[];
   hiddenExamples: string[];
   error: string | null;
@@ -550,6 +554,17 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     try {
       await persistApprovalMode(mode); // writes the config; restarts the sidecar
       set({ approvalMode: mode });
+      await get().connectRetry();
+    } finally {
+      set({ switching: false });
+    }
+  },
+
+  setProxySetting: async (mode, url) => {
+    // Same masked restart as setApprovalMode: the proxy env applies at spawn.
+    set({ switching: true });
+    try {
+      await persistProxySetting(mode, url); // persists; restarts the sidecar
       await get().connectRetry();
     } finally {
       set({ switching: false });

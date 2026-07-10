@@ -37,6 +37,9 @@ import {
   workspaceBase,
   type JupyterStatus,
   type PythonInterpreter,
+  getProxySetting,
+  type ProxyMode,
+  type ProxySetting,
 } from "@/lib/tauri";
 import { useSetupStore } from "@/lib/setup";
 import { RemoteComputeCard } from "@/components/settings/RemoteComputeCard";
@@ -205,6 +208,36 @@ export function SettingsPage() {
     }
   };
 
+  // Network proxy for the sidecar (follow system / custom / direct).
+  const [proxy, setProxy] = useState<ProxySetting | null>(null);
+  const [proxyUrlInput, setProxyUrlInput] = useState("");
+  const refreshProxy = useCallback(() => {
+    void getProxySetting().then((p) => {
+      setProxy(p);
+      if (p) setProxyUrlInput(p.url);
+    });
+  }, []);
+  useEffect(refreshProxy, [refreshProxy]);
+
+  const applyProxy = (mode: ProxyMode, url: string) =>
+    run(t("toast.couldNotSetProxy"), async () => {
+      await useRuntimeStore.getState().setProxySetting(mode, url);
+      refreshProxy();
+      toast.success(t("toast.proxyApplied"));
+    });
+
+  /** Mode select: system/none apply immediately; custom just reveals the URL
+   *  field — it applies on Save/Enter once a URL is typed. */
+  const changeProxyMode = (mode: ProxyMode) => {
+    if (!proxy) return;
+    if (mode === "custom") {
+      setProxy({ ...proxy, mode: "custom" });
+      return;
+    }
+    void applyProxy(mode, "");
+  };
+  const validProxyUrl = /^(https?|socks5):\/\/\S+:\d+\/?$/i.test(proxyUrlInput.trim());
+
   // The one post-change sequence — run() and the background OAuth wait must
   // stay in lockstep, so they share it instead of each keeping a copy.
   const refreshAll = async () => {
@@ -252,6 +285,18 @@ export function SettingsPage() {
 
   const startOAuth = (providerID: string, methodIndex: number, inputs?: Record<string, string>) =>
     run(t("toast.couldNotStartLogin"), async () => {
+      // Re-clicking while THIS login is already waiting must not re-authorize:
+      // a second authorize supersedes the pending one server-side, and some
+      // provider plugins (xai) then tear down the loopback callback server the
+      // new attempt just handed to the browser — every retry would fail. The
+      // existing wait keeps covering the flow; let it finish.
+      if (
+        oauth &&
+        oauth.providerID === providerID &&
+        oauth.methodIndex === methodIndex &&
+        oauthAbort.current
+      )
+        return;
       invalidateOauthWait(); // this flow replaces any pending one
       const gen = oauthGen.current;
       const auth = await getClient()!.oauthAuthorize(providerID, methodIndex, inputs);
@@ -265,27 +310,59 @@ export function SettingsPage() {
         void waitForBrowserLogin(providerID, methodIndex, gen);
     });
 
+  // Provider plugins hold a browser login open for minutes (xai: 5). Match
+  // that window when re-attaching a dropped callback wait below.
+  const OAUTH_WAIT_MS = 5 * 60 * 1000;
+
   const waitForBrowserLogin = async (providerID: string, methodIndex: number, gen: number) => {
-    const abort = new AbortController();
-    oauthAbort.current = abort;
-    try {
-      await getClient()!.oauthCallback(providerID, methodIndex, undefined, abort.signal);
-      if (gen !== oauthGen.current) {
-        // Cancelled in the UI, but the login DID complete — refresh silently
-        // so the now-connected provider still shows up in the list.
+    // The callback POST hangs open until the browser redirect lands, but the
+    // webview's native fetch enforces its own idle timeout (~60s in WKWebView)
+    // — far shorter than the provider's login window, and a slow browser login
+    // (2FA, consent) used to surface as "login did not complete" even though
+    // the browser then finished successfully. A network-level drop is NOT a
+    // failed login: the server keeps the pending attempt and a re-POST resumes
+    // waiting on it (opencode's ProviderAuth.callback re-invokes the stored
+    // pending closure; it is never consumed). Retry those; HTTP errors are the
+    // provider's real verdict and stay terminal.
+    const deadline = Date.now() + OAUTH_WAIT_MS;
+    let lastError: unknown = new Error("Timed out waiting for the browser login");
+    while (Date.now() < deadline) {
+      const abort = new AbortController();
+      oauthAbort.current = abort;
+      try {
+        await getClient()!.oauthCallback(providerID, methodIndex, undefined, abort.signal);
+        if (gen !== oauthGen.current) {
+          // Cancelled in the UI, but the login DID complete — refresh silently
+          // so the now-connected provider still shows up in the list.
+          await refreshAll();
+          return;
+        }
+        setOauth(null);
+        toast.success(t("toast.providerConnected", { providerID }));
         await refreshAll();
         return;
+      } catch (e) {
+        if (gen !== oauthGen.current) return; // cancelled — the abort is expected
+        // Webview fetch failures (idle timeout, transient drop) are TypeError;
+        // apiError() throws plain Error for the server's HTTP verdicts.
+        if (e instanceof TypeError) {
+          lastError = e;
+          await new Promise((r) => setTimeout(r, 500));
+          if (gen !== oauthGen.current) return;
+          continue;
+        }
+        setOauth(null);
+        toast.error(`${t("toast.loginDidNotComplete")}: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      } finally {
+        if (oauthAbort.current === abort) oauthAbort.current = null;
       }
-      setOauth(null);
-      toast.success(t("toast.providerConnected", { providerID }));
-      await refreshAll();
-    } catch (e) {
-      if (gen !== oauthGen.current) return; // cancelled — the abort is expected
-      setOauth(null);
-      toast.error(`${t("toast.loginDidNotComplete")}: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      if (oauthAbort.current === abort) oauthAbort.current = null;
     }
+    // The login window closed without a verdict from the server.
+    setOauth(null);
+    toast.error(
+      `${t("toast.loginDidNotComplete")}: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+    );
   };
 
   const cancelOAuth = () => {
@@ -391,12 +468,15 @@ export function SettingsPage() {
   const q = connectQuery.trim().toLowerCase();
   const selected =
     catalog.find((p) => p.id === q) ?? catalog.find((p) => p.name.toLowerCase() === q) ?? null;
-  // Every provider takes an API key via PUT /auth; special flows (OAuth) add to that.
-  const methods: ProviderAuthMethod[] = selected
-    ? [
-        ...(authMethods[selected.id] ?? []).filter((m) => m.type === "oauth"),
-        { type: "api", label: "API key" },
-      ]
+  // Every provider takes an API key via PUT /auth; special flows (OAuth) add to
+  // that. Keep each method's index in the provider's FULL upstream list — the
+  // authorize call is by that index, and filtering re-numbers positions (a
+  // provider whose api method precedes an oauth one would authorize the wrong
+  // method).
+  const oauthMethods: Array<{ method: ProviderAuthMethod; index: number }> = selected
+    ? (authMethods[selected.id] ?? [])
+        .map((method, index) => ({ method, index }))
+        .filter(({ method }) => method.type === "oauth")
     : [];
 
   return (
@@ -439,6 +519,53 @@ export function SettingsPage() {
               </>
             )}
           </div>
+
+          {/* Network proxy: follow system / custom / direct. system and none
+              apply on select; custom applies on Save (needs a URL first). */}
+          {isTauri && proxy && (
+            <div className="mt-3 border-t border-border pt-3">
+              <div className="flex items-center gap-2">
+                <span className="w-28 shrink-0 text-xs text-muted">{t("runtime.proxyLabel")}</span>
+                <select
+                  value={proxy.mode}
+                  onChange={(e) => changeProxyMode(e.target.value as ProxyMode)}
+                  disabled={busy}
+                  className={cn(inputCls("w-44"), "cursor-pointer")}
+                >
+                  <option value="system">{t("runtime.proxySystem")}</option>
+                  <option value="custom">{t("runtime.proxyCustom")}</option>
+                  <option value="none">{t("runtime.proxyNone")}</option>
+                </select>
+                {proxy.mode === "custom" && (
+                  <>
+                    <input
+                      value={proxyUrlInput}
+                      onChange={(e) => setProxyUrlInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && validProxyUrl) void applyProxy("custom", proxyUrlInput.trim());
+                      }}
+                      placeholder={t("runtime.proxyPlaceholder")}
+                      className={inputCls("flex-1 font-mono")}
+                    />
+                    <button
+                      className={btnAccent()}
+                      onClick={() => void applyProxy("custom", proxyUrlInput.trim())}
+                      disabled={busy || !validProxyUrl}
+                    >
+                      <Check size={13} /> {t("common:actions.save")}
+                    </button>
+                  </>
+                )}
+              </div>
+              <p className="mt-1.5 pl-28 text-[11px] leading-relaxed text-muted">
+                {proxy.mode === "none"
+                  ? t("runtime.proxyDirectHint")
+                  : proxy.effective
+                    ? t("runtime.proxyEffective", { url: proxy.effective })
+                    : t("runtime.proxyNoneDetected")}
+              </p>
+            </div>
+          )}
         </Card>
 
         {/* ---- Models & providers ---- */}
@@ -534,7 +661,7 @@ export function SettingsPage() {
 
                   {selected && (
                     <div className="mt-2 space-y-2">
-                      {methods.map((m, i) =>
+                      {oauthMethods.map(({ method: m, index: i }) =>
                         m.type === "oauth" ? (
                           <div key={i} className="space-y-1.5">
                             {(m.prompts ?? []).map((pr) =>

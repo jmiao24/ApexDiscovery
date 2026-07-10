@@ -69,6 +69,8 @@ pub fn run() {
             runtime::configure_opencode,
             runtime::get_approval_mode,
             runtime::set_approval_mode,
+            runtime::get_proxy_setting,
+            runtime::set_proxy_setting,
             kernel::kernel_execute,
             kernel::kernel_reset,
             kernel::python_interpreter,

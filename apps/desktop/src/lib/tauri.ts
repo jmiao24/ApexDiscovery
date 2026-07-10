@@ -85,6 +85,30 @@ export async function setApprovalMode(mode: ApprovalMode): Promise<void> {
   await invoke("set_approval_mode", { mode });
 }
 
+/** Network proxy for the sidecar: follow the OS, a fixed URL, or direct. */
+export type ProxyMode = "system" | "custom" | "none";
+export interface ProxySetting {
+  mode: ProxyMode;
+  /** The custom URL (empty unless mode is "custom"). */
+  url: string;
+  /** The proxy the sidecar would use right now; null ⇒ direct. */
+  effective: string | null;
+}
+
+/** The persisted proxy setting (desktop only; null in browser). */
+export async function getProxySetting(): Promise<ProxySetting | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return await invoke<ProxySetting>("get_proxy_setting");
+}
+
+/** Persist the proxy setting; the sidecar restarts — the caller must reconnect. */
+export async function setProxySetting(mode: ProxyMode, url: string): Promise<void> {
+  if (!isTauri) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("set_proxy_setting", { mode, url });
+}
+
 /** Remove a provider/mcp entry from the global OpenCode config (restarts the sidecar). */
 export async function removeConfigEntry(section: "provider" | "mcp", key: string): Promise<void> {
   if (!isTauri) throw new Error("not running in the desktop app");

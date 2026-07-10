@@ -399,6 +399,141 @@ pub(crate) fn free_port() -> u16 {
         .unwrap_or(43917)
 }
 
+/// Network-proxy setting for the sidecar: `system` (default) follows the OS,
+/// `custom <url>` uses a fixed proxy, `none` forces direct connections.
+/// Stored as one line in `proxy.txt` under the runtime root.
+fn proxy_setting_file(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(runtime_root(app)?.join("proxy.txt"))
+}
+
+/// The persisted proxy setting as (mode, url). Unknown/missing → system.
+fn read_proxy_setting(app: &AppHandle) -> (String, String) {
+    let raw = proxy_setting_file(app)
+        .ok()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .unwrap_or_default();
+    let line = raw.lines().next().unwrap_or("").trim();
+    match line.split_once(' ') {
+        Some(("custom", url)) if !url.trim().is_empty() => ("custom".into(), url.trim().into()),
+        _ if line == "none" => ("none".into(), String::new()),
+        _ => ("system".into(), String::new()),
+    }
+}
+
+/// Accept `http://`, `https://` or `socks5://` with a host:port.
+fn validate_proxy_url(url: &str) -> Result<(), String> {
+    let rest = ["http://", "https://", "socks5://"]
+        .iter()
+        .find_map(|s| url.strip_prefix(s))
+        .ok_or("proxy URL must start with http://, https:// or socks5://")?;
+    let hostport = rest.trim_end_matches('/');
+    let (host, port) = hostport
+        .rsplit_once(':')
+        .ok_or("proxy URL needs a host:port")?;
+    if host.is_empty() || port.parse::<u16>().is_err() {
+        return Err("proxy URL needs a host:port".into());
+    }
+    Ok(())
+}
+
+/// Proxy env for the sidecar. A GUI app launched from Finder/Dock inherits no
+/// shell environment, so a user whose traffic runs through a system proxy
+/// (common where provider hosts are unreachable directly) gets a sidecar that
+/// cannot reach them: its fetch honors HTTP(S)_PROXY but nothing sets it.
+/// Resolved from the persisted setting: `system` mirrors the OS proxy (an
+/// existing env always wins — a terminal launch already carries the user's own
+/// values), `custom` pins the user's URL, `none` neutralizes even inherited
+/// env. Verified live with xAI OAuth (#9): the proxied browser delivers the
+/// code, then the sidecar's token exchange to auth.x.ai hangs without a proxy
+/// and succeeds with one.
+fn resolve_proxy_env(mode: &str, url: &str) -> Vec<(&'static str, String)> {
+    // Loopback traffic (the sidecar's own API, provider OAuth callback
+    // servers) must never route through a proxy.
+    const NO_PROXY_LOOPBACK: &str = "localhost,127.0.0.1,::1";
+    match mode {
+        "none" => vec![
+            ("HTTP_PROXY", String::new()),
+            ("HTTPS_PROXY", String::new()),
+            ("http_proxy", String::new()),
+            ("https_proxy", String::new()),
+            ("ALL_PROXY", String::new()),
+            ("NO_PROXY", "*".to_string()),
+        ],
+        "custom" => vec![
+            ("HTTP_PROXY", url.to_string()),
+            ("HTTPS_PROXY", url.to_string()),
+            ("NO_PROXY", NO_PROXY_LOOPBACK.to_string()),
+        ],
+        _ => {
+            if ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]
+                .iter()
+                .any(|k| std::env::var_os(k).is_some())
+            {
+                return Vec::new();
+            }
+            match system_proxy_url() {
+                Some(sys) => vec![
+                    ("HTTP_PROXY", sys.clone()),
+                    ("HTTPS_PROXY", sys),
+                    ("NO_PROXY", NO_PROXY_LOOPBACK.to_string()),
+                ],
+                None => Vec::new(),
+            }
+        }
+    }
+}
+
+/// The proxy the sidecar would actually use right now, for display in
+/// Settings. None ⇒ direct connections.
+fn effective_proxy(mode: &str, url: &str) -> Option<String> {
+    match mode {
+        "none" => None,
+        "custom" => Some(url.to_string()),
+        _ => ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]
+            .iter()
+            .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()))
+            .or_else(system_proxy_url),
+    }
+}
+
+/// The system-configured proxy as a URL, if one is enabled (macOS: scutil).
+/// HTTP(S) proxies are preferred — an HTTPS proxy endpoint still speaks plain
+/// HTTP CONNECT, hence the http:// scheme — with SOCKS as the fallback.
+#[cfg(target_os = "macos")]
+fn system_proxy_url() -> Option<String> {
+    let out = quiet_command("scutil").arg("--proxy").output().ok()?;
+    parse_scutil_proxy(&String::from_utf8_lossy(&out.stdout))
+}
+
+/// Parse `scutil --proxy` output (`  Key : value` lines) into a proxy URL.
+fn parse_scutil_proxy(text: &str) -> Option<String> {
+    let get = |key: &str| -> Option<String> {
+        let prefix = format!("{key} : ");
+        text.lines()
+            .find_map(|l| l.trim().strip_prefix(prefix.as_str()).map(|v| v.trim().to_string()))
+    };
+    let enabled = |key: &str| get(key).as_deref() == Some("1");
+    for (en, host, port, scheme) in [
+        ("HTTPSEnable", "HTTPSProxy", "HTTPSPort", "http"),
+        ("HTTPEnable", "HTTPProxy", "HTTPPort", "http"),
+        ("SOCKSEnable", "SOCKSProxy", "SOCKSPort", "socks5"),
+    ] {
+        if enabled(en) {
+            if let (Some(h), Some(p)) = (get(host), get(port)) {
+                return Some(format!("{scheme}://{h}:{p}"));
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "macos"))]
+fn system_proxy_url() -> Option<String> {
+    // Windows/Linux: terminal-launched apps inherit the user's proxy env
+    // (covered by the passthrough above); no OS store is read here yet.
+    None
+}
+
 fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
     let root = runtime_root(app)?;
     let cfg = root.join("xdg-config");
@@ -456,7 +591,13 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
         .env("OPENSCIENCE_APP_VERSION", app.package_info().version.to_string())
         .current_dir(workspace);
     // GUI-launched apps get a minimal PATH; give the agent the user's real tools.
-    let cmd = cmd.env("PATH", enriched_path());
+    let mut cmd = cmd.env("PATH", enriched_path());
+    // Apply the network-proxy setting so provider logins and API calls work
+    // where direct connections are blocked (see resolve_proxy_env).
+    let (proxy_mode, proxy_url) = read_proxy_setting(app);
+    for (k, v) in resolve_proxy_env(&proxy_mode, &proxy_url) {
+        cmd = cmd.env(k, v);
+    }
 
     let (mut rx, child) = cmd.spawn().map_err(|e| format!("failed to spawn opencode: {e}"))?;
     // Drain events so the child's stdout/stderr buffer never blocks it.
@@ -648,8 +789,45 @@ pub fn kill_child(state: &RuntimeState) {
 
 #[cfg(test)]
 mod tests {
-    use super::{prune_stale_skills, random_hex, remove_key_from_config, sync_skill_pack};
+    use super::{
+        parse_scutil_proxy, prune_stale_skills, random_hex, remove_key_from_config,
+        resolve_proxy_env, sync_skill_pack, validate_proxy_url,
+    };
     use std::fs;
+
+    #[test]
+    fn proxy_url_validation() {
+        assert!(validate_proxy_url("http://127.0.0.1:7890").is_ok());
+        assert!(validate_proxy_url("socks5://10.0.0.2:1080").is_ok());
+        assert!(validate_proxy_url("http://[::1]:8080").is_ok());
+        assert!(validate_proxy_url("127.0.0.1:7890").is_err()); // no scheme
+        assert!(validate_proxy_url("http://host").is_err()); // no port
+        assert!(validate_proxy_url("http://:7890").is_err()); // no host
+        assert!(validate_proxy_url("ftp://h:1").is_err()); // wrong scheme
+    }
+
+    #[test]
+    fn proxy_env_modes() {
+        let none = resolve_proxy_env("none", "");
+        assert!(none.iter().any(|(k, v)| *k == "NO_PROXY" && v == "*"));
+        assert!(none.iter().any(|(k, v)| *k == "HTTPS_PROXY" && v.is_empty()));
+
+        let custom = resolve_proxy_env("custom", "http://127.0.0.1:7890");
+        assert!(custom.iter().any(|(k, v)| *k == "HTTPS_PROXY" && v == "http://127.0.0.1:7890"));
+        assert!(custom.iter().any(|(k, v)| *k == "NO_PROXY" && v.contains("127.0.0.1")));
+    }
+
+    #[test]
+    fn scutil_proxy_parses_and_prefers_https() {
+        // Real `scutil --proxy` shape (indented `Key : value` lines).
+        let all = "<dictionary> {\n  HTTPEnable : 1\n  HTTPPort : 1087\n  HTTPProxy : 127.0.0.1\n  HTTPSEnable : 1\n  HTTPSPort : 1087\n  HTTPSProxy : 127.0.0.1\n  SOCKSEnable : 1\n  SOCKSPort : 1087\n  SOCKSProxy : 127.0.0.1\n}";
+        assert_eq!(parse_scutil_proxy(all).as_deref(), Some("http://127.0.0.1:1087"));
+        let socks_only = "  SOCKSEnable : 1\n  SOCKSPort : 7890\n  SOCKSProxy : 10.0.0.2\n";
+        assert_eq!(parse_scutil_proxy(socks_only).as_deref(), Some("socks5://10.0.0.2:7890"));
+        let disabled = "  HTTPEnable : 0\n  HTTPPort : 1087\n  HTTPProxy : 127.0.0.1\n";
+        assert_eq!(parse_scutil_proxy(disabled), None);
+        assert_eq!(parse_scutil_proxy(""), None);
+    }
 
     #[test]
     fn prune_removes_only_stale_skill_dirs() {
@@ -854,6 +1032,47 @@ pub fn set_approval_mode(
     tighten_private(&path);
 
     // Same restart flow as configure_opencode: reload rules on a stable port.
+    if state.url.lock().unwrap().is_some() {
+        restart_sidecar(&app, &state)
+    } else {
+        Ok(path.to_string_lossy().to_string())
+    }
+}
+
+/// The persisted proxy setting plus the proxy the sidecar would use right now.
+#[tauri::command]
+pub fn get_proxy_setting(app: AppHandle) -> Result<serde_json::Value, String> {
+    let (mode, url) = read_proxy_setting(&app);
+    let effective = effective_proxy(&mode, &url);
+    Ok(serde_json::json!({ "mode": mode, "url": url, "effective": effective }))
+}
+
+/// Persist the proxy setting ("system" | "custom" | "none", url for custom)
+/// and restart the sidecar so its network env takes effect.
+#[tauri::command(async)]
+pub fn set_proxy_setting(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+    mode: String,
+    url: String,
+) -> Result<String, String> {
+    let line = match mode.as_str() {
+        "system" => "system".to_string(),
+        "none" => "none".to_string(),
+        "custom" => {
+            let url = url.trim();
+            validate_proxy_url(url)?;
+            format!("custom {url}")
+        }
+        other => return Err(format!("unknown proxy mode: {other}")),
+    };
+    let path = proxy_setting_file(&app)?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, line).map_err(|e| e.to_string())?;
+
+    // Same restart flow as set_approval_mode: the env only applies at spawn.
     if state.url.lock().unwrap().is_some() {
         restart_sidecar(&app, &state)
     } else {

@@ -1,5 +1,9 @@
 # Progress
 
+2026-07-10 03:35 · fix(runtime): #9 root cause found by live probe — the browser delivers the xAI OAuth code fine; the sidecar's token exchange to auth.x.ai hangs because GUI-launched children inherit no proxy config. Added a network-proxy setting (follow system via scutil / custom URL / direct) in Settings → Agent runtime, injected as HTTP(S)_PROXY env at sidecar spawn with NO_PROXY for loopback; system+none apply on select via the masked-restart flow.
+
+2026-07-10 01:40 · fix(settings): OAuth browser-login hardening (#9) — retry the callback wait on webview network drops (WKWebView kills idle fetches ~60s, far short of xai's 5-min window; opencode's pending closure is re-invocable, verified in v1.17.13 source), never re-authorize while the same login is waiting (a second authorize makes the xai plugin close the loopback server the new attempt needs), and fix a latent oauth method-index mismatch after filtering. Provider-side token-exchange rejections (no SuperGrok, blocked auth.x.ai) remain possible and are swallowed upstream — awaiting reporter feedback.
+
 2026-07-10 00:55 · fix(sdk): self-heal the event stream (#8) — the global-config PATCH kills /event ~2s AFTER acknowledging, past af58765's masked reconnect, and EventSource never retries a terminally closed stream; the client now reopens it itself with backoff (verified in debug.log: drop → ready in ~300ms, no manual Connect). "Old model" self-reports are a prompt-level illusion — the app never pins a model per session.
 
 2026-07-09 23:06 · fix: force UTF-8 on the Python kernel stdio (#6, garbled Chinese output on Windows); surface the active session folder new notebooks are created in on the Notebooks page (#7).

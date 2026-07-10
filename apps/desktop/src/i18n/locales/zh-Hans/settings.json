@@ -18,7 +18,15 @@
     "hint": "opencode serve，通过其 HTTP + SSE API 驱动",
     "connect": "连接",
     "disconnect": "断开连接",
-    "serverUrlPlaceholder": "http://127.0.0.1:4096"
+    "serverUrlPlaceholder": "http://127.0.0.1:4096",
+    "proxyLabel": "网络代理",
+    "proxySystem": "跟随系统",
+    "proxyCustom": "自定义…",
+    "proxyNone": "直连(不使用代理)",
+    "proxyPlaceholder": "http://127.0.0.1:7890 / socks5://host:port",
+    "proxyDirectHint": "Agent 运行时的所有连接均为直连。",
+    "proxyEffective": "经由 {{url}} 转发",
+    "proxyNoneDetected": "未检测到系统代理——连接将直连。"
   },
   "updates": {
     "title": "应用更新",
@@ -131,7 +139,9 @@
     "mcpRemoved": "MCP 服务器 {{name}} 已移除",
     "importFailed": "导入失败",
     "noOpenCodeLoginFound": "在此计算机上未找到 OpenCode CLI 登录信息。",
-    "importedLogin": "已导入您的 OpenCode CLI 登录信息。"
+    "importedLogin": "已导入您的 OpenCode CLI 登录信息。",
+    "couldNotSetProxy": "无法应用代理设置",
+    "proxyApplied": "代理设置已生效"
   },
   "dataFlow": {
     "title": "隐私与数据流",
