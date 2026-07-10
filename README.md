@@ -1,12 +1,12 @@
 <div align="center">
 
-[![Open Science Desktop — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+[![APEX Science Desktop — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
 
-# Open Science Desktop
+# APEX Science Desktop
 
 **Local-first, model-agnostic AI research workbench for macOS, Windows & Linux.**
 
-Formerly Open Science. An open-source desktop alternative to Claude Science and
+Formerly Open Science Desktop. An open-source desktop alternative to Claude Science and
 similar AI-for-science workbenches — built with Tauri, MCP, agent skills, and
 reproducible artifacts. It connects agents, notebooks, files, figures, reports,
 runs, and review into one auditable desktop workflow.
@@ -37,7 +37,7 @@ runs, and review into one auditable desktop workflow.
 
 ---
 
-🎉 **Recognition:** Open Science Desktop ranks #1 by scored-task average on [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/), an end-to-end benchmark for autonomous scientific research agents (Pass@1 leaderboard, July 9, 2026).
+🎉 **Recognition:** APEX Science Desktop ranks #1 by scored-task average on [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/), an end-to-end benchmark for autonomous scientific research agents (Pass@1 leaderboard, July 9, 2026).
 
 ---
 
@@ -134,7 +134,7 @@ office/document skills below.
 | Runtime | Bundled OpenCode sidecar, auto-started by the app, isolated from the user's own OpenCode config/data. |
 | Sessions | Multi-session chat/history, dated workspace folders, global history across workspaces, `/` commands, and `!` shell mode. |
 | Files | Global and per-session file browsing, context menu actions, external open/reveal, copy path, and local preview server. |
-| Notebooks | Real `.ipynb` files, Python and R notebook creation, local kernel execution, managed Jupyter environment via bundled `uv`, and an Open JupyterLab action. |
+| Notebooks | `.ipynb` artifacts render in the built-in viewer with local kernel execution; the agent drives a managed Jupyter environment (bundled `uv`) via MCP. |
 | Runs | Append-only run logs, global SQLite run index, search/facets/pagination, local/remote surfaces, output links, logs, and reproduce prompts. |
 | Provenance | `.openscience/provenance.jsonl` tracks file versions and links produced artifacts back to the run or edit that created them. |
 | Review | Traceability, statistics-integrity, domain-check, large-file, publication-figure, remote-compute, and Modal run skills are bundled as first-party skills. |
@@ -168,7 +168,7 @@ You can also add any local or remote MCP server from Settings. See
 [`docs/CONNECT_YOUR_TOOLS.md`](./docs/CONNECT_YOUR_TOOLS.md).
 
 For a neutral positioning note, see
-[`Open Science Desktop vs OpenScience`](./docs/open-science-desktop-vs-openscience.md).
+[`APEX Science Desktop vs OpenScience`](./docs/open-science-desktop-vs-openscience.md).
 
 ## Install
 
@@ -185,7 +185,7 @@ Builds are not code-signed or notarized yet.
 install it into Applications and run:
 
 ```bash
-xattr -cr "/Applications/Open Science.app"
+xattr -cr "/Applications/APEX Science.app"
 ```
 
 **Windows**: if SmartScreen appears, choose **More info -> Run anyway**.
@@ -197,6 +197,26 @@ sudo apt install ./OpenScience_*.deb
 # or
 sudo rpm -i OpenScience_*.rpm
 ```
+
+## Self-hosted web version
+
+The same workbench, served to a browser by one self-hosted process — for a lab
+server or a headless machine. Chat/sessions, the file explorer, artifact
+viewers, runs, and provenance work in the browser; notebooks, remote compute
+(SSH/Slurm), and Modal remain desktop-only for now.
+
+```bash
+APEX_TOKEN=<pick-a-token> docker compose up -d
+# open http://localhost:3411 and sign in with the token
+```
+
+Or without Docker: build the frontend (`pnpm --filter @ai4s/desktop build`),
+then `cargo run --release --manifest-path apps/server/Cargo.toml` — run
+`apexscience-server --help` for the flags (data dir, opencode binary, bind
+host/port). The server binds `127.0.0.1` by default; to expose it beyond
+localhost, pass `--host 0.0.0.0` and terminate TLS in a reverse proxy in
+front. The browser only ever holds the login token — the agent-runtime
+password stays on the server, injected by its `/runtime` reverse proxy.
 
 ## Build from source
 
@@ -246,6 +266,8 @@ pnpm lint
 | Path | Purpose |
 | --- | --- |
 | `apps/desktop/` | Tauri + React desktop app. |
+| `apps/server/` | Axum server for the self-hosted web version. |
+| `crates/shell-core/` | Shared Rust command core (desktop + web server). |
 | `packages/sdk/` | `OpenCodeClient`; keeps the UI from calling OpenCode directly. |
 | `packages/shared/` | Shared domain types and chart palette. |
 | `packages/ui/` | Shared UI package. |
@@ -273,17 +295,17 @@ review.
 
 Issues and PRs are welcome. Keep changes minimal and verifiable, follow
 [`AGENTS.md`](./AGENTS.md), and run the checks before opening a PR. For discussion,
-join the [Open Science Discord](https://discord.gg/fWNMDKcd5P) or the
+join the [APEX Science Discord](https://discord.gg/fWNMDKcd5P) or the
 [linux.do](https://linux.do) community.
 
 ## Citation
 
-If you use Open Science Desktop in your research, please cite it:
+If you use APEX Science Desktop in your research, please cite it:
 
 ```bibtex
 @software{open_science_desktop,
-  author  = {{The Open Science Desktop Contributors}},
-  title   = {Open Science Desktop: a local-first, model-agnostic AI research workbench},
+  author  = {{The APEX Science Desktop Contributors}},
+  title   = {APEX Science Desktop: a local-first, model-agnostic AI research workbench},
   year    = {2026},
   version = {0.1.9},
   url     = {https://github.com/ai4s-research/open-science},
@@ -298,5 +320,5 @@ GitHub's **"Cite this repository"** button (top of the repo page, generated from
 
 [MIT](./LICENSE). Bundled third-party skills and connectors keep their own licenses.
 
-> Open Science Desktop is beta research tooling. Treat outputs as drafts: verify numbers,
+> APEX Science Desktop is beta research tooling. Treat outputs as drafts: verify numbers,
 > citations, code, and conclusions before publication or decision-making.

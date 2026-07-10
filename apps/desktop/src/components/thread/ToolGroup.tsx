@@ -276,20 +276,16 @@ export function ToolGroup({
   activityFor?: (childSessionId: string) => string | undefined;
 }) {
   const { t } = useTranslation(["session", "common"]);
-  // While a step runs the group stays open (the live tail must be visible);
-  // once everything settles it folds to the summary. The fold waits a grace
-  // period — within a turn the next command follows in seconds, and an
-  // open→shut→open flap between steps would be pure jank. A click overrides.
+  // Once a step in the group runs, the group opens and STAYS open — it never
+  // auto-folds. Folding between steps (the old grace-timer design) made the
+  // whole block shut and reopen whenever the model thought for a few seconds
+  // between commands, which read as flicker. History sessions still render
+  // folded (nothing was active in this view); a click always overrides.
   const active = blocks.some((b) => b.status === "running" || b.status === "pending");
   const failed = blocks.filter((b) => b.status === "failed" || b.status === "warning").length;
   const [autoOpen, setAutoOpen] = useState(active);
   useEffect(() => {
-    if (active) {
-      setAutoOpen(true);
-      return;
-    }
-    const timer = window.setTimeout(() => setAutoOpen(false), 2000);
-    return () => window.clearTimeout(timer);
+    if (active) setAutoOpen(true);
   }, [active]);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const open = userOpen ?? autoOpen;

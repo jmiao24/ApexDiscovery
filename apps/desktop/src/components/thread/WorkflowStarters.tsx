@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { ChevronRight, FileSearch, FlaskConical, Globe2, LineChart } from "lucide-react";
-import { installExample, isTauri } from "@/lib/tauri";
+import { hasShell, installExample } from "@/lib/tauri";
 import { toast } from "@/lib/toast";
 
 export interface WorkflowStarter {
@@ -53,7 +53,7 @@ export const WORKFLOW_STARTERS: WorkflowStarter[] = [
       "climate-trends/warming_trend.png, and write climate-trends/report.md citing the dataset " +
       "source — every number must come from the code you ran.",
     prepare: async () => {
-      if (isTauri) await installExample("climate-trends");
+      if (hasShell()) await installExample("climate-trends");
     },
   },
 ];

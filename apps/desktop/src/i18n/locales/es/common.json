@@ -3,5 +3,14 @@
     "save": "Guardar",
     "cancel": "Cancelar",
     "remove": "Quitar"
+  },
+  "login": {
+    "title": "APEX Science",
+    "hint": "Introduce el token de acceso impreso por el servidor (o definido en APEX_TOKEN).",
+    "placeholder": "Token de acceso",
+    "signIn": "Iniciar sesión",
+    "signingIn": "Iniciando sesión…",
+    "wrongToken": "Token incorrecto: revisa el registro de arranque del servidor (o APEX_TOKEN).",
+    "unreachable": "No se pudo contactar con el servidor."
   }
 }

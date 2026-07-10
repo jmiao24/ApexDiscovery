@@ -350,7 +350,7 @@ export interface ProvenanceEnv {
   python?: string;
   /** OS and architecture, e.g. "macos-aarch64". */
   platform: string;
-  /** Open Science app version that recorded it. */
+  /** APEX Science app version that recorded it. */
   app: string;
   /** Installed Python packages (pip freeze), content-addressed to a lockfile. */
   packages?: PackageSnapshot;

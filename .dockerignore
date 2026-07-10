@@ -1,0 +1,13 @@
+# Keep the Docker build context lean — everything here is rebuilt or refetched
+# inside the build stages.
+.git
+node_modules
+**/node_modules
+**/dist
+target
+**/target
+apps/desktop/src-tauri/binaries
+apps/desktop/src-tauri/gen
+runtime/skills/external
+docs/assets
+videos

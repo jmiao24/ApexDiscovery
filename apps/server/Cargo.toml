@@ -1,0 +1,19 @@
+[package]
+name = "apexscience-server"
+version = "0.1.9"
+description = "Self-hosted web server for the APEX Science workbench: the same shell-core commands the desktop app runs, exposed over HTTP for a browser frontend."
+authors = ["AI4S Workbench contributors"]
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+shell-core = { path = "../../crates/shell-core" }
+axum = { version = "0.8", features = ["multipart"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Reverse-proxy client to the OpenCode sidecar (loopback only; streams SSE).
+reqwest = { version = "0.12", default-features = false, features = ["stream", "json"] }
+futures-util = "0.3"

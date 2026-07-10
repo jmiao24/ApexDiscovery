@@ -3,5 +3,14 @@
     "save": "保存",
     "cancel": "キャンセル",
     "remove": "削除"
+  },
+  "login": {
+    "title": "APEX Science",
+    "hint": "サーバー起動時に表示されたアクセストークン（または APEX_TOKEN の値）を入力してください。",
+    "placeholder": "アクセストークン",
+    "signIn": "サインイン",
+    "signingIn": "サインイン中…",
+    "wrongToken": "トークンが違います。サーバーの起動ログ（または APEX_TOKEN）を確認してください。",
+    "unreachable": "サーバーに接続できませんでした。"
   }
 }

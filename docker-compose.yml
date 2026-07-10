@@ -1,0 +1,20 @@
+# Self-hosted ApexScience web server.
+#   APEX_TOKEN=<your-token> docker compose up -d
+# Open http://localhost:3411 and sign in with the token. For access beyond
+# localhost, terminate TLS in a reverse proxy in front of this service.
+services:
+  apexscience:
+    build: .
+    ports:
+      - "3411:3411"
+    environment:
+      # Pin the login token; without it a fresh one is generated per start
+      # (printed in the container log).
+      APEX_TOKEN: ${APEX_TOKEN:-}
+    volumes:
+      # Workspaces, sessions, provenance, runtime config — everything durable.
+      - apex-data:/data
+    restart: unless-stopped
+
+volumes:
+  apex-data:

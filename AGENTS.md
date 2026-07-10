@@ -1,7 +1,7 @@
-# Open Science Desktop
+# APEX Science Desktop
 
-Brand name: **Open Science Desktop** — "Local-first, model-agnostic AI research
-workbench for macOS, Windows & Linux." Formerly Open Science. Bundle identifier stays
+Brand name: **APEX Science Desktop** — "Local-first, model-agnostic AI research
+workbench for macOS, Windows & Linux." Formerly Open Science Desktop. Bundle identifier stays
 `com.ai4s.workbench` and internal `@ai4s/*` package names are unchanged.
 
 Project rules and working context for AI agents (Claude Code, Cursor, Codex, etc.).
@@ -29,6 +29,9 @@ local workspace + SQLite + JSONL provenance.
 ## Repository map
 
 - `apps/desktop/` — Tauri + React desktop shell (`src/` frontend, `src-tauri/` Rust).
+- `apps/server/` — Axum server for the self-hosted web version (same frontend).
+- `crates/shell-core/` — shared Rust command core both shells call; put new
+  command logic here, with thin wrappers in `src-tauri/` and `apps/server/`.
 - `packages/` — `ui`, `shared`, `sdk` (the `OpenCodeClient` wrapper).
 - `runtime/` — `manager`, `opencode-profile`, `mcp`, `skills`.
 - `docs/` — product and technical specs.

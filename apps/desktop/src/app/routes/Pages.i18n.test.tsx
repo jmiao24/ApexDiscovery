@@ -13,15 +13,6 @@ afterEach(() => useUiStore.getState().setLocale("en"));
 const RUNTIME_DEFAULTS = { status: useRuntimeStore.getState().status, agents: useRuntimeStore.getState().agents };
 afterEach(() => useRuntimeStore.setState(RUNTIME_DEFAULTS));
 
-describe("NotebooksPage strings (i18n)", () => {
-  it("renders the page heading and the desktop-only empty state in English", async () => {
-    renderAt("/notebooks");
-    expect(await screen.findByRole("heading", { level: 1, name: "Notebooks" })).toBeInTheDocument();
-    expect(screen.getByText("Notebooks are available in the desktop app.")).toBeInTheDocument();
-    expect(screen.getByText("New notebook")).toBeInTheDocument();
-  });
-});
-
 describe("FilesPage strings (i18n)", () => {
   it("renders the desktop-only explorer message and the preview prompt in English", async () => {
     renderAt("/files");

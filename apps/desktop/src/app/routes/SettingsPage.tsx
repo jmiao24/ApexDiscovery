@@ -25,6 +25,7 @@ import { getClient, useRuntimeStore } from "@/lib/runtime";
 import { useUpdateStore } from "@/lib/update";
 import {
   importOpenCodeLogin,
+  hasShell,
   isTauri,
   jupyterStatus,
   openExternal,
@@ -522,7 +523,7 @@ export function SettingsPage() {
 
           {/* Network proxy: follow system / custom / direct. system and none
               apply on select; custom applies on Save (needs a URL first). */}
-          {isTauri && proxy && (
+          {hasShell() && proxy && (
             <div className="mt-3 border-t border-border pt-3">
               <div className="flex items-center gap-2">
                 <span className="w-28 shrink-0 text-xs text-muted">{t("runtime.proxyLabel")}</span>
@@ -827,7 +828,7 @@ export function SettingsPage() {
                 </div>
               </div>
 
-              {isTauri && (
+              {hasShell() && (
                 <button
                   className="mt-3 flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-text"
                   onClick={() => void importLogin()}

@@ -3,5 +3,14 @@
     "save": "Speichern",
     "cancel": "Abbrechen",
     "remove": "Entfernen"
+  },
+  "login": {
+    "title": "APEX Science",
+    "hint": "Gib das Zugriffstoken ein, das der Server beim Start ausgibt (oder über APEX_TOKEN gesetzt ist).",
+    "placeholder": "Zugriffstoken",
+    "signIn": "Anmelden",
+    "signingIn": "Anmeldung läuft…",
+    "wrongToken": "Falsches Token — prüfe das Startprotokoll des Servers (oder APEX_TOKEN).",
+    "unreachable": "Server nicht erreichbar."
   }
 }

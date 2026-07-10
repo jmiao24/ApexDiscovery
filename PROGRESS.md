@@ -1,5 +1,11 @@
 # Progress
 
+2026-07-10 13:05 · brand+ui: renamed the display brand to APEX Science (UI, installers, CI release names, all 7 READMEs, CITATION; internal ids/data paths unchanged), removed the standalone Notebooks page (nav/route/palette; the .ipynb viewer and agent Jupyter MCP stay), and made tool-call groups stay expanded instead of auto-folding between steps (the collapse/reopen flicker).
+
+2026-07-10 12:25 · feat(web): self-hosted web version v1 — new `apps/server` (Axum) serves the same React frontend with token login, runs the shared commands over `/api/cmd/*`, proxies the OpenCode sidecar at `/runtime` (password injected server-side, SSE streams through), and serves workspace previews/uploads; frontend bridge (`lib/tauri.ts`) dispatches tauri/web/none with unchanged call sites + a WebLogin gate in all 7 locales; Dockerfile + docker-compose ship it. Verified headless-Chrome e2e: login → app renders, Runtime Ready over the proxy, Files/Runs/Settings live, provenance/run/git-snapshot write paths exercised; desktop `tauri build --debug` bundle still green. Docker image build not yet run (daemon unavailable); notebooks/remote-compute/Modal stay desktop-only.
+
+2026-07-10 11:40 · refactor(shell-core): extracted the Tauri command bodies (runtime/sidecar spec, workspace, artifacts, provenance, runs + SQLite index, git snapshots, preview server, opencode config, harness/examples, large-file probe, debug log) into the shared `crates/shell-core` crate behind a `ShellCtx`; `src-tauri` keeps thin wrappers + desktop-only dialogs/openers — 54 core tests + 30 desktop tests pass, desktop `cargo check` clean.
+
 2026-07-10 07:35 · docs(citation): repo is now academically citable — CITATION.cff + a citation section in all 7 READMEs (team authorship "The Open Science Desktop Contributors"); Zenodo↔GitHub archiving enabled, first DOI mints on the next release (then: add the badge + doi field, and sync the cff version each release). Sibling repo ai4s-skills shipped v0.1.0 the same way and already has DOI 10.5281/zenodo.21297455.
 
 2026-07-10 04:04 · release: v0.1.9 published (network-proxy setting, connection self-heal, #6 #7 #8 #9 fixes) — all 8 platform installers built by CI.

@@ -1,8 +1,90 @@
-// Thin bridge to the Tauri Rust side. In a plain browser these are no-ops so the
-// app still runs in `pnpm dev`; in the packaged desktop app they invoke Rust commands.
+// Bridge to the shell hosting the app. Three environments share these
+// functions, with unchanged signatures at every call site:
+//  - Tauri desktop: invoke Rust commands (the original path).
+//  - Web shell: the self-hosted apexscience-server — the same commands over
+//    `POST /api/cmd/<name>` (session-cookie auth), detected via `/api/ping`
+//    before the app renders (see initShell / main.tsx).
+//  - Plain browser dev (`pnpm dev`): no shell — everything degrades to the
+//    original no-op fallbacks.
 
 export const isTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+/** True when the same-origin apexscience-server answered /api/ping. Settled by
+ *  initShell() before the app renders, so render-time reads are stable. */
+let webShell = false;
+
+export function isWebShell(): boolean {
+  return webShell;
+}
+
+/** A shell (desktop or web server) backs the app — files, runs, provenance,
+ *  and workspace commands all work. False only in plain browser dev. */
+export function hasShell(): boolean {
+  return isTauri || webShell;
+}
+
+/** Detect the hosting shell once, before rendering. In a browser, ping the
+ *  same-origin server; also reports whether this session is already logged in
+ *  (main.tsx shows the login screen when not). */
+export async function initShell(): Promise<{ shell: "tauri" | "web" | "none"; authenticated: boolean }> {
+  if (isTauri) return { shell: "tauri", authenticated: true };
+  try {
+    const res = await fetch("/api/ping");
+    if (res.ok) {
+      const info = (await res.json()) as { app?: string; authenticated?: boolean };
+      if (info.app === "apexscience-server") {
+        webShell = true;
+        return { shell: "web", authenticated: Boolean(info.authenticated) };
+      }
+    }
+  } catch {
+    /* no server on this origin — plain browser dev */
+  }
+  return { shell: "none", authenticated: false };
+}
+
+/** Exchange the server token for the HttpOnly session cookie (web shell only). */
+export async function webLogin(token: string): Promise<boolean> {
+  const res = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  return res.ok;
+}
+
+/** Run one shared shell command against the web server. */
+async function webCmd<T>(name: string, args?: object): Promise<T> {
+  const res = await fetch(`/api/cmd/${name}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(args ?? {}),
+  });
+  if (!res.ok) {
+    let message = `${name} failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) message = body.error;
+    } catch {
+      /* keep the status message */
+    }
+    throw new Error(message);
+  }
+  return (await res.json()) as T;
+}
+
+/** Dispatch one shared command to whichever shell hosts the app. The libs
+ *  (artifactFile, runs, provenance) call this instead of Tauri's invoke so
+ *  they work identically on desktop and web. Throws when there is no shell. */
+export async function command<T>(name: string, args?: object): Promise<T> {
+  if (isTauri) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<T>(name, args as Record<string, unknown> | undefined);
+  }
+  if (webShell) return webCmd<T>(name, args);
+  throw new Error("no shell available");
+}
 
 export interface OpenCodeCredentials {
   provider: string;
@@ -16,15 +98,24 @@ export type ConfigureResult =
   | { ok: false; reason: "not-desktop" }
   | { ok: false; reason: "error"; message: string };
 
-/** Start the bundled OpenCode sidecar (desktop only). Returns its base URL. */
+/** Start the agent runtime. Desktop: spawn the bundled sidecar and return its
+ *  loopback URL. Web: the server supervises the sidecar and proxies it at
+ *  /runtime — returns that absolute mount. Null in plain browser dev. */
 export async function startRuntime(): Promise<string | null> {
-  if (!isTauri) return null;
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("start_runtime");
+  if (isTauri) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<string>("start_runtime");
+  }
+  if (webShell) {
+    await webCmd<string>("start_runtime");
+    return `${window.location.origin}/runtime`;
+  }
+  return null;
 }
 
 /**
- * Per-run password the sidecar requires on every request (desktop only —
+ * Per-run password the sidecar requires on every request (desktop only — the
+ * web server injects it in its reverse proxy so it never reaches the browser;
  * browser dev talks to a user-run, passwordless `opencode serve`). Held in
  * memory on both sides; never persisted.
  */
@@ -35,34 +126,68 @@ export async function runtimePassword(): Promise<string | null> {
 }
 
 /**
- * Pick local files via the native dialog and copy them into the agent
- * workspace (desktop only). Returns the workspace file names; [] on cancel.
+ * Pick local files and copy them into the agent workspace. Desktop: native
+ * dialog + Rust copy. Web: browser file picker + multipart upload. Returns the
+ * workspace file names; [] on cancel.
  */
 export async function addFilesToWorkspace(): Promise<string[]> {
-  if (!isTauri) return [];
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string[]>("add_files_to_workspace");
+  if (isTauri) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<string[]>("add_files_to_workspace");
+  }
+  if (webShell) return webUploadFiles();
+  return [];
+}
+
+/** Browser file picker → POST /api/upload. Resolves [] when the user cancels. */
+function webUploadFiles(): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.onchange = async () => {
+      const files = Array.from(input.files ?? []);
+      if (!files.length) return resolve([]);
+      const form = new FormData();
+      for (const f of files) form.append("file", f, f.name);
+      try {
+        const res = await fetch("/api/upload", { method: "POST", body: form });
+        if (!res.ok) throw new Error(`upload failed (${res.status})`);
+        resolve((await res.json()) as string[]);
+      } catch (e) {
+        reject(e instanceof Error ? e : new Error(String(e)));
+      }
+    };
+    // No reliable cancel event across browsers — a picker closed without a
+    // selection simply never fires onchange, which leaves the promise pending;
+    // resolve on window refocus instead so the composer never wedges.
+    window.addEventListener(
+      "focus",
+      () => setTimeout(() => resolve([]), 500),
+      { once: true },
+    );
+    input.click();
+  });
 }
 
 /**
- * Write text into the workspace as a file (desktop only), deduplicating the
+ * Write text into the workspace as a file, deduplicating the
  * name on collision. Returns the actual file name written.
  */
 export async function addTextToWorkspace(filename: string, content: string): Promise<string> {
-  if (!isTauri) throw new Error("not running in the desktop app");
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("add_text_to_workspace", { filename, content });
+  if (!hasShell()) throw new Error("not running in the desktop app");
+  return command<string>("add_text_to_workspace", { filename, content });
 }
 
 /**
  * Explicitly import the user's OpenCode CLI login into the app's private
- * runtime (desktop only). Returns false when no CLI login exists; the sidecar
- * is restarted on success.
+ * runtime. Returns false when no CLI login exists; the sidecar
+ * is restarted on success. (Web: imports the login of the machine the SERVER
+ * runs on — for self-hosting on your own machine that is the same login.)
  */
 export async function importOpenCodeLogin(): Promise<boolean> {
-  if (!isTauri) return false;
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<boolean>("import_opencode_login");
+  if (!hasShell()) return false;
+  return command<boolean>("import_opencode_login");
 }
 
 /** How agent actions get approved — the composer's Codex-style switch.
@@ -72,17 +197,15 @@ export type ApprovalMode = "approve" | "full";
 
 /** The approval mode OpenCode's config currently holds ("approve" until changed). */
 export async function getApprovalMode(): Promise<ApprovalMode> {
-  if (!isTauri) return "approve";
-  const { invoke } = await import("@tauri-apps/api/core");
-  const mode = await invoke<string>("get_approval_mode");
+  if (!hasShell()) return "approve";
+  const mode = await command<string>("get_approval_mode");
   return mode === "full" ? "full" : "approve";
 }
 
 /** Switch the approval mode; the sidecar restarts — the caller must reconnect. */
 export async function setApprovalMode(mode: ApprovalMode): Promise<void> {
-  if (!isTauri) return;
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("set_approval_mode", { mode });
+  if (!hasShell()) return;
+  await command("set_approval_mode", { mode });
 }
 
 /** Network proxy for the sidecar: follow the OS, a fixed URL, or direct. */
@@ -95,25 +218,22 @@ export interface ProxySetting {
   effective: string | null;
 }
 
-/** The persisted proxy setting (desktop only; null in browser). */
+/** The persisted proxy setting (null in plain browser dev). */
 export async function getProxySetting(): Promise<ProxySetting | null> {
-  if (!isTauri) return null;
-  const { invoke } = await import("@tauri-apps/api/core");
-  return await invoke<ProxySetting>("get_proxy_setting");
+  if (!hasShell()) return null;
+  return command<ProxySetting>("get_proxy_setting");
 }
 
 /** Persist the proxy setting; the sidecar restarts — the caller must reconnect. */
 export async function setProxySetting(mode: ProxyMode, url: string): Promise<void> {
-  if (!isTauri) return;
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("set_proxy_setting", { mode, url });
+  if (!hasShell()) return;
+  await command("set_proxy_setting", { mode, url });
 }
 
 /** Remove a provider/mcp entry from the global OpenCode config (restarts the sidecar). */
 export async function removeConfigEntry(section: "provider" | "mcp", key: string): Promise<void> {
-  if (!isTauri) throw new Error("not running in the desktop app");
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("remove_config_entry", { section, key });
+  if (!hasShell()) throw new Error("not running in the desktop app");
+  await command("remove_config_entry", { section, key });
 }
 
 export interface JupyterStatus {
@@ -262,45 +382,54 @@ export type SaveResult =
   | { kind: "canceled" }
   | { kind: "not-desktop" };
 
-/** Save text via the native "Save As" dialog (desktop only). Throws on write failure. */
+/** Save text: desktop shows the native "Save As" dialog; the web shell
+ *  triggers a browser download. Throws on write failure. */
 export async function saveTextFile(filename: string, content: string): Promise<SaveResult> {
-  if (!isTauri) return { kind: "not-desktop" };
-  const { invoke } = await import("@tauri-apps/api/core");
-  const path = await invoke<string | null>("save_text_file", { filename, content });
-  return path ? { kind: "saved", path } : { kind: "canceled" };
+  if (isTauri) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const path = await invoke<string | null>("save_text_file", { filename, content });
+    return path ? { kind: "saved", path } : { kind: "canceled" };
+  }
+  if (webShell) {
+    const url = URL.createObjectURL(new Blob([content], { type: "text/plain" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    return { kind: "saved", path: filename };
+  }
+  return { kind: "not-desktop" };
 }
 
-/** The active workspace directory (desktop only; null in browser). */
+/** The active workspace directory (null in plain browser dev). */
 export async function workspacePath(): Promise<string | null> {
-  if (!isTauri) return null;
+  if (!hasShell()) return null;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<string>("workspace_path");
+    return await command<string>("workspace_path");
   } catch {
     return null;
   }
 }
 
-/** The base folder new dated workspaces are created under (desktop only). */
+/** The base folder new dated workspaces are created under. */
 export async function workspaceBase(): Promise<string | null> {
-  if (!isTauri) return null;
+  if (!hasShell()) return null;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<string>("workspace_base");
+    return await command<string>("workspace_base");
   } catch {
     return null;
   }
 }
 
 /** Choose the base folder new session workspaces are created under.
- *  Returns the canonical path. Throws in the browser. */
+ *  Returns the canonical path. Throws without a shell. */
 export async function setWorkspaceBase(path: string): Promise<string> {
-  if (!isTauri) throw new Error("not running in the desktop app");
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("set_workspace_base", { path });
+  if (!hasShell()) throw new Error("not running in the desktop app");
+  return command<string>("set_workspace_base", { path });
 }
 
-/** Reveal the base workspace folder in the OS file manager. */
+/** Reveal the base workspace folder in the OS file manager (desktop only). */
 export async function openWorkspaceBase(): Promise<void> {
   if (!isTauri) return;
   const { invoke } = await import("@tauri-apps/api/core");
@@ -309,37 +438,33 @@ export async function openWorkspaceBase(): Promise<void> {
 
 /** Switch the active workspace folder (creates it if needed; the runtime
  *  rescopes via `?directory=` — no restart). Returns the canonical path.
- *  Throws in the browser. */
+ *  Throws without a shell. */
 export async function setWorkspace(path: string): Promise<string> {
-  if (!isTauri) throw new Error("not running in the desktop app");
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("set_workspace", { path });
+  if (!hasShell()) throw new Error("not running in the desktop app");
+  return command<string>("set_workspace", { path });
 }
 
 /** Record which session owns the active workspace (written to
  *  `.openscience/session.txt`) so skill helpers can attribute remote runs. */
 export async function markSession(sessionId: string): Promise<void> {
-  if (!isTauri) return;
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("mark_session", { sessionId });
+  if (!hasShell()) return;
+  await command("mark_session", { sessionId });
 }
 
 /** Best-effort local git checkpoint for the active workspace. Returns false
  *  when there were no changes. Never configures a remote or pushes. */
 export async function commitWorkspaceSnapshot(message: string): Promise<boolean> {
-  if (!isTauri) return false;
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<boolean>("commit_workspace_snapshot", { message });
+  if (!hasShell()) return false;
+  return command<boolean>("commit_workspace_snapshot", { message });
 }
 
 /** Create a new dated folder under the base workspace and switch to it. */
 export async function newDatedWorkspace(name: string): Promise<string> {
-  if (!isTauri) throw new Error("not running in the desktop app");
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("new_dated_workspace", { name });
+  if (!hasShell()) throw new Error("not running in the desktop app");
+  return command<string>("new_dated_workspace", { name });
 }
 
-/** Native folder picker; null on cancel or in the browser. */
+/** Native folder picker; null on cancel or without the desktop app. */
 export async function pickFolder(): Promise<string | null> {
   if (!isTauri) return null;
   const { invoke } = await import("@tauri-apps/api/core");
@@ -468,17 +593,15 @@ export async function modalStatus(): Promise<ModalStatus | null> {
 /** Copy a bundled example project into the workspace (idempotent; never
  *  overwrites user edits). Returns the workspace directory name. */
 export async function installExample(name: string): Promise<string> {
-  if (!isTauri) throw new Error("not running in the desktop app");
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("install_example", { name });
+  if (!hasShell()) throw new Error("not running in the desktop app");
+  return command<string>("install_example", { name });
 }
 
-/** Append a diagnostic line to <app-data>/debug.log (desktop only; no-op in browser). */
+/** Append a diagnostic line to <app-data>/debug.log (no-op without a shell). */
 export async function logDebug(message: string): Promise<void> {
-  if (!isTauri) return;
+  if (!hasShell()) return;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("log_debug", { message });
+    await command("log_debug", { message });
   } catch {
     /* never let diagnostics break the app */
   }
@@ -519,14 +642,13 @@ export async function watchFullscreen(cb: (fullscreen: boolean) => void): Promis
   return win.onResized(() => void sync());
 }
 
-/** Write the provider key/model into OpenCode's config via the Rust command. */
+/** Write the provider key/model into OpenCode's config via the shell. */
 export async function configureOpenCode(
   creds: OpenCodeCredentials,
 ): Promise<ConfigureResult> {
-  if (!isTauri) return { ok: false, reason: "not-desktop" };
+  if (!hasShell()) return { ok: false, reason: "not-desktop" };
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const path = await invoke<string>("configure_opencode", {
+    const path = await command<string>("configure_opencode", {
       provider: creds.provider,
       apiKey: creds.apiKey,
       model: creds.model,

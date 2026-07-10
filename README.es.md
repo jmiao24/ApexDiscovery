@@ -1,12 +1,12 @@
 <div align="center">
 
-[![Open Science Desktop — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+[![APEX Science Desktop — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
 
-# Open Science Desktop
+# APEX Science Desktop
 
 **Banco de trabajo de investigación con IA, local-first y agnóstico al modelo, para macOS, Windows & Linux.**
 
-Formerly Open Science. Una alternativa desktop open source a Claude Science y workbenches AI-for-science similares, construida con Tauri, MCP, agent skills y artefactos reproducibles. Conecta agentes, notebooks, archivos, figuras, informes, ejecuciones y revisión en un flujo de escritorio auditable.
+Formerly Open Science Desktop. Una alternativa desktop open source a Claude Science y workbenches AI-for-science similares, construida con Tauri, MCP, agent skills y artefactos reproducibles. Conecta agentes, notebooks, archivos, figuras, informes, ejecuciones y revisión en un flujo de escritorio auditable.
 
 <p>
   <a href="./README.md">English</a> ·
@@ -32,7 +32,7 @@ Formerly Open Science. Una alternativa desktop open source a Claude Science y wo
 
 ---
 
-🎉 **Reconocimiento:** Open Science Desktop ocupa el puesto #1 por promedio de tareas puntuadas en [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/), un benchmark end-to-end para agentes autónomos de investigación científica (leaderboard Pass@1, 9 de julio de 2026).
+🎉 **Reconocimiento:** APEX Science Desktop ocupa el puesto #1 por promedio de tareas puntuadas en [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/), un benchmark end-to-end para agentes autónomos de investigación científica (leaderboard Pass@1, 9 de julio de 2026).
 
 ---
 
@@ -127,7 +127,7 @@ Descarga la versión más reciente desde [Releases](https://github.com/ai4s-rese
 Los builds aún no están firmados. En macOS, si Gatekeeper bloquea la app:
 
 ```bash
-xattr -cr "/Applications/Open Science.app"
+xattr -cr "/Applications/APEX Science.app"
 ```
 
 En Windows, usa **More info -> Run anyway** en SmartScreen.
@@ -172,18 +172,18 @@ Los archivos del workspace, datos crudos, historial, procedencia, notebooks y ru
 
 ## Estado
 
-El registro de implementación más fiable es [`PROGRESS.md`](./PROGRESS.md). El trabajo cercano se centra en builds firmados/notarizados, verificación Windows/Linux, auto-update, endurecimiento de conectores y revisión de reproducibilidad. Para discutir el proyecto, únete al [Open Science Discord](https://discord.gg/fWNMDKcd5P).
+El registro de implementación más fiable es [`PROGRESS.md`](./PROGRESS.md). El trabajo cercano se centra en builds firmados/notarizados, verificación Windows/Linux, auto-update, endurecimiento de conectores y revisión de reproducibilidad. Para discutir el proyecto, únete al [APEX Science Discord](https://discord.gg/fWNMDKcd5P).
 
-[MIT](./LICENSE). Open Science Desktop es tooling beta de investigación: trata las salidas como borradores y verifica números, citas, código y conclusiones antes de publicar o decidir.
+[MIT](./LICENSE). APEX Science Desktop es tooling beta de investigación: trata las salidas como borradores y verifica números, citas, código y conclusiones antes de publicar o decidir.
 
 ## Cita
 
-Si usas Open Science Desktop en tu investigación, cítalo así:
+Si usas APEX Science Desktop en tu investigación, cítalo así:
 
 ```bibtex
 @software{open_science_desktop,
-  author  = {{The Open Science Desktop Contributors}},
-  title   = {Open Science Desktop: a local-first, model-agnostic AI research workbench},
+  author  = {{The APEX Science Desktop Contributors}},
+  title   = {APEX Science Desktop: a local-first, model-agnostic AI research workbench},
   year    = {2026},
   version = {0.1.9},
   url     = {https://github.com/ai4s-research/open-science},

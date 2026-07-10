@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Files, FlaskConical, FolderTree, NotebookPen, PanelLeft, Plus, Settings, Trash2 } from "lucide-react";
+import { Files, FlaskConical, FolderTree, PanelLeft, Plus, Settings, Trash2 } from "lucide-react";
 import type { Project } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 import { useRuntimeStore } from "@/lib/runtime";
@@ -124,7 +124,7 @@ export function Sidebar({ project }: { project: Project }) {
           <img src={logo} alt="" className="h-[18px] w-auto self-center" />
           {/* eslint-disable-next-line i18next/no-literal-string -- product brand name, not translated across locales (see AGENTS.md) */}
           <div className="font-serif text-[17px] font-semibold leading-none tracking-tight text-text">
-            Open Science
+            APEX Science
           </div>
           <span className="text-[10px] uppercase tracking-widest text-muted">{t("sidebar.betaBadge")}</span>
           {!overlayTitlebar && (
@@ -142,7 +142,6 @@ export function Sidebar({ project }: { project: Project }) {
 
       <nav className="flex flex-col px-3">
         <NavRow icon={<Plus size={16} />} label={t("items.new")} onClick={startNew} />
-        <NavRow icon={<NotebookPen size={16} />} label={t("items.notebooks")} onClick={() => navigate("/notebooks")} />
         <NavRow icon={<FolderTree size={16} />} label={t("items.files")} onClick={() => navigate("/files")} />
         <NavRow icon={<FlaskConical size={16} />} label={t("items.runs")} onClick={() => navigate("/runs")} />
         <NavRow icon={<Files size={16} />} label={t("items.skills")} onClick={() => navigate("/skills")} />

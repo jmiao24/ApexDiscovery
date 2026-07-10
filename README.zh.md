@@ -1,12 +1,12 @@
 <div align="center">
 
-[![Open Science Desktop — 本地优先 AI 科研桌面工作台](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+[![APEX Science Desktop — 本地优先 AI 科研桌面工作台](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
 
-# Open Science Desktop
+# APEX Science Desktop
 
 **本地优先、模型无关的 macOS、Windows & Linux AI 科研桌面工作台。**
 
-原名 Open Science。它是 Claude Science 及同类 AI-for-science 工作台的开源桌面替代：
+原名 Open Science Desktop。它是 Claude Science 及同类 AI-for-science 工作台的开源桌面替代：
 基于 Tauri、MCP、agent skills 和可复现工件构建。它把智能体、笔记本、文件、图表、
 报告、运行记录和审查连接成一条可审计的桌面工作流。
 
@@ -36,7 +36,7 @@
 
 ---
 
-🎉 **认可：** Open Science Desktop 在面向自主科研智能体的端到端基准 [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/) 上，按已评分任务平均分排名第 1（Pass@1 榜单，2026 年 7 月 9 日）。
+🎉 **认可：** APEX Science Desktop 在面向自主科研智能体的端到端基准 [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/) 上，按已评分任务平均分排名第 1（Pass@1 榜单，2026 年 7 月 9 日）。
 
 ---
 
@@ -147,7 +147,7 @@
 [`docs/CONNECT_YOUR_TOOLS.md`](./docs/CONNECT_YOUR_TOOLS.md)。
 
 中立定位对比见
-[`Open Science Desktop vs OpenScience`](./docs/open-science-desktop-vs-openscience.md)。
+[`APEX Science Desktop vs OpenScience`](./docs/open-science-desktop-vs-openscience.md)。
 
 ## 安装
 
@@ -162,7 +162,7 @@
 **macOS**：如果 Gatekeeper 提示应用已损坏或来自未知开发者，把应用安装到 Applications 后运行：
 
 ```bash
-xattr -cr "/Applications/Open Science.app"
+xattr -cr "/Applications/APEX Science.app"
 ```
 
 **Windows**：如果出现 SmartScreen，选择 **更多信息 -> 仍要运行**。
@@ -239,16 +239,16 @@ pnpm lint
 ## 参与贡献
 
 欢迎 Issue 和 PR。请保持改动最小且可验证，遵循 [`AGENTS.md`](./AGENTS.md)，并在提交 PR 前运行检查。讨论和交流可以加入
-[Open Science Discord](https://discord.gg/fWNMDKcd5P)，也可以在 [linux.do](https://linux.do) 社区参与。
+[APEX Science Discord](https://discord.gg/fWNMDKcd5P)，也可以在 [linux.do](https://linux.do) 社区参与。
 
 ## 引用
 
-如果 Open Science Desktop 对你的研究有帮助,请如下引用:
+如果 APEX Science Desktop 对你的研究有帮助,请如下引用:
 
 ```bibtex
 @software{open_science_desktop,
-  author  = {{The Open Science Desktop Contributors}},
-  title   = {Open Science Desktop: a local-first, model-agnostic AI research workbench},
+  author  = {{The APEX Science Desktop Contributors}},
+  title   = {APEX Science Desktop: a local-first, model-agnostic AI research workbench},
   year    = {2026},
   version = {0.1.9},
   url     = {https://github.com/ai4s-research/open-science},
@@ -262,4 +262,4 @@ pnpm lint
 
 [MIT](./LICENSE)。随附的第三方技能和连接器保留各自许可证。
 
-> Open Science Desktop 仍是 beta 阶段科研工具。产出应视为草稿：发表或决策前请核对数字、引用、代码和结论。
+> APEX Science Desktop 仍是 beta 阶段科研工具。产出应视为草稿：发表或决策前请核对数字、引用、代码和结论。

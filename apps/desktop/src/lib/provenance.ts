@@ -4,7 +4,7 @@
 // Tauri bridge so it can be unit-tested without a desktop shell.
 import type { ToolUpdatedEvent } from "@ai4s/sdk";
 import type { ProvenanceRecord } from "@ai4s/shared";
-import { isTauri, logDebug } from "./tauri";
+import { command, hasShell, logDebug } from "./tauri";
 import { deriveArtifact } from "./artifacts";
 
 export interface ProvenanceInput {
@@ -48,10 +48,9 @@ export async function recordProvenance(
   sessionId: string | undefined,
   model: string | null,
 ): Promise<void> {
-  if (!isTauri) return;
+  if (!hasShell()) return;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("record_provenance", {
+    await command("record_provenance", {
       path: input.path,
       tool: input.tool,
       content: input.content ?? null,
@@ -70,10 +69,9 @@ export async function recordProvenance(
 
 /** All recorded versions of one artifact, oldest first ([] in browser dev). */
 export async function listProvenance(path: string): Promise<ProvenanceRecord[]> {
-  if (!isTauri) return [];
+  if (!hasShell()) return [];
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<ProvenanceRecord[]>("list_provenance", { path });
+    return await command<ProvenanceRecord[]>("list_provenance", { path });
   } catch {
     return [];
   }
@@ -81,10 +79,9 @@ export async function listProvenance(path: string): Promise<ProvenanceRecord[]> 
 
 /** The captured `pip freeze` list for a package snapshot hash (null if unreadable). */
 export async function readEnvLockfile(hash: string): Promise<string | null> {
-  if (!isTauri) return null;
+  if (!hasShell()) return null;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<string>("read_env_lockfile", { hash });
+    return await command<string>("read_env_lockfile", { hash });
   } catch {
     return null;
   }

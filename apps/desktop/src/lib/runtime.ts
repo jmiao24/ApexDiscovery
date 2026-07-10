@@ -18,7 +18,7 @@ import {
   detectTools as probeTools,
   commitWorkspaceSnapshot,
   getApprovalMode,
-  isTauri,
+  hasShell,
   logDebug,
   markSession,
   newDatedWorkspace,
@@ -295,7 +295,7 @@ async function performTurn(
       // pinned a folder via the workspace switcher, a new session gets its
       // own fresh dated folder (~/Documents/OpenScience/<date-time>) first,
       // so its files never pile up in the bare base folder.
-      if (isTauri && !get().workspacePinned) {
+      if (hasShell() && !get().workspacePinned) {
         set({ switching: true });
         try {
           await newDatedWorkspace(datedWorkspaceName());
@@ -307,7 +307,7 @@ async function performTurn(
         if (get().status !== "ready" || !client) {
           throw new Error("Runtime did not reconnect after creating the session folder.");
         }
-      } else if (isTauri && get().workspacePinned) {
+      } else if (hasShell() && get().workspacePinned) {
         // /new and /clear intentionally keep the same folder, but the old
         // session route may have just torn down/reopened directory-scoped SSE.
         // Rebuild the scoped client before creating the next session so first
@@ -835,7 +835,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
 
   bootstrap: async () => {
     void get().detectTools();
-    if (!isTauri) return;
+    if (!hasShell()) return;
     void logDebug("bootstrap: starting bundled runtime");
     try {
       const url = await startRuntime();

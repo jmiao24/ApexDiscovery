@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUp, Check, ChevronDown, Hand, Paperclip, Square, Terminal, X, Zap } from "lucide-react";
-import { addFilesToWorkspace, addTextToWorkspace, isTauri, type ApprovalMode } from "@/lib/tauri";
+import { addFilesToWorkspace, addTextToWorkspace, hasShell, type ApprovalMode } from "@/lib/tauri";
 import { WorkspaceChip } from "@/components/thread/WorkspaceChip";
 import { useUiStore } from "@/lib/store";
 import { toast } from "@/lib/toast";
@@ -317,7 +317,7 @@ export function Composer({
 
   // Very long pastes become a workspace file chip instead of flooding the box.
   const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    if (!isTauri || !onSend) return;
+    if (!hasShell() || !onSend) return;
     const text = e.clipboardData.getData("text/plain");
     if (text.length <= PASTE_AS_FILE_CHARS && text.split("\n").length <= PASTE_AS_FILE_LINES) {
       return; // normal paste
@@ -354,7 +354,7 @@ export function Composer({
     }
   };
 
-  const canAttach = isTauri && !!onSend;
+  const canAttach = hasShell() && !!onSend;
   const canSend =
     !disabled &&
     (command

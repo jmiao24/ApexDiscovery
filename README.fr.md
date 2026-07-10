@@ -1,12 +1,12 @@
 <div align="center">
 
-[![Open Science Desktop — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+[![APEX Science Desktop — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
 
-# Open Science Desktop
+# APEX Science Desktop
 
 **Atelier de recherche IA local-first et agnostique au modèle pour macOS, Windows & Linux.**
 
-Formerly Open Science. Une alternative desktop open source à Claude Science et aux workbenches AI-for-science similaires, construite avec Tauri, MCP, agent skills et des artefacts reproductibles. Elle relie agents, notebooks, fichiers, figures, rapports, exécutions et revue dans un flux desktop auditable.
+Formerly Open Science Desktop. Une alternative desktop open source à Claude Science et aux workbenches AI-for-science similaires, construite avec Tauri, MCP, agent skills et des artefacts reproductibles. Elle relie agents, notebooks, fichiers, figures, rapports, exécutions et revue dans un flux desktop auditable.
 
 <p>
   <a href="./README.md">English</a> ·
@@ -32,13 +32,13 @@ Formerly Open Science. Une alternative desktop open source à Claude Science et 
 
 ---
 
-🎉 **Reconnaissance :** Open Science Desktop est n° 1 au score moyen des tâches évaluées sur [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/), un benchmark de bout en bout pour agents autonomes de recherche scientifique (classement Pass@1, 9 juillet 2026).
+🎉 **Reconnaissance :** APEX Science Desktop est n° 1 au score moyen des tâches évaluées sur [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/), un benchmark de bout en bout pour agents autonomes de recherche scientifique (classement Pass@1, 9 juillet 2026).
 
 ---
 
 ## Sommaire
 
-- [✨ Ce que fait Open Science](#ce-que-fait-open-science)
+- [✨ Ce que fait APEX Science](#ce-que-fait-open-science)
 - [🎬 Captures](#captures)
 - [🧪 Fonctionnalités actuelles](#fonctionnalités-actuelles)
 - [🔌 Skills et connecteurs](#skills-et-connecteurs)
@@ -48,7 +48,7 @@ Formerly Open Science. Une alternative desktop open source à Claude Science et 
 - [🗂️ Structure du dépôt](#structure-du-dépôt)
 - [📌 État](#état)
 
-## Ce que fait Open Science
+## Ce que fait APEX Science
 
 **Déroule toute la boucle de recherche** — d'une direction large à un article terminé : exploration, revue de littérature, hypothèse, code d'expérience, analyse, figures et rédaction, en une seule session continue et auditable.
 
@@ -127,7 +127,7 @@ Téléchargez la dernière version depuis [Releases](https://github.com/ai4s-res
 Les builds ne sont pas encore signés. Si macOS bloque l'app :
 
 ```bash
-xattr -cr "/Applications/Open Science.app"
+xattr -cr "/Applications/APEX Science.app"
 ```
 
 Sous Windows, choisissez **More info -> Run anyway** dans SmartScreen.
@@ -172,18 +172,18 @@ Les fichiers du workspace, données brutes, historique, provenance, notebooks et
 
 ## État
 
-Le journal d'implémentation le plus fiable est [`PROGRESS.md`](./PROGRESS.md). Les prochains travaux portent sur les releases signées/notarisées, la vérification Windows/Linux, l'auto-update, le durcissement des connecteurs et la revue de reproductibilité. Pour discuter du projet, rejoignez le [Discord Open Science](https://discord.gg/fWNMDKcd5P).
+Le journal d'implémentation le plus fiable est [`PROGRESS.md`](./PROGRESS.md). Les prochains travaux portent sur les releases signées/notarisées, la vérification Windows/Linux, l'auto-update, le durcissement des connecteurs et la revue de reproductibilité. Pour discuter du projet, rejoignez le [Discord APEX Science](https://discord.gg/fWNMDKcd5P).
 
-[MIT](./LICENSE). Open Science Desktop est un outil de recherche beta : traitez les sorties comme des brouillons et vérifiez nombres, citations, code et conclusions avant publication ou décision.
+[MIT](./LICENSE). APEX Science Desktop est un outil de recherche beta : traitez les sorties comme des brouillons et vérifiez nombres, citations, code et conclusions avant publication ou décision.
 
 ## Citation
 
-Si vous utilisez Open Science Desktop dans vos recherches, merci de le citer ainsi :
+Si vous utilisez APEX Science Desktop dans vos recherches, merci de le citer ainsi :
 
 ```bibtex
 @software{open_science_desktop,
-  author  = {{The Open Science Desktop Contributors}},
-  title   = {Open Science Desktop: a local-first, model-agnostic AI research workbench},
+  author  = {{The APEX Science Desktop Contributors}},
+  title   = {APEX Science Desktop: a local-first, model-agnostic AI research workbench},
   year    = {2026},
   version = {0.1.9},
   url     = {https://github.com/ai4s-research/open-science},

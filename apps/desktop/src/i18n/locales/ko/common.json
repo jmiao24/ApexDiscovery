@@ -3,5 +3,14 @@
     "save": "저장",
     "cancel": "취소",
     "remove": "제거"
+  },
+  "login": {
+    "title": "APEX Science",
+    "hint": "서버 시작 시 출력된 액세스 토큰(또는 APEX_TOKEN 값)을 입력하세요.",
+    "placeholder": "액세스 토큰",
+    "signIn": "로그인",
+    "signingIn": "로그인 중…",
+    "wrongToken": "토큰이 올바르지 않습니다. 서버 시작 로그(또는 APEX_TOKEN)를 확인하세요.",
+    "unreachable": "서버에 연결할 수 없습니다."
   }
 }

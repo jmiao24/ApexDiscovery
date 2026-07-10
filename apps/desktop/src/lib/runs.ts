@@ -6,7 +6,7 @@
 // can be unit-tested without a desktop shell.
 import type { RunArtifact, RunRecord } from "@ai4s/shared";
 import type { ToolUpdatedEvent } from "@ai4s/sdk";
-import { isTauri, logDebug } from "./tauri";
+import { command, hasShell, logDebug } from "./tauri";
 
 /** The compute surface a run targeted. Only "local" runs produce workspace
  *  files we can hash; remote surfaces are recorded honestly with their command
@@ -176,10 +176,9 @@ export async function recordRun(
   sessionId: string | undefined,
   model: string | null,
 ): Promise<void> {
-  if (!isTauri) return;
+  if (!hasShell()) return;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("record_run", {
+    await command("record_run", {
       command: input.command,
       log: input.log ?? null,
       startedAt: input.startedAt ?? null,
@@ -197,10 +196,9 @@ export async function recordRun(
 
 /** All recorded runs, newest first ([] in browser dev). */
 export async function listRuns(): Promise<RunRecord[]> {
-  if (!isTauri) return [];
+  if (!hasShell()) return [];
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<RunRecord[]>("list_runs", {});
+    return await command<RunRecord[]>("list_runs", {});
   } catch {
     return [];
   }
@@ -238,10 +236,9 @@ const EMPTY_PAGE: RunPage = { rows: [], total: 0, facets: { status: [], surface:
 
 /** Query the runs index (indexed, paginated, faceted). Empty page in browser dev. */
 export async function queryRuns(query: RunQuery): Promise<RunPage> {
-  if (!isTauri) return EMPTY_PAGE;
+  if (!hasShell()) return EMPTY_PAGE;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<RunPage>("query_runs_cmd", { query });
+    return await command<RunPage>("query_runs_cmd", { query });
   } catch {
     return EMPTY_PAGE;
   }
@@ -249,10 +246,9 @@ export async function queryRuns(query: RunQuery): Promise<RunPage> {
 
 /** A run's captured stdout/stderr by its log hash (null if unreadable). */
 export async function readRunLog(hash: string): Promise<string | null> {
-  if (!isTauri) return null;
+  if (!hasShell()) return null;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<string>("read_run_log", { hash });
+    return await command<string>("read_run_log", { hash });
   } catch {
     return null;
   }
