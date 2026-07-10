@@ -234,7 +234,10 @@ export function SettingsPage() {
 
   const saveModel = (model: string) =>
     run(t("toast.couldNotSetModel"), async () => {
-      if (model) await getClient()!.setDefaultModel(model);
+      // Go through the store, not the client directly: applying a model closes
+      // the event stream server-side, so the store reconnects transparently
+      // (masked by `switching`) — no disconnect, no manual Connect afterward.
+      if (model) await useRuntimeStore.getState().setDefaultModel(model);
       toast.success(t("toast.defaultModelSet", { model }));
     });
 

@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-09 13:05 · fix(models): switching the default model now reconnects transparently (masked by `switching`, like setApprovalMode) instead of closing the event stream and stranding the app disconnected until a manual Connect.
+
 2026-07-09 11:52 · fix(sessions): stopped the open-session effect firing twice (currentId dep) and made openSession bail before a duplicate reconnect, fixing connection-pool exhaustion that left later sessions stuck on the loading spinner; also unstuck the /new·/clear guard when clearing from a draft.
 
 2026-07-09 11:50 · fix(git-snapshot): only auto-commit into app-created workspace repos (marker-gated) so a user's own repo is never touched, and serialized snapshot commits behind a process lock to avoid index.lock races.

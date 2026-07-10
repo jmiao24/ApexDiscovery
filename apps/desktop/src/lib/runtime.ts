@@ -82,6 +82,8 @@ interface RuntimeState {
   commands: CommandInfo[];
   /** Configured default model ("provider/model"), or null when unset. */
   defaultModel: string | null;
+  /** Apply a new default model and transparently reconnect (see impl). */
+  setDefaultModel: (model: string) => Promise<void>;
   /** The composer's approval switch: "approve" (dangerous commands prompt)
    *  or "full" (everything in-workspace runs). Loaded from OpenCode config. */
   approvalMode: ApprovalMode;
@@ -548,6 +550,24 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     try {
       await persistApprovalMode(mode); // writes the config; restarts the sidecar
       set({ approvalMode: mode });
+      await get().connectRetry();
+    } finally {
+      set({ switching: false });
+    }
+  },
+
+  setDefaultModel: async (model) => {
+    if (!client) throw new Error("Not connected to the OpenCode runtime.");
+    // Applying the model PATCHes OpenCode's global config, which closes the
+    // event stream server-side. EventSource's own reconnect does not reliably
+    // recover from that — it strands the app in "connecting"/disconnected until
+    // a manual Connect. So do a deliberate masked reconnect (a fresh stream,
+    // exactly what the manual Connect did): `switching` keeps the UI connected,
+    // so switching models never flips the status or blocks the composer.
+    set({ switching: true });
+    try {
+      await client.setDefaultModel(model);
+      set({ defaultModel: model });
       await get().connectRetry();
     } finally {
       set({ switching: false });

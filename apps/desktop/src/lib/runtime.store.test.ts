@@ -21,6 +21,9 @@ const mocks = vi.hoisted(() => ({
    *  "aborted" error and one or more session.idle events. Empty by default. */
   abortTrailing: [] as unknown[],
   getMessages: vi.fn(),
+  /** Records setDefaultModel calls; `currentModel` is what getDefaultModel returns. */
+  setDefaultModelSpy: vi.fn(),
+  currentModel: null as string | null,
   /** History the mock server returns for any session. */
   messages: [] as unknown[],
   /** Next getMessages call throws. */
@@ -91,7 +94,11 @@ vi.mock("@ai4s/sdk", () => {
       return [];
     }
     async getDefaultModel() {
-      return null;
+      return mocks.currentModel;
+    }
+    async setDefaultModel(model: string) {
+      mocks.setDefaultModelSpy(model);
+      mocks.currentModel = model;
     }
     async createSession() {
       if (mocks.failCreates > 0) {
@@ -174,6 +181,7 @@ beforeEach(async () => {
   mocks.messages = [];
   mocks.failMessages = false;
   mocks.approvalMode = "approve";
+  mocks.currentModel = null;
   useRuntimeStore.setState({
     currentId: null,
     workspacePinned: false,
@@ -765,5 +773,26 @@ describe("approval mode", () => {
     const s = useRuntimeStore.getState();
     expect(s.switching).toBe(false);
     expect(s.status).toBe("ready");
+  });
+
+  it("setDefaultModel applies the model and reconnects seamlessly (no manual Connect)", async () => {
+    const before = mocks.clientOpts.length;
+    await useRuntimeStore.getState().setDefaultModel("anthropic/claude-sonnet-5");
+    expect(mocks.setDefaultModelSpy).toHaveBeenCalledWith("anthropic/claude-sonnet-5");
+    // A fresh client/event stream replaces the one the config change closed —
+    // exactly one reconnect, so switching models never strands the app offline.
+    expect(mocks.clientOpts.length - before).toBe(1);
+    const s = useRuntimeStore.getState();
+    expect(s.status).toBe("ready");
+    expect(s.switching).toBe(false);
+    expect(s.defaultModel).toBe("anthropic/claude-sonnet-5");
+  });
+
+  it("setDefaultModel masks the reconnect with `switching` (no disconnect flash)", async () => {
+    const p = useRuntimeStore.getState().setDefaultModel("anthropic/claude-sonnet-5");
+    expect(useRuntimeStore.getState().switching).toBe(true);
+    await p;
+    expect(useRuntimeStore.getState().switching).toBe(false);
+    expect(useRuntimeStore.getState().status).toBe("ready");
   });
 });
