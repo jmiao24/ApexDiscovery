@@ -171,7 +171,7 @@ function textOfContent(content) {
 }
 
 // ---- the agent turn ----
-async function runTurn(session, promptText) {
+async function runTurn(session, promptText, { plan = false } = {}) {
   if (runningTurns.has(session.id)) throw Object.assign(new Error("A turn is already running"), { status: 409 });
 
   // Record the user message (the UI shows its own copy locally; history is
@@ -217,27 +217,40 @@ async function runTurn(session, promptText) {
         cwd: session.directory || process.cwd(),
         resume: session.claudeSessionId || undefined,
         model,
-        permissionMode: permissionMode(),
+        // A "plan" turn is enforced read-only by the SDK: the agent proposes a
+        // plan and ends its turn; execution starts on the user's next message.
+        permissionMode: plan ? "plan" : permissionMode(),
         includePartialMessages: true,
         // Load workspace settings (.claude/skills, CLAUDE.md) like the CLI does.
         settingSources: ["project"],
         abortController: abort,
         ...(bridgeConfig.apiKey ? { env: { ...process.env, ANTHROPIC_API_KEY: bridgeConfig.apiKey } } : {}),
         canUseTool: async (toolName, input) => {
-          const mode = permissionMode();
+          if (toolName === "ExitPlanMode") {
+            return {
+              behavior: "deny",
+              message:
+                "Present the plan to the user as your final message and end the turn. Execution starts after the user confirms in their next message.",
+            };
+          }
+          const mode = plan ? "plan" : permissionMode();
           if (mode === "bypassPermissions") return { behavior: "allow", updatedInput: input };
           const allowed = alwaysAllowed.get(session.id);
           if (allowed?.has(toolName)) return { behavior: "allow", updatedInput: input };
 
           const requestId = freshId("perm");
+          const permission = mapToolName(toolName);
+          const patterns = permissionPatterns(toolName, input);
           broadcast("permission.asked", {
             id: requestId,
             sessionID: session.id,
-            permission: mapToolName(toolName),
-            patterns: permissionPatterns(toolName, input),
+            permission,
+            patterns,
           });
           const reply = await new Promise((resolve) => {
-            pendingPermissions.set(requestId, { sessionId: session.id, resolve });
+            // action/patterns are kept so GET /permission (recovery on page
+            // open) can re-render the prompt, not just the SSE event.
+            pendingPermissions.set(requestId, { sessionId: session.id, permission, patterns, resolve });
           });
           broadcast("permission.replied", { requestID: requestId, sessionID: session.id });
           if (reply === "always") {
@@ -505,7 +518,7 @@ const server = createServer(async (req, res) => {
           .join("\n");
         if (!text) return void apiError(res, 400, "empty prompt");
         if (runningTurns.has(id)) return void apiError(res, 409, "a turn is already running");
-        void runTurn(session, text);
+        void runTurn(session, text, { plan: body.agent === "plan" });
         return void json(res, { ok: true });
       }
       if (method === "POST" && sub === "abort") {
@@ -575,8 +588,8 @@ const server = createServer(async (req, res) => {
       const pend = [...pendingPermissions.entries()].map(([rid, p]) => ({
         id: rid,
         sessionID: p.sessionId,
-        permission: "tool",
-        patterns: [],
+        permission: p.permission ?? "tool",
+        patterns: p.patterns ?? [],
       }));
       return void json(res, pend);
     }

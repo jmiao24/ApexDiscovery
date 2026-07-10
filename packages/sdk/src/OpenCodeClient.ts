@@ -624,14 +624,20 @@ export class OpenCodeClient {
     if (!res.ok) throw await this.apiError(res, `Failed to run /${command}`);
   }
 
-  /** Send a prompt into a session; output streams back via onEvent (SSE). */
-  async sendPrompt(sessionId: string, text: string): Promise<void> {
+  /** Send a prompt into a session; output streams back via onEvent (SSE).
+   *  `agent` routes the turn to a specific primary agent — the app sends the
+   *  FIRST message of a session to "plan" (read-only: propose a plan, ask for
+   *  confirmation) and later messages to the default build agent. */
+  async sendPrompt(sessionId: string, text: string, opts?: { agent?: string }): Promise<void> {
     const res = await this.fetchWithTimeout(
       `${this.baseUrl}/session/${encodeURIComponent(sessionId)}/prompt_async`,
       {
         method: "POST",
         headers: this.headers(true),
-        body: JSON.stringify({ parts: [{ type: "text", text }] }),
+        body: JSON.stringify({
+          parts: [{ type: "text", text }],
+          ...(opts?.agent ? { agent: opts.agent } : {}),
+        }),
       },
     );
     if (!res.ok) throw await this.apiError(res, "Failed to send prompt");

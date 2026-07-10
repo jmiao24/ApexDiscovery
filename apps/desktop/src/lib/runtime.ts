@@ -1015,8 +1015,20 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
 
   // The send lifecycle (new → input → send → response) is shared by plain
   // prompts, "!" shell commands and "/" slash commands — see performTurn.
-  sendPrompt: (text) =>
-    performTurn(set, get, text, (sid) => withRetry(() => client!.sendPrompt(sid, text)), false),
+  // The FIRST message of a fresh conversation goes to the read-only "plan"
+  // agent: the agent proposes a plan and asks for confirmation instead of
+  // executing right away; the user's follow-up runs on the default agent.
+  sendPrompt: (text) => {
+    const tid = get().currentId ?? DRAFT_KEY;
+    const planFirst = (get().threads[tid]?.blocks ?? []).length === 0;
+    return performTurn(
+      set,
+      get,
+      text,
+      (sid) => withRetry(() => client!.sendPrompt(sid, text, planFirst ? { agent: "plan" } : undefined)),
+      false,
+    );
+  },
 
   // No retry for shell/command: re-POSTing would run the command twice.
   runShell: (command) => {
