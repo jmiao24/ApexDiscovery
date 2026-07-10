@@ -218,6 +218,28 @@ localhost, pass `--host 0.0.0.0` and terminate TLS in a reverse proxy in
 front. The browser only ever holds the login token — the agent-runtime
 password stays on the server, injected by its `/runtime` reverse proxy.
 
+### Claude Agent SDK backend (experimental)
+
+`apps/claude-bridge/` is a drop-in replacement for the OpenCode sidecar that
+runs the agent on the [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk/overview)
+instead: a small Node server speaking the same HTTP+SSE wire subset the
+frontend consumes, and accepting the same CLI/env contract as `opencode serve`
+— so neither the frontend nor the Rust server changes. It uses your existing
+Claude Code login (or `ANTHROPIC_API_KEY`) and honors the app's approval mode
+(the approve switch maps to the SDK's permission callback).
+
+```bash
+pnpm install   # installs @anthropic-ai/claude-agent-sdk for the bridge
+APEX_TOKEN=<token> APEX_OPENCODE_BIN=$PWD/apps/claude-bridge/src/server.mjs \
+  cargo run --release --manifest-path apps/server/Cargo.toml
+```
+
+Chat with streaming, tool activity (bash/write/edit rows), tool approvals,
+session history/resume, `!` shell mode, and model selection (Sonnet/Opus/Haiku)
+work; OpenCode-specific surfaces (multi-provider OAuth catalog, MCP management,
+slash-command discovery) are stubbed. Provenance, runs, files, and git
+snapshots are backend-independent and work unchanged.
+
 ## Build from source
 
 Prerequisites:
