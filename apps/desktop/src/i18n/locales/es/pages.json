@@ -7,6 +7,7 @@
     "pythonNotebook": "Cuaderno de Python",
     "rNotebook": "Cuaderno de R",
     "description": "Todos los cuadernos de Jupyter de tus carpetas de sesión, del más reciente al más antiguo. Las celdas se ejecutan en el kernel local de Python o R dentro de la carpeta propia del cuaderno; el agente trabaja sobre los mismos archivos.",
+    "createsIn": "Los cuadernos nuevos se crean en",
     "empty": {
       "tauri": "Aún no hay cuadernos. Crea uno, o pídele al agente que produzca uno.",
       "web": "Los cuadernos están disponibles en la app de escritorio."

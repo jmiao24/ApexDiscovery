@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ExternalLink, NotebookPen, Plus } from "lucide-react";
-import { addTextToWorkspace, isTauri, jupyterStatus, openJupyterLab } from "@/lib/tauri";
+import { addTextToWorkspace, isTauri, jupyterStatus, openJupyterLab, workspaceBase, workspacePath } from "@/lib/tauri";
 import { listNotebooks, type NotebookEntry } from "@/lib/artifactFile";
 import { emptyIpynb } from "@/lib/notebook-file";
 import type { KernelLanguage } from "@/lib/kernel";
@@ -27,15 +27,27 @@ export function NotebooksPage() {
   // button (no point offering it before setup).
   const [jupyterInstalled, setJupyterInstalled] = useState(false);
   const [openingLab, setOpeningLab] = useState(false);
+  // The active session folder new notebooks land in — creation is scoped to it,
+  // so we show it explicitly (browsing is global, creation is local).
+  const [createTarget, setCreateTarget] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     setEntries(await listNotebooks("base"));
   }, []);
+  // Resolve the active workspace as a folder name relative to the base, so it
+  // reads the same as the folder chips on each list row.
+  const refreshTarget = useCallback(async () => {
+    const [ws, base] = await Promise.all([workspacePath(), workspaceBase()]);
+    if (!ws) return setCreateTarget(null);
+    const rel = base && ws.startsWith(base) ? ws.slice(base.length).replace(/^[/\\]+/, "") : ws;
+    setCreateTarget(rel || ws);
+  }, []);
   useEffect(() => {
     void refresh();
+    void refreshTarget();
     void jupyterStatus().then((s) => setJupyterInstalled(Boolean(s?.installed)));
-  }, [refresh]);
+  }, [refresh, refreshTarget]);
 
   const openLab = async () => {
     setOpeningLab(true);
@@ -105,7 +117,10 @@ export function NotebooksPage() {
           <div className="relative" ref={menuRef}>
             <button
               className="flex items-center gap-1.5 rounded-input bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
-              onClick={() => setMenuOpen((v) => !v)}
+              onClick={() => {
+                if (!menuOpen) void refreshTarget();
+                setMenuOpen((v) => !v);
+              }}
               disabled={!isTauri}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
@@ -136,6 +151,14 @@ export function NotebooksPage() {
           </div>
         </div>
         <p className="mt-1 text-sm text-muted">{t("notebooks.description")}</p>
+        {isTauri && createTarget && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted">
+            {t("notebooks.createsIn")}
+            <span className="max-w-[60%] truncate rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-text">
+              {createTarget}
+            </span>
+          </p>
+        )}
 
         <div className="mt-5 space-y-1.5">
           {entries.length === 0 && (

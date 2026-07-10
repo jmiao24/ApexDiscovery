@@ -7,6 +7,7 @@
     "pythonNotebook": "Notebook Python",
     "rNotebook": "Notebook R",
     "description": "Tous les notebooks Jupyter de vos dossiers de session, du plus récent au plus ancien. Les cellules s'exécutent sur le noyau Python ou R local dans le propre dossier du notebook ; l'agent travaille sur les mêmes fichiers.",
+    "createsIn": "Les nouveaux notebooks sont créés dans",
     "empty": {
       "tauri": "Aucun notebook pour le moment. Créez-en un, ou demandez à l'agent d'en produire un.",
       "web": "Les notebooks sont disponibles dans l'application de bureau."

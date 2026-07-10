@@ -7,6 +7,7 @@
     "pythonNotebook": "Python-Notebook",
     "rNotebook": "R-Notebook",
     "description": "Alle Jupyter-Notebooks aus Ihren Sitzungsordnern, neueste zuerst. Zellen laufen auf dem lokalen Python- oder R-Kernel im eigenen Ordner des Notebooks; der Agent arbeitet an denselben Dateien.",
+    "createsIn": "Neue Notebooks werden erstellt in",
     "empty": {
       "tauri": "Noch keine Notebooks. Erstellen Sie eines, oder lassen Sie den Agenten eines erzeugen.",
       "web": "Notebooks sind in der Desktop-App verfügbar."

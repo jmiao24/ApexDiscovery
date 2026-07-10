@@ -7,6 +7,7 @@
     "pythonNotebook": "Python 笔记本",
     "rNotebook": "R 笔记本",
     "description": "您所有会话文件夹中的 Jupyter 笔记本，按最新排序。单元格在笔记本自身文件夹中的本地 Python 或 R 内核上运行；代理处理的是同一批文件。",
+    "createsIn": "新笔记本创建于",
     "empty": {
       "tauri": "尚无笔记本。创建一个，或让代理生成一个。",
       "web": "笔记本功能在桌面应用中可用。"
