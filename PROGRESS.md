@@ -1,6 +1,8 @@
 # Progress
 
-2026-07-10 19:05 · release: v0.1.9 published (network-proxy setting, connection self-heal, #6 #7 #8 #9 fixes) — all 8 platform installers built by CI.
+2026-07-10 07:35 · docs(citation): repo is now academically citable — CITATION.cff + a citation section in all 7 READMEs (team authorship "The Open Science Desktop Contributors"); Zenodo↔GitHub archiving enabled, first DOI mints on the next release (then: add the badge + doi field, and sync the cff version each release). Sibling repo ai4s-skills shipped v0.1.0 the same way and already has DOI 10.5281/zenodo.21297455.
+
+2026-07-10 04:04 · release: v0.1.9 published (network-proxy setting, connection self-heal, #6 #7 #8 #9 fixes) — all 8 platform installers built by CI.
 
 2026-07-10 03:35 · fix(runtime): #9 root cause found by live probe — the browser delivers the xAI OAuth code fine; the sidecar's token exchange to auth.x.ai hangs because GUI-launched children inherit no proxy config. Added a network-proxy setting (follow system via scutil / custom URL / direct) in Settings → Agent runtime, injected as HTTP(S)_PROXY env at sidecar spawn with NO_PROXY for loopback; system+none apply on select via the masked-restart flow.
 
