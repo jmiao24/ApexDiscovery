@@ -417,6 +417,12 @@ fn spawn_kernel(app: &AppHandle, lang: &str, cwd: &std::path::Path, key: &str) -
             let mut c = crate::runtime::quiet_command(&python);
             c.arg(script);
             c.env("PATH", python_path_env(&python));
+            // Force UTF-8 for the stdio protocol and user file I/O. Without this,
+            // Windows decodes piped stdin/stdout with the ANSI code page (e.g.
+            // cp936/GBK), garbling non-ASCII source like `print("中文")`. No-op on
+            // macOS/Linux, which already default to UTF-8.
+            c.env("PYTHONUTF8", "1");
+            c.env("PYTHONIOENCODING", "utf-8");
             (c, None)
         }
         "r" => {

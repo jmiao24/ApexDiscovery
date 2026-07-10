@@ -51,6 +51,16 @@ def run_cell(ns: dict, code: str):
 
 
 def main() -> None:
+    # Force UTF-8 on the stdio protocol regardless of the OS locale. On Windows,
+    # piped stdin/stdout default to the ANSI code page (e.g. cp936/GBK), which
+    # corrupts non-ASCII source like `print("中文")` before it is executed. This
+    # is self-contained (independent of how the process is spawned); a no-op
+    # where stdio is already UTF-8.
+    for stream in (sys.stdin, sys.stdout):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
+
     ns: dict = {"__name__": "__main__"}
     for line in sys.stdin:
         line = line.strip()
