@@ -240,6 +240,25 @@ work; OpenCode-specific surfaces (multi-provider OAuth catalog, MCP management,
 slash-command discovery) are stubbed. Provenance, runs, files, and git
 snapshots are backend-independent and work unchanged.
 
+### OpenAI Codex backend (experimental)
+
+`apps/codex-bridge/` is the same idea on the
+[OpenAI Codex SDK](https://developers.openai.com/codex/sdk): same wire subset,
+same drop-in sidecar contract. It uses your existing `codex login`
+(~/.codex/auth.json) or `OPENAI_API_KEY`, and defaults to the model in your
+`~/.codex/config.toml`.
+
+```bash
+APEX_TOKEN=<token> APEX_OPENCODE_BIN=$PWD/apps/codex-bridge/src/server.mjs \
+  cargo run --release --manifest-path apps/server/Cargo.toml
+```
+
+Codex has no per-tool approval callback — it sandboxes instead. The app's
+approve/full switch maps to Codex sandbox modes (approve → `workspace-write`,
+full → `danger-full-access`), so approval prompts never appear on this
+backend; plan-first routing is ignored. Chat with streaming, command/file-
+change tool rows, session history/resume, `!` shell mode, and abort work.
+
 ## Build from source
 
 Prerequisites:
