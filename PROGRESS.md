@@ -1,5 +1,9 @@
 # Progress
 
+2026-07-10 00:55 · fix(sdk): self-heal the event stream (#8) — the global-config PATCH kills /event ~2s AFTER acknowledging, past af58765's masked reconnect, and EventSource never retries a terminally closed stream; the client now reopens it itself with backoff (verified in debug.log: drop → ready in ~300ms, no manual Connect). "Old model" self-reports are a prompt-level illusion — the app never pins a model per session.
+
+2026-07-09 23:06 · fix: force UTF-8 on the Python kernel stdio (#6, garbled Chinese output on Windows); surface the active session folder new notebooks are created in on the Notebooks page (#7).
+
 2026-07-09 13:05 · fix(models): switching the default model now reconnects transparently (masked by `switching`, like setApprovalMode) instead of closing the event stream and stranding the app disconnected until a manual Connect.
 
 2026-07-09 11:52 · fix(sessions): stopped the open-session effect firing twice (currentId dep) and made openSession bail before a duplicate reconnect, fixing connection-pool exhaustion that left later sessions stuck on the loading spinner; also unstuck the /new·/clear guard when clearing from a draft.

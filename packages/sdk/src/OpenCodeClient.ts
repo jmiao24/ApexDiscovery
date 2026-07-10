@@ -60,6 +60,10 @@ export class OpenCodeClient {
   private status: RuntimeStatus = "offline";
   private abort: AbortController | null = null;
   private es: EventSource | null = null;
+  /** Pending self-heal of a dead event stream (see reconnectSoon). */
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True between close() and the next connect() — stops self-healing. */
+  private closed = false;
   private readonly customFetch: boolean;
   private readonly connectTimeoutMs: number;
   private readonly requestTimeoutMs: number;
@@ -119,6 +123,11 @@ export class OpenCodeClient {
 
   /** Open the SSE event stream. Resolves once the server acknowledges. */
   connect(): Promise<void> {
+    this.closed = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.setStatus("connecting");
 
     // Prefer EventSource in a real webview/browser (reliable SSE, incl. macOS
@@ -164,8 +173,18 @@ export class OpenCodeClient {
             this.es = null;
             reject(new Error("Could not open OpenCode event stream"));
           } else {
-            // EventSource auto-reconnects; reflect the transient state.
-            this.setStatus("connecting");
+            // Take over reconnection ourselves. EventSource's built-in retry
+            // never recovers when the server ends the stream terminally —
+            // e.g. the global-config PATCH (model switch) rebuilds the
+            // instance and closes /event moments AFTER acknowledging, killing
+            // even a freshly reopened stream; the app then sat in
+            // "connecting" until a manual Connect. Reopen a fresh stream
+            // with backoff instead (a deliberate close() cancels it).
+            es.close();
+            if (this.es === es) {
+              this.es = null;
+              this.reconnectSoon();
+            }
           }
         };
       });
@@ -207,11 +226,34 @@ export class OpenCodeClient {
   }
 
   close(): void {
+    this.closed = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.es?.close();
     this.es = null;
     this.abort?.abort();
     this.abort = null;
     this.setStatus("offline");
+  }
+
+  /** Reopen the event stream after it died post-open, with backoff. The first
+   *  retry is quick (a plain blip); later ones stretch to cover the server's
+   *  instance-rebuild window after a global-config PATCH. Gives up into
+   *  "error" so the banner offers the manual Connect. */
+  private reconnectSoon(attempt = 0): void {
+    if (this.closed || this.reconnectTimer) return;
+    this.setStatus("connecting");
+    const delay = attempt === 0 ? 250 : Math.min(1000 * attempt, 3000);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.closed) return;
+      this.connect().catch(() => {
+        if (attempt + 1 < 8) this.reconnectSoon(attempt + 1);
+        else this.setStatus("error");
+      });
+    }, delay);
   }
 
   /** Create a new agent session, returning its id. Scoping is by the sidecar's
@@ -327,6 +369,12 @@ export class OpenCodeClient {
       body: JSON.stringify({ model }),
     });
     if (!res.ok) throw await this.apiError(res, "Failed to set model");
+    // NOTE: deliberately do NOT disposeInstance() here (unlike auth changes).
+    // Disposing tears the instance down asynchronously server-side, landing
+    // ~1s AFTER the store's connectRetry has already opened a fresh event
+    // stream — it kills that stream and EventSource cannot recover, stranding
+    // the app in "connecting" until a manual Connect. The model switch is
+    // applied by the config PATCH; the reconnect picks it up.
   }
 
   /** Providers OpenCode can use right now, with their models. */
