@@ -53,6 +53,7 @@ runs, and review into one auditable desktop workflow.
 - [🗂️ Repository layout](#repository-layout)
 - [📌 Status](#status)
 - [🤝 Contributing](#contributing)
+- [📖 Citation](#citation)
 - [⚖️ License](#license)
 
 ## What it does
@@ -274,6 +275,24 @@ Issues and PRs are welcome. Keep changes minimal and verifiable, follow
 [`AGENTS.md`](./AGENTS.md), and run the checks before opening a PR. For discussion,
 join the [Open Science Discord](https://discord.gg/fWNMDKcd5P) or the
 [linux.do](https://linux.do) community.
+
+## Citation
+
+If you use Open Science Desktop in your research, please cite it:
+
+```bibtex
+@software{open_science_desktop,
+  author  = {{The Open Science Desktop Contributors}},
+  title   = {Open Science Desktop: a local-first, model-agnostic AI research workbench},
+  year    = {2026},
+  version = {0.1.9},
+  url     = {https://github.com/ai4s-research/open-science},
+  license = {MIT}
+}
+```
+
+GitHub's **"Cite this repository"** button (top of the repo page, generated from
+[`CITATION.cff`](./CITATION.cff)) provides the same reference in APA and BibTeX.
 
 ## License
 
