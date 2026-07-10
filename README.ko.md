@@ -175,3 +175,20 @@ pnpm lint
 가장 신뢰할 수 있는 구현 로그는 [`PROGRESS.md`](./PROGRESS.md)입니다. 가까운 작업은 서명/공증된 릴리스, Windows/Linux 검증 확대, 자동 업데이트, 커넥터 강화, 재현성 리뷰 지속입니다. 토론은 [Open Science Discord](https://discord.gg/fWNMDKcd5P)에서도 할 수 있습니다.
 
 [MIT](./LICENSE). Open Science Desktop은 beta 연구 도구입니다. 출력은 초안으로 보고, 공개나 의사결정 전에 숫자, 인용, 코드, 결론을 검증하세요.
+
+## 인용
+
+연구에서 Open Science Desktop을 사용했다면 아래와 같이 인용해 주세요:
+
+```bibtex
+@software{open_science_desktop,
+  author  = {{The Open Science Desktop Contributors}},
+  title   = {Open Science Desktop: a local-first, model-agnostic AI research workbench},
+  year    = {2026},
+  version = {0.1.9},
+  url     = {https://github.com/ai4s-research/open-science},
+  license = {MIT}
+}
+```
+
+GitHub의 **“Cite this repository”** 버튼([`CITATION.cff`](./CITATION.cff) 기반)에서 APA/BibTeX 형식도 얻을 수 있습니다.

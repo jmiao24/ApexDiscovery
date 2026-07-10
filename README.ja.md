@@ -175,3 +175,20 @@ pnpm lint
 現在の実装ログは [`PROGRESS.md`](./PROGRESS.md) を参照してください。近い作業は署名済みリリース、Windows/Linux 検証、自動更新、コネクタの堅牢化、再現性レビューの継続です。議論には [Open Science Discord](https://discord.gg/fWNMDKcd5P) も使えます。
 
 [MIT](./LICENSE). Open Science Desktop は beta の研究ツールです。出力は草稿として扱い、公開や意思決定の前に数字、引用、コード、結論を検証してください。
+
+## 引用
+
+研究で Open Science Desktop を使用した場合は、以下のように引用してください:
+
+```bibtex
+@software{open_science_desktop,
+  author  = {{The Open Science Desktop Contributors}},
+  title   = {Open Science Desktop: a local-first, model-agnostic AI research workbench},
+  year    = {2026},
+  version = {0.1.9},
+  url     = {https://github.com/ai4s-research/open-science},
+  license = {MIT}
+}
+```
+
+GitHub の **“Cite this repository”** ボタン([`CITATION.cff`](./CITATION.cff) から生成)でも APA / BibTeX 形式を取得できます。

@@ -175,3 +175,20 @@ Workspace-Dateien, Rohdaten, Sitzungsverlauf, Provenance, Notebooks und Run Reco
 Das verlässlichste Implementierungslog ist [`PROGRESS.md`](./PROGRESS.md). Nahe Arbeiten: signierte/notarisierte Releases, breitere Windows/Linux-Verifikation, Auto-Update, robustere Konnektoren und weitere Reproduzierbarkeits-Reviews. Für Diskussionen gibt es den [Open Science Discord](https://discord.gg/fWNMDKcd5P).
 
 [MIT](./LICENSE). Open Science Desktop ist Beta-Forschungstooling. Ausgaben sind Entwürfe: Zahlen, Zitate, Code und Schlussfolgerungen vor Veröffentlichung oder Entscheidung prüfen.
+
+## Zitation
+
+Wenn Sie Open Science Desktop in Ihrer Forschung verwenden, zitieren Sie es bitte wie folgt:
+
+```bibtex
+@software{open_science_desktop,
+  author  = {{The Open Science Desktop Contributors}},
+  title   = {Open Science Desktop: a local-first, model-agnostic AI research workbench},
+  year    = {2026},
+  version = {0.1.9},
+  url     = {https://github.com/ai4s-research/open-science},
+  license = {MIT}
+}
+```
+
+GitHubs **„Cite this repository“**-Button (aus [`CITATION.cff`](./CITATION.cff) generiert) liefert dieselbe Referenz als APA und BibTeX.

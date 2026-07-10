@@ -52,6 +52,7 @@
 - [🗂️ 仓库结构](#仓库结构)
 - [📌 状态](#状态)
 - [🤝 参与贡献](#参与贡献)
+- [📖 引用](#引用)
 - [⚖️ 许可证](#许可证)
 
 ## 它能做什么
@@ -239,6 +240,23 @@ pnpm lint
 
 欢迎 Issue 和 PR。请保持改动最小且可验证，遵循 [`AGENTS.md`](./AGENTS.md)，并在提交 PR 前运行检查。讨论和交流可以加入
 [Open Science Discord](https://discord.gg/fWNMDKcd5P)，也可以在 [linux.do](https://linux.do) 社区参与。
+
+## 引用
+
+如果 Open Science Desktop 对你的研究有帮助,请如下引用:
+
+```bibtex
+@software{open_science_desktop,
+  author  = {{The Open Science Desktop Contributors}},
+  title   = {Open Science Desktop: a local-first, model-agnostic AI research workbench},
+  year    = {2026},
+  version = {0.1.9},
+  url     = {https://github.com/ai4s-research/open-science},
+  license = {MIT}
+}
+```
+
+仓库页顶部的 **"Cite this repository"** 按钮(由 [`CITATION.cff`](./CITATION.cff) 生成)提供 APA 与 BibTeX 两种格式。
 
 ## 许可证
 
