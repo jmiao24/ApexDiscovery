@@ -1,7 +1,7 @@
 [package]
 name = "ai4s-workbench"
 version = "0.1.9"
-description = "Open Science Desktop"
+description = "APEX Science Desktop"
 authors = ["AI4S Workbench contributors"]
 edition = "2021"
 
@@ -13,6 +13,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# Shared command core (also used by the self-hosted web server).
+shell-core = { path = "../../../crates/shell-core" }
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 tauri-plugin-single-instance = "2"
@@ -22,7 +24,5 @@ serde_json = "1"
 tokio = { version = "1", features = ["time"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-clipboard-manager = "2"
-getrandom = "0.4.3"
 opener = { version = "0.8.5", features = ["reveal"] }
-rusqlite = { version = "0.32", features = ["bundled"] }
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "native-tls"] }

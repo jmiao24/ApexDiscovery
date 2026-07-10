@@ -1,0 +1,13 @@
+[package]
+name = "shell-core"
+version = "0.1.9"
+description = "Shared shell-command core for APEX Science Desktop and the web server"
+authors = ["AI4S Workbench contributors"]
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+getrandom = "0.4.3"

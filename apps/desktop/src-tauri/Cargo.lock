@@ -33,12 +33,11 @@ dependencies = [
 name = "ai4s-workbench"
 version = "0.1.9"
 dependencies = [
- "getrandom 0.4.3",
  "opener",
  "reqwest",
- "rusqlite",
  "serde",
  "serde_json",
+ "shell-core",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
@@ -3470,6 +3469,16 @@ dependencies = [
  "libc",
  "sigchld",
  "windows-sys 0.60.2",
+]
+
+[[package]]
+name = "shell-core"
+version = "0.1.9"
+dependencies = [
+ "getrandom 0.4.3",
+ "rusqlite",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
