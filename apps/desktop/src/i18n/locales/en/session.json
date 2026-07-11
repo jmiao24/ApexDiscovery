@@ -56,9 +56,9 @@
     },
     "plan": {
       "label": "Plan",
-      "aria": "Plan-first mode",
-      "onTitle": "Plan first: proposes a plan and asks clarifying questions before executing",
-      "offTitle": "Plan first is off: the first message runs immediately"
+      "aria": "Planning",
+      "onTitle": "Planning allowed: the agent plans complex or unclear requests first, and asks you clarifying questions",
+      "offTitle": "Planning off: every request runs straight away"
     }
   },
   "localCommand": {

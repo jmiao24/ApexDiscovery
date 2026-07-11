@@ -240,17 +240,25 @@ work; OpenCode-specific surfaces (multi-provider OAuth catalog, MCP management,
 slash-command discovery) are stubbed. Provenance, runs, files, and git
 snapshots are backend-independent and work unchanged.
 
-**Plan first (with clarifying questions).** With the composer's **Plan** toggle
-on (the default), the first message of a conversation runs read-only: the agent
-researches, then proposes a plan instead of executing. If the request is
-underspecified — no input data, unclear scope, an open methodology or output
-choice — it asks 1–4 multiple-choice clarifying questions first, each with
-concrete options plus a free-text answer, and waits for your picks before
-finalizing the plan. Execution starts on your next message. The bridge exposes
-this to the agent as an in-process `AskUserQuestion` MCP tool and surfaces it on
-the wire as a `question.asked` event, so the app's existing question card
-renders it. Turn the toggle off to send the first message straight to the build
-agent.
+**Planning (the agent decides).** With the composer's **Plan** toggle on (the
+default), the agent may plan — and judges, per message, whether a request
+deserves it. A multi-step, ambiguous, or consequential request (an analysis
+pipeline, an open methodology or output choice, missing input data) makes it
+call `EnterPlanMode`: the turn goes read-only, it researches, and it ends with a
+proposed plan instead of executing. A simple request ("what's in this file?") is
+just answered. When something essential is still unclear it asks 1–4
+multiple-choice questions — concrete options plus a free-text answer — and waits
+for your picks before finalizing the plan. Execution starts on your next
+message. Turn the toggle off and nothing is ever planned: every request runs
+straight away.
+
+The bridge serves `EnterPlanMode` and `AskUserQuestion` to the agent as
+in-process MCP tools and surfaces a question on the wire as `question.asked`, so
+the app's existing question card renders it with no frontend work. Read-only is
+*enforced*, not merely requested: once the agent enters plan mode the bridge's
+permission callback denies every tool that would write or execute — including
+when the approval switch is on full access — and steers the agent back into
+planning.
 
 ## Build from source
 

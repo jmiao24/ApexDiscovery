@@ -97,31 +97,32 @@ setInterval(() => {
   for (const res of sseClients) res.write(": keepalive\n\n");
 }, 25_000).unref();
 
-// Injected into a plan turn's prompt so the model asks Biomni-style clarifying
-// questions (rendered as selectable options by the AskUserQuestion tool) before
-// committing to a plan. Kept out of the recorded history — the visible user
-// message stays exactly what the user typed.
-const CLARIFY_GUIDANCE = [
+// Appended to the system prompt when the user allows planning. The MODEL decides
+// whether a request deserves a plan (it calls EnterPlanMode) — the bridge does
+// not force it. Once the model opts in, canUseTool enforces read-only for the
+// rest of the turn, so "plan mode" is real, not just a promise in the prompt.
+const PLANNING_GUIDANCE = [
   "",
-  "<plan_mode>",
-  "You are in plan mode: research read-only, then propose a plan — do not edit",
-  "files or run commands yet.",
+  "<planning>",
+  "Before using ANY tool, decide whether this request deserves a plan first.",
   "",
-  "FIRST decide whether you can plan well from what you have. If the request is",
-  "missing something essential — no input data is present in the workspace, the",
-  "goal or scope is unclear, or a methodology/output choice is open — call the",
-  "AskUserQuestion tool (mcp__apex__AskUserQuestion) BEFORE doing deep",
-  "exploration. Ask 1–4 concise multiple-choice questions, each with 2–4 concrete",
-  "options (the user can also type their own answer). Ask only about decisions",
-  "that genuinely change the plan; if the request is already clear and the inputs",
-  "are present, skip the tool and just plan.",
+  "If it is multi-step, ambiguous, or consequential — an analysis pipeline, an open",
+  "methodology or output choice, input data that is missing or unspecified, or work",
+  "that would write many files or run for a long time — call EnterPlanMode",
+  "(mcp__apex__EnterPlanMode) as your FIRST action, before exploring.",
   "",
-  "After the user answers, present your final plan as your last message and stop",
-  "— execution begins on the user's next message.",
-  "</plan_mode>",
+  "If it is simple and clear (a question, reading a file, a small edit, a one-off",
+  "command), do NOT call it — just do the work.",
+  "",
+  "After EnterPlanMode you are read-only for the rest of the turn: research with read",
+  "tools, and if something essential is still unclear, call AskUserQuestion",
+  "(mcp__apex__AskUserQuestion) to ask 1–4 multiple-choice questions with concrete",
+  "options rather than asking in prose. Then present your plan as your final message",
+  "and stop — execution begins on the user's next message.",
+  "</planning>",
 ].join("\n");
 
-// Read-only tools that a plan turn may run without prompting the user — the
+// Read-only tools a planning turn may run without prompting the user — the
 // research phase must not stall on approvals it would never be denied.
 const PLAN_READONLY_TOOLS = new Set([
   "Read",
@@ -225,7 +226,7 @@ function askUser(sessionId, questions) {
       description: String(o.description ?? ""),
     })),
     multiple: !!q.multiSelect,
-    // Always offer a typed "Other" answer, like Biomni's option list.
+    // Always offer a typed "Other" answer alongside the options.
     custom: true,
   }));
   broadcast("question.asked", { id: requestId, sessionID: sessionId, questions: mapped });
@@ -234,17 +235,50 @@ function askUser(sessionId, questions) {
   });
 }
 
-// The AskUserQuestion tool, exposed to the agent as an in-process MCP tool
-// (`mcp__apex__AskUserQuestion`). Its input schema mirrors Claude Code's own
-// AskUserQuestion so the model uses it naturally; the handler blocks the turn
-// on the user's selection and feeds the answer back as the tool result.
-function askServerFor(session) {
-  return createSdkMcpServer({
-    name: "apex",
-    version: "1.0.0",
-    tools: [
+/**
+ * The agent's own tools, served in-process (`mcp__apex__*`):
+ *
+ *   EnterPlanMode    the model's OWN decision that this request deserves a plan.
+ *                    Calling it flips the turn read-only (enforced in canUseTool)
+ *                    — the model then researches, may ask clarifying questions,
+ *                    and ends the turn with a plan instead of executing. Only
+ *                    offered when the user allows planning.
+ *   AskUserQuestion  multiple-choice clarifying questions, surfaced to the UI as
+ *                    a `question.asked` card; the user's picks come back as the
+ *                    tool result. Mirrors Claude Code's own AskUserQuestion shape
+ *                    so the model reaches for it naturally.
+ *
+ * `onEnterPlan` is how the turn learns the model opted in.
+ */
+function apexToolsFor(session, { planAllowed, onEnterPlan }) {
+  const tools = [];
+  if (planAllowed) {
+    tools.push(
       tool(
-        "AskUserQuestion",
+        "EnterPlanMode",
+        "Enter read-only plan mode for this turn. Call this FIRST when the request is " +
+          "multi-step, ambiguous, or consequential (an analysis pipeline, an open " +
+          "methodology or output choice, missing input data, or work that writes many " +
+          "files). Do not call it for simple, clear requests — just do those. After " +
+          "calling it you cannot edit files or run commands: research, optionally ask " +
+          "the user clarifying questions, then present a plan and stop.",
+        {
+          reason: z.string().describe("Why this request needs a plan before executing."),
+          description: z.string().describe("Short title for the planning step (≈8 words)."),
+        },
+        async ({ reason, description }) => {
+          onEnterPlan({ reason, description });
+          return { content: [{ type: "text", text: JSON.stringify({ enter_plan_mode: true }) }] };
+        },
+        // Load it up front. Deferred, the model has to run a tool search to
+        // discover it — which it does mid-turn, slowly, or not at all.
+        { alwaysLoad: true },
+      ),
+    );
+  }
+  tools.push(
+    tool(
+      "AskUserQuestion",
         "Ask the user 1–4 clarifying multiple-choice questions before proceeding. " +
           "Use when the request is ambiguous or underspecified (missing data source, " +
           "unclear scope, output format, or methodology). Each question is shown to the " +
@@ -291,13 +325,16 @@ function askServerFor(session) {
             .join("\n");
           return { content: [{ type: "text", text: `The user answered:\n${summary}` }] };
         },
+        { alwaysLoad: true },
       ),
-    ],
-  });
+  );
+  return createSdkMcpServer({ name: "apex", version: "1.0.0", tools });
 }
 
 // ---- the agent turn ----
-async function runTurn(session, promptText, { plan = false } = {}) {
+// `planAllowed` only OFFERS the model EnterPlanMode — whether this turn actually
+// becomes a plan is the model's call, and is recorded in `planning` below.
+async function runTurn(session, promptText, { planAllowed = false } = {}) {
   if (runningTurns.has(session.id)) throw Object.assign(new Error("A turn is already running"), { status: 409 });
 
   // Record the user message (the UI shows its own copy locally; history is
@@ -336,9 +373,16 @@ async function runTurn(session, promptText, { plan = false } = {}) {
     });
   };
 
-  // A plan turn carries clarify guidance so the model asks AskUserQuestion
-  // before committing; the recorded history above kept the clean user text.
-  const sdkPrompt = plan ? `${promptText}\n${CLARIFY_GUIDANCE}` : promptText;
+  // Set the moment the model calls EnterPlanMode. From then on this turn is
+  // read-only (see canUseTool) — the model's decision, enforced by the bridge.
+  let planning = false;
+
+  // Tell the model when planning is worth it. Only when the user allows it — with
+  // the toggle off there is no EnterPlanMode tool and no guidance, so every
+  // request executes straight away. The guidance rides on the prompt (a
+  // systemPrompt append does not reliably reach the model here) but is kept OUT
+  // of the recorded history: the visible message stays what the user typed.
+  const sdkPrompt = planAllowed ? `${promptText}\n${PLANNING_GUIDANCE}` : promptText;
 
   try {
     const stream = query({
@@ -347,15 +391,25 @@ async function runTurn(session, promptText, { plan = false } = {}) {
         cwd: session.directory || process.cwd(),
         resume: session.claudeSessionId || undefined,
         model,
-        // A "plan" turn is enforced read-only by the SDK: the agent proposes a
-        // plan and ends its turn; execution starts on the user's next message.
-        permissionMode: plan ? "plan" : permissionMode(),
+        // Always "default" so canUseTool is actually consulted: it implements the
+        // approve/full switch itself (below), and a planning turn's read-only
+        // enforcement lives there. Passing "bypassPermissions" to the SDK would
+        // skip the callback entirely — and with it the enforcement, letting a
+        // "planning" turn write files whenever the user is on full access.
+        permissionMode: "default",
         includePartialMessages: true,
         // Load workspace settings (.claude/skills, CLAUDE.md) like the CLI does.
         settingSources: ["project"],
         abortController: abort,
-        // The AskUserQuestion clarify tool runs in-process (no subprocess).
-        mcpServers: { apex: askServerFor(session) },
+        // EnterPlanMode + AskUserQuestion, served in-process (no subprocess).
+        mcpServers: {
+          apex: apexToolsFor(session, {
+            planAllowed,
+            onEnterPlan: () => {
+              planning = true;
+            },
+          }),
+        },
         ...(bridgeConfig.apiKey ? { env: { ...process.env, ANTHROPIC_API_KEY: bridgeConfig.apiKey } } : {}),
         canUseTool: async (toolName, input) => {
           if (toolName === "ExitPlanMode") {
@@ -365,14 +419,14 @@ async function runTurn(session, promptText, { plan = false } = {}) {
                 "Present the plan to the user as your final message and end the turn. Execution starts after the user confirms in their next message.",
             };
           }
-          // The clarify tool asks the user itself — never gate it behind the
-          // approval prompt (it must run even inside read-only plan mode).
+          // Our own tools ask the user themselves — never gate them behind the
+          // approval prompt (they must run even inside read-only planning).
           if (toolName.startsWith("mcp__apex__")) {
             return { behavior: "allow", updatedInput: input };
           }
-          // In plan mode the research phase is read-only: let safe read tools
-          // run without prompting, and steer anything else back into the plan.
-          if (plan) {
+          // The model opted into planning: research runs unprompted, and
+          // anything that would execute is steered back into the plan.
+          if (planning) {
             if (PLAN_READONLY_TOOLS.has(toolName)) return { behavior: "allow", updatedInput: input };
             return {
               behavior: "deny",
@@ -380,7 +434,6 @@ async function runTurn(session, promptText, { plan = false } = {}) {
                 "You are in plan mode — don't run this yet. Describe it in your plan, or ask the user a clarifying question with AskUserQuestion. Execution begins after the user confirms.",
             };
           }
-          // Plan turns already returned above; here the turn is a normal build.
           const mode = permissionMode();
           if (mode === "bypassPermissions") return { behavior: "allow", updatedInput: input };
           const allowed = alwaysAllowed.get(session.id);
@@ -674,7 +727,11 @@ const server = createServer(async (req, res) => {
           .join("\n");
         if (!text) return void apiError(res, 400, "empty prompt");
         if (runningTurns.has(id)) return void apiError(res, 409, "a turn is already running");
-        void runTurn(session, text, { plan: body.agent === "plan" });
+        // `planMode: "auto"` = the user allows planning; the MODEL still decides
+        // whether to use it. (`agent: "plan"` is OpenCode's force-a-plan-agent
+        // routing — honored here as "planning allowed" for compatibility.)
+        const planAllowed = body.planMode === "auto" || body.agent === "plan";
+        void runTurn(session, text, { planAllowed });
         return void json(res, { ok: true });
       }
       if (method === "POST" && sub === "abort") {

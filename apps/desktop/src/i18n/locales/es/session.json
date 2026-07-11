@@ -56,9 +56,9 @@
     },
     "plan": {
       "label": "Plan",
-      "aria": "Modo planificar primero",
-      "onTitle": "Planificar primero: propone un plan y hace preguntas aclaratorias antes de ejecutar",
-      "offTitle": "Planificar primero desactivado: el primer mensaje se ejecuta de inmediato"
+      "aria": "Planificación",
+      "onTitle": "Planificación permitida: ante una petición compleja o poco clara, el agente planifica primero y hace preguntas aclaratorias",
+      "offTitle": "Planificación desactivada: cada petición se ejecuta de inmediato"
     }
   },
   "localCommand": {

@@ -625,10 +625,17 @@ export class OpenCodeClient {
   }
 
   /** Send a prompt into a session; output streams back via onEvent (SSE).
-   *  `agent` routes the turn to a specific primary agent — the app sends the
-   *  FIRST message of a session to "plan" (read-only: propose a plan, ask for
-   *  confirmation) and later messages to the default build agent. */
-  async sendPrompt(sessionId: string, text: string, opts?: { agent?: string }): Promise<void> {
+   *  `agent` routes the turn to a specific primary agent (OpenCode's "plan"
+   *  agent forces a read-only planning turn).
+   *  `planMode` instead ALLOWS planning and leaves the choice to the agent: it
+   *  decides per message whether the request deserves a plan (proposing one,
+   *  and asking clarifying questions, instead of executing). Runtimes that
+   *  don't support it ignore the field and just execute. */
+  async sendPrompt(
+    sessionId: string,
+    text: string,
+    opts?: { agent?: string; planMode?: boolean },
+  ): Promise<void> {
     const res = await this.fetchWithTimeout(
       `${this.baseUrl}/session/${encodeURIComponent(sessionId)}/prompt_async`,
       {
@@ -637,6 +644,7 @@ export class OpenCodeClient {
         body: JSON.stringify({
           parts: [{ type: "text", text }],
           ...(opts?.agent ? { agent: opts.agent } : {}),
+          ...(opts?.planMode ? { planMode: "auto" } : {}),
         }),
       },
     );

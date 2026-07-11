@@ -56,9 +56,9 @@
     },
     "plan": {
       "label": "Plan",
-      "aria": "Mode planification d’abord",
-      "onTitle": "Planifier d’abord : propose un plan et pose des questions de clarification avant d’exécuter",
-      "offTitle": "Planifier d’abord désactivé : le premier message s’exécute immédiatement"
+      "aria": "Planification",
+      "onTitle": "Planification autorisée : pour une demande complexe ou floue, l’agent planifie d’abord et pose des questions de clarification",
+      "offTitle": "Planification désactivée : chaque demande s’exécute immédiatement"
     }
   },
   "localCommand": {
