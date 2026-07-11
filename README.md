@@ -240,6 +240,18 @@ work; OpenCode-specific surfaces (multi-provider OAuth catalog, MCP management,
 slash-command discovery) are stubbed. Provenance, runs, files, and git
 snapshots are backend-independent and work unchanged.
 
+**Plan first (with clarifying questions).** With the composer's **Plan** toggle
+on (the default), the first message of a conversation runs read-only: the agent
+researches, then proposes a plan instead of executing. If the request is
+underspecified — no input data, unclear scope, an open methodology or output
+choice — it asks 1–4 multiple-choice clarifying questions first, each with
+concrete options plus a free-text answer, and waits for your picks before
+finalizing the plan. Execution starts on your next message. The bridge exposes
+this to the agent as an in-process `AskUserQuestion` MCP tool and surfaces it on
+the wire as a `question.asked` event, so the app's existing question card
+renders it. Turn the toggle off to send the first message straight to the build
+agent.
+
 ## Build from source
 
 Prerequisites:

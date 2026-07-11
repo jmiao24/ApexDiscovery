@@ -53,6 +53,12 @@
     "error": {
       "paste": "No se pudo guardar el contenido pegado: {{message}}",
       "addFiles": "No se pudieron añadir los archivos: {{message}}"
+    },
+    "plan": {
+      "label": "Plan",
+      "aria": "Modo planificar primero",
+      "onTitle": "Planificar primero: propone un plan y hace preguntas aclaratorias antes de ejecutar",
+      "offTitle": "Planificar primero desactivado: el primer mensaje se ejecuta de inmediato"
     }
   },
   "localCommand": {

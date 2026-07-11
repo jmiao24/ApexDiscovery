@@ -31,7 +31,8 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
 
 // ---- CLI / env contract (identical to `opencode serve`) ----
 const args = process.argv.slice(2);
@@ -96,11 +97,52 @@ setInterval(() => {
   for (const res of sseClients) res.write(": keepalive\n\n");
 }, 25_000).unref();
 
+// Injected into a plan turn's prompt so the model asks Biomni-style clarifying
+// questions (rendered as selectable options by the AskUserQuestion tool) before
+// committing to a plan. Kept out of the recorded history — the visible user
+// message stays exactly what the user typed.
+const CLARIFY_GUIDANCE = [
+  "",
+  "<plan_mode>",
+  "You are in plan mode: research read-only, then propose a plan — do not edit",
+  "files or run commands yet.",
+  "",
+  "FIRST decide whether you can plan well from what you have. If the request is",
+  "missing something essential — no input data is present in the workspace, the",
+  "goal or scope is unclear, or a methodology/output choice is open — call the",
+  "AskUserQuestion tool (mcp__apex__AskUserQuestion) BEFORE doing deep",
+  "exploration. Ask 1–4 concise multiple-choice questions, each with 2–4 concrete",
+  "options (the user can also type their own answer). Ask only about decisions",
+  "that genuinely change the plan; if the request is already clear and the inputs",
+  "are present, skip the tool and just plan.",
+  "",
+  "After the user answers, present your final plan as your last message and stop",
+  "— execution begins on the user's next message.",
+  "</plan_mode>",
+].join("\n");
+
+// Read-only tools that a plan turn may run without prompting the user — the
+// research phase must not stall on approvals it would never be denied.
+const PLAN_READONLY_TOOLS = new Set([
+  "Read",
+  "Grep",
+  "Glob",
+  "LS",
+  "WebFetch",
+  "WebSearch",
+  "NotebookRead",
+  "Task",
+  "TodoWrite",
+]);
+
 // ---- running turns / pending approvals ----
 /** sessionId → { abort: AbortController } */
 const runningTurns = new Map();
 /** requestId → { sessionId, resolve(reply) } */
 const pendingPermissions = new Map();
+/** requestId → { sessionId, questions, resolve(answers|null) } — an open
+ *  AskUserQuestion the user must answer (rendered as a selectable card). */
+const pendingQuestions = new Map();
 /** sessionId → Set<toolName> the user approved "always" for. */
 const alwaysAllowed = new Map();
 let idCounter = 0;
@@ -170,6 +212,90 @@ function textOfContent(content) {
   return "";
 }
 
+// ---- interactive clarifying questions (AskUserQuestion) ----
+// Broadcast a `question.asked` the UI renders as a selectable card, and resolve
+// once the user replies (an array of picked labels per question) or skips (null).
+function askUser(sessionId, questions) {
+  const requestId = freshId("qst");
+  const mapped = questions.map((q) => ({
+    question: String(q.question ?? ""),
+    header: String(q.header ?? ""),
+    options: (q.options ?? []).map((o) => ({
+      label: String(o.label ?? ""),
+      description: String(o.description ?? ""),
+    })),
+    multiple: !!q.multiSelect,
+    // Always offer a typed "Other" answer, like Biomni's option list.
+    custom: true,
+  }));
+  broadcast("question.asked", { id: requestId, sessionID: sessionId, questions: mapped });
+  return new Promise((resolve) => {
+    pendingQuestions.set(requestId, { sessionId, questions: mapped, resolve });
+  });
+}
+
+// The AskUserQuestion tool, exposed to the agent as an in-process MCP tool
+// (`mcp__apex__AskUserQuestion`). Its input schema mirrors Claude Code's own
+// AskUserQuestion so the model uses it naturally; the handler blocks the turn
+// on the user's selection and feeds the answer back as the tool result.
+function askServerFor(session) {
+  return createSdkMcpServer({
+    name: "apex",
+    version: "1.0.0",
+    tools: [
+      tool(
+        "AskUserQuestion",
+        "Ask the user 1–4 clarifying multiple-choice questions before proceeding. " +
+          "Use when the request is ambiguous or underspecified (missing data source, " +
+          "unclear scope, output format, or methodology). Each question is shown to the " +
+          "user as selectable options; they may also type their own answer.",
+        {
+          questions: z
+            .array(
+              z.object({
+                question: z.string().describe("The full question to ask the user."),
+                header: z.string().describe("A short label for the question (≈12 chars)."),
+                multiSelect: z
+                  .boolean()
+                  .optional()
+                  .describe("Allow selecting more than one option."),
+                options: z
+                  .array(
+                    z.object({
+                      label: z.string(),
+                      description: z.string().optional(),
+                    }),
+                  )
+                  .min(2)
+                  .max(4)
+                  .describe("2–4 concrete choices."),
+              }),
+            )
+            .min(1)
+            .max(4),
+        },
+        async ({ questions }) => {
+          const answers = await askUser(session.id, questions);
+          if (!answers) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "The user skipped the questions. Proceed with sensible defaults and state your assumptions in the plan.",
+                },
+              ],
+            };
+          }
+          const summary = questions
+            .map((q, i) => `- ${q.header || q.question}: ${(answers[i] ?? []).join(", ") || "(no answer)"}`)
+            .join("\n");
+          return { content: [{ type: "text", text: `The user answered:\n${summary}` }] };
+        },
+      ),
+    ],
+  });
+}
+
 // ---- the agent turn ----
 async function runTurn(session, promptText, { plan = false } = {}) {
   if (runningTurns.has(session.id)) throw Object.assign(new Error("A turn is already running"), { status: 409 });
@@ -210,9 +336,13 @@ async function runTurn(session, promptText, { plan = false } = {}) {
     });
   };
 
+  // A plan turn carries clarify guidance so the model asks AskUserQuestion
+  // before committing; the recorded history above kept the clean user text.
+  const sdkPrompt = plan ? `${promptText}\n${CLARIFY_GUIDANCE}` : promptText;
+
   try {
     const stream = query({
-      prompt: promptText,
+      prompt: sdkPrompt,
       options: {
         cwd: session.directory || process.cwd(),
         resume: session.claudeSessionId || undefined,
@@ -224,6 +354,8 @@ async function runTurn(session, promptText, { plan = false } = {}) {
         // Load workspace settings (.claude/skills, CLAUDE.md) like the CLI does.
         settingSources: ["project"],
         abortController: abort,
+        // The AskUserQuestion clarify tool runs in-process (no subprocess).
+        mcpServers: { apex: askServerFor(session) },
         ...(bridgeConfig.apiKey ? { env: { ...process.env, ANTHROPIC_API_KEY: bridgeConfig.apiKey } } : {}),
         canUseTool: async (toolName, input) => {
           if (toolName === "ExitPlanMode") {
@@ -233,7 +365,23 @@ async function runTurn(session, promptText, { plan = false } = {}) {
                 "Present the plan to the user as your final message and end the turn. Execution starts after the user confirms in their next message.",
             };
           }
-          const mode = plan ? "plan" : permissionMode();
+          // The clarify tool asks the user itself — never gate it behind the
+          // approval prompt (it must run even inside read-only plan mode).
+          if (toolName.startsWith("mcp__apex__")) {
+            return { behavior: "allow", updatedInput: input };
+          }
+          // In plan mode the research phase is read-only: let safe read tools
+          // run without prompting, and steer anything else back into the plan.
+          if (plan) {
+            if (PLAN_READONLY_TOOLS.has(toolName)) return { behavior: "allow", updatedInput: input };
+            return {
+              behavior: "deny",
+              message:
+                "You are in plan mode — don't run this yet. Describe it in your plan, or ask the user a clarifying question with AskUserQuestion. Execution begins after the user confirms.",
+            };
+          }
+          // Plan turns already returned above; here the turn is a normal build.
+          const mode = permissionMode();
           if (mode === "bypassPermissions") return { behavior: "allow", updatedInput: input };
           const allowed = alwaysAllowed.get(session.id);
           if (allowed?.has(toolName)) return { behavior: "allow", updatedInput: input };
@@ -357,6 +505,14 @@ async function runTurn(session, promptText, { plan = false } = {}) {
       if (p.sessionId === session.id) {
         pendingPermissions.delete(id);
         p.resolve("reject");
+      }
+    }
+    // Likewise any unanswered clarify question — resolve to null (skipped).
+    for (const [id, q] of pendingQuestions) {
+      if (q.sessionId === session.id) {
+        pendingQuestions.delete(id);
+        broadcast("question.rejected", { requestID: id, sessionID: session.id });
+        q.resolve(null);
       }
     }
     // Streamed text that never made it into a complete assistant message
@@ -603,7 +759,36 @@ const server = createServer(async (req, res) => {
       pending.resolve(body.reply === "reject" ? "reject" : body.reply === "always" ? "always" : "once");
       return void json(res, { ok: true });
     }
-    if (method === "GET" && path === "/question") return void json(res, []);
+    if (method === "GET" && path === "/question") {
+      // Recovery on page open: pending clarify questions the agent is blocked on.
+      const pend = [...pendingQuestions.entries()].map(([rid, q]) => ({
+        id: rid,
+        sessionID: q.sessionId,
+        questions: q.questions,
+      }));
+      return void json(res, pend);
+    }
+    const qReply = /^\/question\/([^/]+)\/reply$/.exec(path);
+    if (method === "POST" && qReply) {
+      const rid = decodeURIComponent(qReply[1]);
+      const pending = pendingQuestions.get(rid);
+      if (!pending) return void apiError(res, 404, "no such question");
+      const body = await readBody(req);
+      pendingQuestions.delete(rid);
+      broadcast("question.replied", { requestID: rid, sessionID: pending.sessionId });
+      pending.resolve(Array.isArray(body.answers) ? body.answers : []);
+      return void json(res, { ok: true });
+    }
+    const qReject = /^\/question\/([^/]+)\/reject$/.exec(path);
+    if (method === "POST" && qReject) {
+      const rid = decodeURIComponent(qReject[1]);
+      const pending = pendingQuestions.get(rid);
+      if (!pending) return void apiError(res, 404, "no such question");
+      pendingQuestions.delete(rid);
+      broadcast("question.rejected", { requestID: rid, sessionID: pending.sessionId });
+      pending.resolve(null);
+      return void json(res, { ok: true });
+    }
 
     // --- discovery stubs the UI polls ---
     if (method === "GET" && path === "/api/skill") {

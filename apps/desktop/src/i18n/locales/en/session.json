@@ -53,6 +53,12 @@
     "error": {
       "paste": "Could not save paste: {{message}}",
       "addFiles": "Could not add files: {{message}}"
+    },
+    "plan": {
+      "label": "Plan",
+      "aria": "Plan-first mode",
+      "onTitle": "Plan first: proposes a plan and asks clarifying questions before executing",
+      "offTitle": "Plan first is off: the first message runs immediately"
     }
   },
   "localCommand": {

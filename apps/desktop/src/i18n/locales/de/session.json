@@ -53,6 +53,12 @@
     "error": {
       "paste": "Einfügen konnte nicht gespeichert werden: {{message}}",
       "addFiles": "Dateien konnten nicht hinzugefügt werden: {{message}}"
+    },
+    "plan": {
+      "label": "Plan",
+      "aria": "Plan-zuerst-Modus",
+      "onTitle": "Plan zuerst: schlägt einen Plan vor und stellt Rückfragen, bevor ausgeführt wird",
+      "offTitle": "Plan zuerst ist aus: die erste Nachricht wird sofort ausgeführt"
     }
   },
   "localCommand": {

@@ -53,6 +53,12 @@
     "error": {
       "paste": "无法保存粘贴内容：{{message}}",
       "addFiles": "无法添加文件：{{message}}"
+    },
+    "plan": {
+      "label": "规划",
+      "aria": "先规划模式",
+      "onTitle": "先规划:执行前先给出方案并提出澄清问题",
+      "offTitle": "先规划已关闭:第一条消息直接执行"
     }
   },
   "localCommand": {

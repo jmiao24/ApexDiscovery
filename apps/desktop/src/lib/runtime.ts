@@ -43,10 +43,17 @@ import i18n from "@/i18n";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const URL_KEY = "ai4s.opencodeUrl";
 const HIDDEN_KEY = "ai4s.hiddenExamples";
+const PLAN_KEY = "ai4s.planMode";
 
 function initialUrl(): string {
   if (typeof window === "undefined") return DEFAULT_OPENCODE_URL;
   return window.localStorage.getItem(URL_KEY) ?? DEFAULT_OPENCODE_URL;
+}
+/** Plan-first defaults ON (the first message of a conversation is planned and
+ *  clarified before executing); the user can turn it off from the composer. */
+function initialPlanMode(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(PLAN_KEY) !== "off";
 }
 function initialHidden(): string[] {
   if (typeof window === "undefined") return [];
@@ -91,6 +98,11 @@ interface RuntimeState {
   approvalMode: ApprovalMode;
   /** Persist a new approval mode (restarts the sidecar) and reconnect. */
   setApprovalMode: (mode: ApprovalMode) => Promise<void>;
+  /** Plan-first switch: when on, the FIRST message of a conversation runs in
+   *  plan mode — the agent proposes a plan and asks clarifying questions before
+   *  executing. Off sends the first message straight to the build agent. */
+  planMode: boolean;
+  setPlanMode: (on: boolean) => void;
   /** Persist the network-proxy setting (restarts the sidecar) and reconnect. */
   setProxySetting: (mode: ProxyMode, url: string) => Promise<void>;
   tools: ToolStatus[];
@@ -424,6 +436,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   commands: [],
   defaultModel: null,
   approvalMode: "approve",
+  planMode: initialPlanMode(),
   tools: [],
   hiddenExamples: initialHidden(),
   error: null,
@@ -514,6 +527,11 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   setServerUrl: (serverUrl) => {
     if (typeof window !== "undefined") window.localStorage.setItem(URL_KEY, serverUrl);
     set({ serverUrl });
+  },
+
+  setPlanMode: (on) => {
+    if (typeof window !== "undefined") window.localStorage.setItem(PLAN_KEY, on ? "on" : "off");
+    set({ planMode: on });
   },
 
   loadCatalog: async () => {
@@ -1015,12 +1033,14 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
 
   // The send lifecycle (new → input → send → response) is shared by plain
   // prompts, "!" shell commands and "/" slash commands — see performTurn.
-  // The FIRST message of a fresh conversation goes to the read-only "plan"
-  // agent: the agent proposes a plan and asks for confirmation instead of
-  // executing right away; the user's follow-up runs on the default agent.
+  // When plan mode is on, the FIRST message of a fresh conversation goes to the
+  // read-only "plan" agent: it proposes a plan and asks clarifying questions
+  // instead of executing right away; the user's follow-up runs on the default
+  // agent. Turning plan mode off sends the first message straight to build.
   sendPrompt: (text) => {
     const tid = get().currentId ?? DRAFT_KEY;
-    const planFirst = (get().threads[tid]?.blocks ?? []).length === 0;
+    const planFirst =
+      get().planMode && (get().threads[tid]?.blocks ?? []).length === 0;
     return performTurn(
       set,
       get,

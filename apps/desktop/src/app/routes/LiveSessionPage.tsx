@@ -59,6 +59,8 @@ export function LiveSessionPage() {
     reconcileRunning,
     approvalMode,
     setApprovalMode,
+    planMode,
+    setPlanMode,
   } = useRuntimeStore();
   const clearingLocalCommand = useRef(false);
 
@@ -412,6 +414,8 @@ export function LiveSessionPage() {
               }
               approvalMode={approvalMode}
               onApprovalModeChange={(mode) => void setApprovalMode(mode)}
+              planMode={planMode}
+              onPlanModeChange={(on) => setPlanMode(on)}
             />
           </div>
         </div>

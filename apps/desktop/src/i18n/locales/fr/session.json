@@ -53,6 +53,12 @@
     "error": {
       "paste": "Impossible d'enregistrer le collage : {{message}}",
       "addFiles": "Impossible d'ajouter les fichiers : {{message}}"
+    },
+    "plan": {
+      "label": "Plan",
+      "aria": "Mode planification d’abord",
+      "onTitle": "Planifier d’abord : propose un plan et pose des questions de clarification avant d’exécuter",
+      "offTitle": "Planifier d’abord désactivé : le premier message s’exécute immédiatement"
     }
   },
   "localCommand": {

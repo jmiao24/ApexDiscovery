@@ -13,6 +13,9 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.206
         version: 0.3.206(@anthropic-ai/sdk@0.111.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
 
   apps/desktop:
     dependencies:

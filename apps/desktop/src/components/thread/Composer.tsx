@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, Check, ChevronDown, Hand, Paperclip, Square, Terminal, X, Zap } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Hand, ListChecks, Paperclip, Square, Terminal, X, Zap } from "lucide-react";
 import { addFilesToWorkspace, addTextToWorkspace, hasShell, type ApprovalMode } from "@/lib/tauri";
 import { WorkspaceChip } from "@/components/thread/WorkspaceChip";
 import { useUiStore } from "@/lib/store";
@@ -73,6 +73,8 @@ export function Composer({
   placeholder,
   approvalMode,
   onApprovalModeChange,
+  planMode,
+  onPlanModeChange,
 }: {
   onSend?: (text: string) => void;
   onRunShell?: (command: string) => void;
@@ -88,6 +90,10 @@ export function Composer({
    *  session does; static mock sessions don't). */
   approvalMode?: ApprovalMode;
   onApprovalModeChange?: (mode: ApprovalMode) => void;
+  /** The plan-first toggle: when on, the first message of a conversation is
+   *  planned and clarified before executing. Shows only when both are given. */
+  planMode?: boolean;
+  onPlanModeChange?: (on: boolean) => void;
 }) {
   const { t } = useTranslation(["session", "common"]);
   const resolvedPlaceholder = placeholder ?? t("composer.placeholder.default");
@@ -533,6 +539,23 @@ export function Composer({
               <ChevronDown size={11} />
             </button>
           </div>
+        )}
+        {typeof planMode === "boolean" && onPlanModeChange && (
+          <button
+            aria-label={t("composer.plan.aria")}
+            aria-pressed={planMode}
+            title={planMode ? t("composer.plan.onTitle") : t("composer.plan.offTitle")}
+            className={cn(
+              "flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs transition-colors",
+              planMode
+                ? "bg-accent/15 text-accent hover:bg-accent/20"
+                : "text-muted hover:bg-surface-2 hover:text-text",
+            )}
+            onClick={() => onPlanModeChange(!planMode)}
+          >
+            <ListChecks size={12} />
+            <span>{t("composer.plan.label")}</span>
+          </button>
         )}
         <span className="flex-1" />
         {working && onStop ? (
