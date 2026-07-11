@@ -26,10 +26,13 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use axum::http::{header, HeaderValue};
 use axum::middleware;
 use axum::routing::{any, get, post};
 use axum::Router;
+use tower::ServiceBuilder;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 
 use shell_core::ShellCtx;
 use state::AppState;
@@ -111,8 +114,27 @@ async fn main() {
         Err(e) => eprintln!("warning: opencode sidecar failed to start: {e}"),
     }
 
-    let spa = ServeDir::new(&frontend_dir)
-        .fallback(ServeFile::new(frontend_dir.join("index.html")));
+    // Cache the way a hashed-asset build wants to be cached. Without this the
+    // browser heuristically caches index.html, keeps pointing at the PREVIOUS
+    // build's asset hashes, and the user stays on a stale app after every
+    // redeploy. index.html must be revalidated; /assets/* is content-hashed, so
+    // a given URL never changes and can be kept forever.
+    let assets = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
+        ))
+        .service(ServeDir::new(frontend_dir.join("assets")));
+
+    let spa = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-cache"),
+        ))
+        .service(
+            ServeDir::new(&frontend_dir)
+                .fallback(ServeFile::new(frontend_dir.join("index.html"))),
+        );
 
     let api = Router::new()
         .route("/cmd/{name}", post(commands::run_command))
@@ -129,6 +151,7 @@ async fn main() {
             any(proxy::proxy_runtime)
                 .layer(middleware::from_fn_with_state(state.clone(), auth::require_session)),
         )
+        .nest_service("/assets", assets)
         .fallback_service(spa)
         .with_state(state.clone())
         // Uploads and artifact bodies can be large.
