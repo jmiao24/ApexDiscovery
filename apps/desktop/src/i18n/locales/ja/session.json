@@ -218,7 +218,15 @@
     "submit": "送信",
     "reject": "拒否",
     "alwaysAllow": "常に許可",
-    "allowOnce": "今回のみ許可"
+    "allowOnce": "今回のみ許可",
+    "plan": {
+      "heading": "実行前に計画を確認してください",
+      "approve": "承認して実行",
+      "requestChanges": "修正を依頼",
+      "sendBack": "差し戻す",
+      "cancel": "キャンセル",
+      "feedbackPlaceholder": "何を変更しますか?(任意)"
+    }
   },
   "stepSummary": {
     "steps": "{{count}} ステップ"

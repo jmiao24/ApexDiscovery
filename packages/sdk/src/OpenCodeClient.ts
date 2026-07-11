@@ -15,6 +15,7 @@ import type {
   ProviderInfo,
   QuestionAskedEvent,
   PermissionAskedEvent,
+  PlanAskedEvent,
   RuntimeStatus,
   SessionMeta,
   SkillInfo,
@@ -734,6 +735,42 @@ export class OpenCodeClient {
     }));
   }
 
+  /** A plan the agent is blocked on (recovery on open). Runtimes without plan
+   *  approval have no such route — treat that as "nothing pending". */
+  async listPlans(_sessionId?: string): Promise<PlanAskedEvent[]> {
+    const res = await this.fetchWithTimeout(`${this.baseUrl}/plan${this.dirQuery()}`, {
+      headers: this.headers(),
+    });
+    if (!res.ok) return [];
+    const arr = (await res.json()) as Array<{
+      id: string;
+      sessionID: string;
+      plan?: string;
+      title?: string;
+    }>;
+    return arr.map((p) => ({
+      type: "plan.asked" as const,
+      sessionId: p.sessionID,
+      requestId: p.id,
+      plan: p.plan ?? "",
+      title: p.title ?? "Plan",
+    }));
+  }
+
+  /** Approve the plan (the agent carries it out in the same turn), or send it
+   *  back with feedback to be revised and submitted again. */
+  async replyPlan(requestId: string, approved: boolean, feedback?: string): Promise<void> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/plan/${encodeURIComponent(requestId)}/reply${this.dirQuery()}`,
+      {
+        method: "POST",
+        headers: this.headers(true),
+        body: JSON.stringify({ approved, ...(feedback ? { feedback } : {}) }),
+      },
+    );
+    if (!res.ok) throw await this.apiError(res, "Failed to reply to the plan");
+  }
+
   /** Reply to a permission request: allow once, allow always, or reject. */
   async replyPermission(requestId: string, reply: PermissionReply): Promise<void> {
     const res = await this.fetchImpl(
@@ -930,6 +967,26 @@ export class OpenCodeClient {
         const p = props as { requestID?: string; id?: string; sessionID?: string };
         this.emit({
           type: "permission.resolved",
+          sessionId: String(p.sessionID ?? ""),
+          requestId: String(p.requestID ?? p.id ?? ""),
+        });
+        break;
+      }
+      case "plan.asked": {
+        const p = props as { id?: string; sessionID?: string; plan?: string; title?: string };
+        this.emit({
+          type: "plan.asked",
+          sessionId: String(p.sessionID ?? ""),
+          requestId: String(p.id ?? ""),
+          plan: String(p.plan ?? ""),
+          title: String(p.title ?? "Plan"),
+        });
+        break;
+      }
+      case "plan.replied": {
+        const p = props as { requestID?: string; id?: string; sessionID?: string };
+        this.emit({
+          type: "plan.resolved",
           sessionId: String(p.sessionID ?? ""),
           requestId: String(p.requestID ?? p.id ?? ""),
         });

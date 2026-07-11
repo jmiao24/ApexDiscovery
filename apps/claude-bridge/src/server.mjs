@@ -114,11 +114,16 @@ const PLANNING_GUIDANCE = [
   "If it is simple and clear (a question, reading a file, a small edit, a one-off",
   "command), do NOT call it — just do the work.",
   "",
-  "After EnterPlanMode you are read-only for the rest of the turn: research with read",
-  "tools, and if something essential is still unclear, call AskUserQuestion",
-  "(mcp__apex__AskUserQuestion) to ask 1–4 multiple-choice questions with concrete",
-  "options rather than asking in prose. Then present your plan as your final message",
-  "and stop — execution begins on the user's next message.",
+  "After EnterPlanMode you are read-only: research with read tools, and if something",
+  "essential is still unclear, call AskUserQuestion (mcp__apex__AskUserQuestion) to",
+  "ask 1–4 multiple-choice questions with concrete options rather than asking in prose.",
+  "",
+  "When the plan is ready, submit it with ExitPlanMode (mcp__apex__ExitPlanMode) — put",
+  "the full plan in its `plan` field as Markdown (a title, then the steps). The user",
+  "reviews it and either approves it, which lifts the read-only gate so you carry it",
+  "out immediately in this same turn, or sends it back with feedback for you to revise",
+  "and submit again. Do not just print the plan as a message: it is only actionable",
+  "once submitted through ExitPlanMode.",
   "</planning>",
 ].join("\n");
 
@@ -144,6 +149,9 @@ const pendingPermissions = new Map();
 /** requestId → { sessionId, questions, resolve(answers|null) } — an open
  *  AskUserQuestion the user must answer (rendered as a selectable card). */
 const pendingQuestions = new Map();
+/** requestId → { sessionId, plan, resolve({approved, feedback}) } — a finished
+ *  plan waiting for the user to approve it (or send it back for changes). */
+const pendingPlans = new Map();
 /** sessionId → Set<toolName> the user approved "always" for. */
 const alwaysAllowed = new Map();
 let idCounter = 0;
@@ -184,10 +192,15 @@ function mapToolInput(input) {
   const out = { ...input };
   if (typeof input.file_path === "string") out.filePath = input.file_path;
   if (typeof input.notebook_path === "string") out.filePath = input.notebook_path;
+  // The submitted plan is the row's expandable detail, so the conversation keeps
+  // the plan the user approved (the approval card itself is transient).
+  if (typeof input.plan === "string") out.content = input.plan;
   return out;
 }
 
 function toolTitle(name, input) {
+  // Matches both the bare name and our MCP one (mcp__apex__ExitPlanMode).
+  if (/ExitPlanMode$/i.test(name) && typeof input?.plan === "string") return planTitle(input.plan);
   if (typeof input?.command === "string") return input.command;
   if (typeof input?.file_path === "string") return input.file_path;
   if (typeof input?.pattern === "string") return input.pattern;
@@ -235,6 +248,27 @@ function askUser(sessionId, questions) {
   });
 }
 
+/** The plan's own heading, for the card's title bar. */
+function planTitle(plan) {
+  const heading = /^#{1,3}\s+(.+)$/m.exec(plan)?.[1];
+  return (heading ?? plan.split("\n").find((l) => l.trim()) ?? "Plan").trim().slice(0, 90);
+}
+
+// Show the finished plan and block until the user approves it (execution then
+// continues in this same turn) or sends it back with feedback.
+function askPlanApproval(sessionId, plan) {
+  const requestId = freshId("pln");
+  broadcast("plan.asked", {
+    id: requestId,
+    sessionID: sessionId,
+    plan,
+    title: planTitle(plan),
+  });
+  return new Promise((resolve) => {
+    pendingPlans.set(requestId, { sessionId, plan, title: planTitle(plan), resolve });
+  });
+}
+
 /**
  * The agent's own tools, served in-process (`mcp__apex__*`):
  *
@@ -250,7 +284,7 @@ function askUser(sessionId, questions) {
  *
  * `onEnterPlan` is how the turn learns the model opted in.
  */
-function apexToolsFor(session, { planAllowed, onEnterPlan }) {
+function apexToolsFor(session, { planAllowed, onEnterPlan, onApprovePlan }) {
   const tools = [];
   if (planAllowed) {
     tools.push(
@@ -261,7 +295,7 @@ function apexToolsFor(session, { planAllowed, onEnterPlan }) {
           "methodology or output choice, missing input data, or work that writes many " +
           "files). Do not call it for simple, clear requests — just do those. After " +
           "calling it you cannot edit files or run commands: research, optionally ask " +
-          "the user clarifying questions, then present a plan and stop.",
+          "the user clarifying questions, then submit a plan with ExitPlanMode.",
         {
           reason: z.string().describe("Why this request needs a plan before executing."),
           description: z.string().describe("Short title for the planning step (≈8 words)."),
@@ -272,6 +306,50 @@ function apexToolsFor(session, { planAllowed, onEnterPlan }) {
         },
         // Load it up front. Deferred, the model has to run a tool search to
         // discover it — which it does mid-turn, slowly, or not at all.
+        { alwaysLoad: true },
+      ),
+      // The SDK only offers a built-in ExitPlanMode under permissionMode "plan",
+      // which we can't use (it would skip canUseTool and with it the read-only
+      // gate). So we own this one too — and it does the approval itself, rather
+      // than merely signalling: it blocks the turn on the user's verdict.
+      tool(
+        "ExitPlanMode",
+        "Submit your finished plan for the user's approval. Put the whole plan in `plan` " +
+          "as Markdown (a title, then the steps). The user either approves it — and you " +
+          "then carry it out immediately, in this same turn — or sends it back with " +
+          "feedback, in which case revise and call this again. This is the ONLY way to " +
+          "leave plan mode; printing the plan as a message does nothing.",
+        {
+          plan: z.string().describe("The full plan, as Markdown."),
+        },
+        async ({ plan }) => {
+          const reply = await askPlanApproval(
+            session.id,
+            plan?.trim() ? plan : "The agent submitted an empty plan.",
+          );
+          if (reply?.approved) {
+            onApprovePlan(); // lifts the read-only gate for the rest of the turn
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "The user APPROVED the plan. You are no longer read-only — carry it out now, in this same turn. Do not ask again.",
+                },
+              ],
+            };
+          }
+          const feedback = reply?.feedback?.trim();
+          return {
+            content: [
+              {
+                type: "text",
+                text: feedback
+                  ? `The user did NOT approve the plan. Their feedback:\n${feedback}\n\nRevise the plan accordingly and call ExitPlanMode again with the updated plan. You are still read-only.`
+                  : "The user did NOT approve the plan. Revise it — or ask a clarifying question with AskUserQuestion — and call ExitPlanMode again. You are still read-only.",
+              },
+            ],
+          };
+        },
         { alwaysLoad: true },
       ),
     );
@@ -408,19 +486,16 @@ async function runTurn(session, promptText, { planAllowed = false } = {}) {
             onEnterPlan: () => {
               planning = true;
             },
+            onApprovePlan: () => {
+              planning = false;
+            },
           }),
         },
         ...(bridgeConfig.apiKey ? { env: { ...process.env, ANTHROPIC_API_KEY: bridgeConfig.apiKey } } : {}),
         canUseTool: async (toolName, input) => {
-          if (toolName === "ExitPlanMode") {
-            return {
-              behavior: "deny",
-              message:
-                "Present the plan to the user as your final message and end the turn. Execution starts after the user confirms in their next message.",
-            };
-          }
-          // Our own tools ask the user themselves — never gate them behind the
-          // approval prompt (they must run even inside read-only planning).
+          // Our own tools (EnterPlanMode / ExitPlanMode / AskUserQuestion) talk to
+          // the user themselves — never gate them behind the approval prompt, and
+          // they must stay callable inside read-only planning.
           if (toolName.startsWith("mcp__apex__")) {
             return { behavior: "allow", updatedInput: input };
           }
@@ -566,6 +641,14 @@ async function runTurn(session, promptText, { planAllowed = false } = {}) {
         pendingQuestions.delete(id);
         broadcast("question.rejected", { requestID: id, sessionID: session.id });
         q.resolve(null);
+      }
+    }
+    // …and any plan still awaiting approval when the turn died.
+    for (const [id, p] of pendingPlans) {
+      if (p.sessionId === session.id) {
+        pendingPlans.delete(id);
+        broadcast("plan.replied", { requestID: id, sessionID: session.id });
+        p.resolve({ approved: false });
       }
     }
     // Streamed text that never made it into a complete assistant message
@@ -844,6 +927,32 @@ const server = createServer(async (req, res) => {
       pendingQuestions.delete(rid);
       broadcast("question.rejected", { requestID: rid, sessionID: pending.sessionId });
       pending.resolve(null);
+      return void json(res, { ok: true });
+    }
+
+    // --- plan approval ---
+    if (method === "GET" && path === "/plan") {
+      // Recovery on page open: a plan the agent is blocked on.
+      const pend = [...pendingPlans.entries()].map(([rid, p]) => ({
+        id: rid,
+        sessionID: p.sessionId,
+        plan: p.plan,
+        title: p.title,
+      }));
+      return void json(res, pend);
+    }
+    const planReply = /^\/plan\/([^/]+)\/reply$/.exec(path);
+    if (method === "POST" && planReply) {
+      const rid = decodeURIComponent(planReply[1]);
+      const pending = pendingPlans.get(rid);
+      if (!pending) return void apiError(res, 404, "no such plan");
+      const body = await readBody(req);
+      pendingPlans.delete(rid);
+      broadcast("plan.replied", { requestID: rid, sessionID: pending.sessionId });
+      pending.resolve({
+        approved: body.approved === true,
+        feedback: typeof body.feedback === "string" ? body.feedback : undefined,
+      });
       return void json(res, { ok: true });
     }
 

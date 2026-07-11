@@ -226,7 +226,15 @@
     "submit": "Absenden",
     "reject": "Ablehnen",
     "alwaysAllow": "Immer erlauben",
-    "allowOnce": "Einmal erlauben"
+    "allowOnce": "Einmal erlauben",
+    "plan": {
+      "heading": "Plan vor der Ausführung prüfen",
+      "approve": "Freigeben & ausführen",
+      "requestChanges": "Änderungen anfordern",
+      "sendBack": "Zurücksenden",
+      "cancel": "Abbrechen",
+      "feedbackPlaceholder": "Was soll sich ändern? (optional)"
+    }
   },
   "stepSummary": {
     "steps": "{{count}} Schritte"

@@ -8,6 +8,7 @@ import {
   type OpenCodeEvent,
   type PermissionAskedEvent,
   type PermissionReply,
+  type PlanAskedEvent,
   type QuestionAskedEvent,
   type SessionMeta,
   type SkillInfo,
@@ -112,6 +113,8 @@ interface RuntimeState {
   /** Pending interactive requests the agent is blocked on, newest last. */
   questions: QuestionAskedEvent[];
   permissions: PermissionAskedEvent[];
+  /** Finished plans waiting for the user's verdict. */
+  plans: PlanAskedEvent[];
   /** Subagent session → the session whose task tool spawned it, learned from
    *  task tool events (live) and the session list (recovery after reload). */
   sessionParents: Record<string, string>;
@@ -126,6 +129,10 @@ interface RuntimeState {
   answerQuestion: (requestId: string, answers: string[][]) => Promise<void>;
   rejectQuestion: (requestId: string) => Promise<void>;
   replyPermission: (requestId: string, reply: PermissionReply) => Promise<void>;
+  /** Approve the plan — the agent carries it out in the same turn. */
+  approvePlan: (requestId: string) => Promise<void>;
+  /** Send the plan back to be revised, optionally saying what to change. */
+  rejectPlan: (requestId: string, feedback?: string) => Promise<void>;
   setServerUrl: (url: string) => void;
   loadCatalog: () => Promise<void>;
   detectTools: () => Promise<void>;
@@ -443,6 +450,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   error: null,
   questions: [],
   permissions: [],
+  plans: [],
   sessionParents: {},
   panes: {},
   workspace: null,
@@ -520,6 +528,25 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     set((s) => ({ permissions: s.permissions.filter((x) => sig(x) !== sig(p)) }));
     try {
       await Promise.all(batch.map((x) => client!.replyPermission(x.requestId, reply)));
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
+
+  approvePlan: async (requestId) => {
+    if (!client) return;
+    set((s) => ({ plans: s.plans.filter((p) => p.requestId !== requestId) }));
+    try {
+      await client.replyPlan(requestId, true);
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
+  rejectPlan: async (requestId, feedback) => {
+    if (!client) return;
+    set((s) => ({ plans: s.plans.filter((p) => p.requestId !== requestId) }));
+    try {
+      await client.replyPlan(requestId, false, feedback);
     } catch (err) {
       set({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -690,6 +717,14 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
           return;
         case "permission.resolved":
           set((s) => ({ permissions: s.permissions.filter((p) => p.requestId !== event.requestId) }));
+          return;
+        case "plan.asked":
+          set((s) => ({
+            plans: [...s.plans.filter((p) => p.requestId !== event.requestId), event],
+          }));
+          return;
+        case "plan.resolved":
+          set((s) => ({ plans: s.plans.filter((p) => p.requestId !== event.requestId) }));
           return;
       }
       const sid = event.sessionId;
@@ -985,18 +1020,21 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     // Recover any request the agent is blocked on (asked before connect/reload).
     void (async () => {
       try {
-        const [qs, ps] = await Promise.all([
+        const [qs, ps, pls] = await Promise.all([
           client!.listQuestions(id),
           client!.listPermissions(id),
+          client!.listPlans(id).catch(() => []),
         ]);
-        // Both lists are workspace-scoped (they include subagent sessions'
+        // All three lists are workspace-scoped (they include subagent sessions'
         // asks) — replace by requestId so live SSE copies don't duplicate.
         set((s) => {
           const qIds = new Set(qs.map((q) => q.requestId));
           const pIds = new Set(ps.map((p) => p.requestId));
+          const lIds = new Set(pls.map((p) => p.requestId));
           return {
             questions: [...s.questions.filter((q) => !qIds.has(q.requestId)), ...qs],
             permissions: [...s.permissions.filter((p) => !pIds.has(p.requestId)), ...ps],
+            plans: [...s.plans.filter((p) => !lIds.has(p.requestId)), ...pls],
           };
         });
       } catch {

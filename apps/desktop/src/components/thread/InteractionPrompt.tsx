@@ -1,23 +1,33 @@
 import { useState } from "react";
-import { Check, HelpCircle, ShieldQuestion } from "lucide-react";
+import { Check, ClipboardList, HelpCircle, ShieldQuestion } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { PermissionAskedEvent, PermissionReply, QuestionAskedEvent } from "@ai4s/sdk";
+import type {
+  PermissionAskedEvent,
+  PermissionReply,
+  PlanAskedEvent,
+  QuestionAskedEvent,
+} from "@ai4s/sdk";
+import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { cn } from "@/lib/cn";
 
 /**
- * The answerable surface for an agent request that blocks the run — a
- * `question` (pick options) or a `permission` (approve an action). Without
- * this, the agent's `question`/`permission` tool sits forever and the session
- * looks stuck. Rendered just above the composer for the current session.
+ * The answerable surface for an agent request that blocks the run — a `plan`
+ * (approve it, or send it back), a `question` (pick options) or a `permission`
+ * (approve an action). Without this, the agent's request sits forever and the
+ * session looks stuck. Rendered just above the composer for the current session.
  */
 export function InteractionPrompt({
+  plan,
   question,
   permission,
   origin,
   onAnswer,
   onReject,
   onPermission,
+  onApprovePlan,
+  onRejectPlan,
 }: {
+  plan?: PlanAskedEvent;
   question?: QuestionAskedEvent;
   permission?: PermissionAskedEvent;
   /** Who is asking, when it isn't the main agent — a subagent session's title. */
@@ -25,7 +35,20 @@ export function InteractionPrompt({
   onAnswer: (requestId: string, answers: string[][]) => void;
   onReject: (requestId: string) => void;
   onPermission: (requestId: string, reply: PermissionReply) => void;
+  onApprovePlan?: (requestId: string) => void;
+  onRejectPlan?: (requestId: string, feedback?: string) => void;
 }) {
+  if (plan && onApprovePlan && onRejectPlan) {
+    return (
+      <PlanCard
+        key={plan.requestId}
+        plan={plan}
+        origin={origin}
+        onApprove={onApprovePlan}
+        onReject={onRejectPlan}
+      />
+    );
+  }
   if (question) {
     return (
       <QuestionCard
@@ -48,6 +71,93 @@ export function InteractionPrompt({
     );
   }
   return null;
+}
+
+/**
+ * The finished plan, for the user to approve before anything runs. Approving it
+ * lets the agent carry it out immediately (same turn); "Request changes" hands
+ * back optional feedback and the agent revises and submits a new plan.
+ */
+function PlanCard({
+  plan,
+  origin,
+  onApprove,
+  onReject,
+}: {
+  plan: PlanAskedEvent;
+  origin?: string;
+  onApprove: (requestId: string) => void;
+  onReject: (requestId: string, feedback?: string) => void;
+}) {
+  const { t } = useTranslation(["session", "common"]);
+  const [changing, setChanging] = useState(false);
+  const [feedback, setFeedback] = useState("");
+
+  return (
+    <div className="rounded-card border border-accent/40 bg-surface shadow-card">
+      <header className="border-b border-border px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <ClipboardList size={15} className="text-accent" />
+          <span className="text-sm font-medium text-text">{t("interaction.plan.heading")}</span>
+        </div>
+        <div className="mt-0.5 truncate pl-6 text-xs text-muted" title={plan.title}>
+          {plan.title}
+        </div>
+        {origin && (
+          <div className="mt-0.5 pl-6 text-xs text-muted">{t("interaction.askedBy", { origin })}</div>
+        )}
+      </header>
+
+      {/* The plan can be long, and the card lives in the fixed footer above the
+          composer — scroll it here so the verdict buttons stay reachable. */}
+      <div className="max-h-[45vh] overflow-y-auto px-4 py-3">
+        <MarkdownViewer>{plan.plan}</MarkdownViewer>
+      </div>
+
+      {changing ? (
+        <div className="space-y-2 border-t border-border px-4 py-2.5">
+          <textarea
+            autoFocus
+            rows={2}
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder={t("interaction.plan.feedbackPlaceholder")}
+            className="w-full resize-none rounded-input border border-border bg-surface px-3 py-2 text-[13px] text-text outline-none placeholder:text-muted focus:border-accent/60"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              className="rounded-input px-3 py-1.5 text-xs text-muted hover:text-text"
+              onClick={() => setChanging(false)}
+            >
+              {t("interaction.plan.cancel")}
+            </button>
+            <button
+              className="rounded-input bg-accent px-3.5 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90"
+              onClick={() => onReject(plan.requestId, feedback.trim() || undefined)}
+            >
+              {t("interaction.plan.sendBack")}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <footer className="flex items-center gap-2 border-t border-border px-4 py-2.5">
+          <button
+            className="rounded-input border border-border px-3 py-1.5 text-xs text-text hover:bg-surface-2"
+            onClick={() => setChanging(true)}
+          >
+            {t("interaction.plan.requestChanges")}
+          </button>
+          <div className="flex-1" />
+          <button
+            className="rounded-input bg-accent px-3.5 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90"
+            onClick={() => onApprove(plan.requestId)}
+          >
+            {t("interaction.plan.approve")}
+          </button>
+        </footer>
+      )}
+    </div>
+  );
 }
 
 /** "external_directory" → "external directory" — readable, still explicit. */

@@ -30,4 +30,6 @@ export {
   type PermissionAskedEvent,
   type PermissionResolvedEvent,
   type PermissionReply,
+  type PlanAskedEvent,
+  type PlanResolvedEvent,
 } from "./types";

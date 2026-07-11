@@ -226,7 +226,15 @@
     "submit": "Submit",
     "reject": "Reject",
     "alwaysAllow": "Always allow",
-    "allowOnce": "Allow once"
+    "allowOnce": "Allow once",
+    "plan": {
+      "heading": "Review the plan before it runs",
+      "approve": "Approve & run",
+      "requestChanges": "Request changes",
+      "sendBack": "Send back",
+      "cancel": "Cancel",
+      "feedbackPlaceholder": "What should change? (optional)"
+    }
   },
   "stepSummary": {
     "steps": "{{count}} steps"

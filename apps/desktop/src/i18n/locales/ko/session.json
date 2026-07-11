@@ -218,7 +218,15 @@
     "submit": "제출",
     "reject": "거부",
     "alwaysAllow": "항상 허용",
-    "allowOnce": "한 번만 허용"
+    "allowOnce": "한 번만 허용",
+    "plan": {
+      "heading": "실행 전에 계획을 검토하세요",
+      "approve": "승인 후 실행",
+      "requestChanges": "수정 요청",
+      "sendBack": "돌려보내기",
+      "cancel": "취소",
+      "feedbackPlaceholder": "무엇을 바꿔야 하나요? (선택)"
+    }
   },
   "stepSummary": {
     "steps": "{{count}}단계"

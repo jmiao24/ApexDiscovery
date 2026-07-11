@@ -55,6 +55,9 @@ export function LiveSessionPage() {
     answerQuestion,
     rejectQuestion,
     replyPermission,
+    plans,
+    approvePlan,
+    rejectPlan,
     interrupt,
     reconcileRunning,
     approvalMode,
@@ -173,7 +176,10 @@ export function LiveSessionPage() {
     !!currentId && (sid === currentId || rootSessionOf(sessionParents, sid) === currentId);
   const activeQuestion = questions.find((q) => belongsHere(q.sessionId));
   const activePermission = permissions.find((p) => belongsHere(p.sessionId));
-  const activeRequest = activeQuestion ?? activePermission;
+  const activePlan = plans.find((p) => belongsHere(p.sessionId));
+  // A finished plan outranks the rest: nothing else can proceed until it has a
+  // verdict, and it is the decision the user actually has to make.
+  const activeRequest = activePlan ?? activeQuestion ?? activePermission;
   // Name the subagent on the card when the ask isn't from the main agent.
   const requestOrigin =
     activeRequest && activeRequest.sessionId !== currentId
@@ -389,12 +395,15 @@ export function LiveSessionPage() {
           <div className="mx-auto max-w-[760px] space-y-3">
             {activeRequest && (
               <InteractionPrompt
-                question={activeQuestion}
-                permission={activeQuestion ? undefined : activePermission}
+                plan={activePlan}
+                question={activePlan ? undefined : activeQuestion}
+                permission={activePlan || activeQuestion ? undefined : activePermission}
                 origin={requestOrigin}
                 onAnswer={(id, answers) => void answerQuestion(id, answers)}
                 onReject={(id) => void rejectQuestion(id)}
                 onPermission={(id, reply) => void replyPermission(id, reply)}
+                onApprovePlan={(id) => void approvePlan(id)}
+                onRejectPlan={(id, feedback) => void rejectPlan(id, feedback)}
               />
             )}
             <Composer

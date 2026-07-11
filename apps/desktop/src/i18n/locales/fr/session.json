@@ -226,7 +226,15 @@
     "submit": "Envoyer",
     "reject": "Rejeter",
     "alwaysAllow": "Toujours autoriser",
-    "allowOnce": "Autoriser une fois"
+    "allowOnce": "Autoriser une fois",
+    "plan": {
+      "heading": "Vérifiez le plan avant exécution",
+      "approve": "Approuver et exécuter",
+      "requestChanges": "Demander des modifications",
+      "sendBack": "Renvoyer",
+      "cancel": "Annuler",
+      "feedbackPlaceholder": "Que faut-il changer ? (facultatif)"
+    }
   },
   "stepSummary": {
     "steps": "{{count}} étapes"

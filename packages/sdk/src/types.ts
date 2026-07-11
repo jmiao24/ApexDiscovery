@@ -90,6 +90,23 @@ export interface PermissionResolvedEvent {
   sessionId: string;
   requestId: string;
 }
+/** The agent finished a plan and is blocked on the user's verdict. Approving it
+ *  lets the agent carry it out in the SAME turn; sending it back with feedback
+ *  makes it revise and submit again. */
+export interface PlanAskedEvent {
+  type: "plan.asked";
+  sessionId: string;
+  requestId: string;
+  /** The plan itself, as Markdown. */
+  plan: string;
+  /** The plan's heading, for the card's title bar. */
+  title: string;
+}
+export interface PlanResolvedEvent {
+  type: "plan.resolved";
+  sessionId: string;
+  requestId: string;
+}
 export interface RuntimeErrorEvent {
   type: "error";
   sessionId?: string;
@@ -104,7 +121,9 @@ export type OpenCodeEvent =
   | QuestionAskedEvent
   | QuestionResolvedEvent
   | PermissionAskedEvent
-  | PermissionResolvedEvent;
+  | PermissionResolvedEvent
+  | PlanAskedEvent
+  | PlanResolvedEvent;
 
 /** Approve a permission once, always (persist a rule), or reject it. */
 export type PermissionReply = "once" | "always" | "reject";

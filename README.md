@@ -252,13 +252,18 @@ for your picks before finalizing the plan. Execution starts on your next
 message. Turn the toggle off and nothing is ever planned: every request runs
 straight away.
 
-The bridge serves `EnterPlanMode` and `AskUserQuestion` to the agent as
-in-process MCP tools and surfaces a question on the wire as `question.asked`, so
-the app's existing question card renders it with no frontend work. Read-only is
-*enforced*, not merely requested: once the agent enters plan mode the bridge's
-permission callback denies every tool that would write or execute — including
-when the approval switch is on full access — and steers the agent back into
-planning.
+**Nothing runs until you approve the plan.** The finished plan is shown as a
+card: **Approve & run** lets the agent carry it out immediately — in the same
+turn, no second prompt — while **Request changes** hands your feedback back so
+it revises and submits a new plan. Until you approve, the turn is read-only.
+
+The bridge serves `EnterPlanMode`, `ExitPlanMode`, and `AskUserQuestion` to the
+agent as in-process MCP tools, and surfaces the plan and the questions on the
+wire (`plan.asked`, `question.asked`) so the app renders them as cards. Read-only
+is *enforced*, not merely requested: from `EnterPlanMode` until you approve, the
+bridge's permission callback denies every tool that would write or execute —
+including when the approval switch is on full access — and steers the agent back
+into planning. Approving is what lifts the gate.
 
 ## Build from source
 

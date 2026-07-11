@@ -218,7 +218,15 @@
     "submit": "提交",
     "reject": "拒绝",
     "alwaysAllow": "始终允许",
-    "allowOnce": "仅允许一次"
+    "allowOnce": "仅允许一次",
+    "plan": {
+      "heading": "执行前请审核方案",
+      "approve": "批准并执行",
+      "requestChanges": "要求修改",
+      "sendBack": "退回修改",
+      "cancel": "取消",
+      "feedbackPlaceholder": "需要改什么?(可留空)"
+    }
   },
   "stepSummary": {
     "steps": "{{count}} 个步骤"
