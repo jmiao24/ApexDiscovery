@@ -17,6 +17,7 @@ import type {
   ProviderAuthMethod,
   ProviderCatalogEntry,
   ProviderInfo,
+  ReviewerConfig,
 } from "@ai4s/sdk";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/lib/store";
@@ -108,6 +109,11 @@ export function SettingsPage() {
   const [catalog, setCatalog] = useState<ProviderCatalogEntry[]>([]);
   const [customIds, setCustomIds] = useState<string[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [reviewer, setReviewer] = useState<ReviewerConfig>({
+    enabled: false,
+    autoFix: false,
+    maxPasses: 2,
+  });
   const [jupyter, setJupyter] = useState<JupyterStatus | null>(null);
   // The interpreter local Python kernels resolve to + the manual override input.
   const [pyInfo, setPyInfo] = useState<PythonInterpreter | null>(null);
@@ -149,18 +155,20 @@ export function SettingsPage() {
     const client = getClient();
     if (!client) return;
     try {
-      const [p, m, c, custom, mcp] = await Promise.all([
+      const [p, m, c, custom, mcp, reviewerConfig] = await Promise.all([
         client.listProviders(),
         client.listAuthMethods(),
         client.listProviderCatalog(),
         client.listCustomProviderIds(),
         client.listMcpServers().catch(() => []),
+        client.getReviewerConfig(),
       ]);
       setProviders(p);
       setAuthMethods(m);
       setCatalog(c.all);
       setCustomIds(custom);
       setMcpServers(mcp);
+      setReviewer(reviewerConfig);
       setJupyter(await jupyterStatus());
     } catch {
       /* runtime not ready yet */
@@ -429,8 +437,8 @@ export function SettingsPage() {
       await getClient()!.addMcpServer(
         name,
         mType === "local"
-          ? { type: "local", command: target.split(/\s+/), enabled: true }
-          : { type: "remote", url: target, enabled: true },
+          ? { type: "local", command: target.split(/\s+/), enabled: true, approvalMode: "writes" }
+          : { type: "remote", url: target, enabled: true, approvalMode: "writes" },
       );
       toast.success(t("toast.mcpAdded", { name }));
       setMName("");
@@ -448,9 +456,28 @@ export function SettingsPage() {
 
   const removeMcp = (name: string) =>
     run(t("toast.couldNotRemoveMcp"), async () => {
-      await removeConfigEntry("mcp", name);
+      // Codex bridge owns its compatibility config and can remove the server
+      // directly. Older OpenCode runtimes return 404, then the shell edits the
+      // app-private OpenCode config as before.
+      const removedByRuntime = await getClient()!.removeMcpServer(name);
+      if (!removedByRuntime) await removeConfigEntry("mcp", name);
       await useRuntimeStore.getState().connectRetry();
       toast.success(t("toast.mcpRemoved", { name }));
+    });
+
+  const updateMcp = (server: McpServer, patch: { enabled?: boolean; approvalMode?: "auto" | "prompt" | "writes" | "approve" }) =>
+    run(t("toast.couldNotUpdateMcp"), async () => {
+      if (!server.config || server.config.managedBy) return;
+      await getClient()!.addMcpServer(server.name, { ...server.config, ...patch });
+      toast.success(t("toast.mcpUpdated", { name: server.name }));
+    });
+
+  const updateReviewer = (patch: Partial<Pick<ReviewerConfig, "autoFix">>) =>
+    run(t("reviewer.updateFailed"), async () => {
+      const next = { ...reviewer, ...patch, enabled: false, maxPasses: 2 as const };
+      await getClient()!.setReviewerConfig(next);
+      setReviewer(next);
+      toast.success(t("reviewer.updated"));
     });
 
   const importLogin = () =>
@@ -842,6 +869,29 @@ export function SettingsPage() {
           )}
         </Card>
 
+        {/* ---- Independent Reviewer Agent ---- */}
+        <Card title={t("reviewer.title")} hint={t("reviewer.hint")}>
+          {!connected ? (
+            <p className="text-[13px] text-muted">{t("reviewer.connectPrompt")}</p>
+          ) : (
+            <div className="grid gap-2">
+              <label className="flex items-start gap-2 rounded-input border border-border bg-surface-2 px-3 py-2">
+                <input
+                  type="checkbox"
+                  checked={reviewer.autoFix}
+                  onChange={(event) => void updateReviewer({ autoFix: event.target.checked })}
+                  disabled={busy}
+                  className="mt-0.5 accent-[var(--color-accent)]"
+                />
+                <span>
+                  <span className="block text-[13px] font-medium text-text">{t("reviewer.autoFix")}</span>
+                  <span className="block text-xs leading-relaxed text-muted">{t("reviewer.autoFixHint")}</span>
+                </span>
+              </label>
+            </div>
+          )}
+        </Card>
+
         {/* ---- MCP servers ---- */}
         <Card title={t("mcp.title")} hint={t("mcp.hint")}>
           {!connected ? (
@@ -974,6 +1024,7 @@ export function SettingsPage() {
                   <span className="font-medium text-text">{s.name}</span>
                   <span className="text-xs text-muted">
                     {s.config?.type ?? "?"} · {s.status}
+                    {s.config?.managedBy ? ` · ${t("mcp.managedBy", { plugin: s.config.managedBy })}` : ""}
                   </span>
                   <span className="max-w-[260px] flex-1 truncate text-right font-mono text-[11px] text-muted/70">
                     {s.config?.type === "local"
@@ -982,13 +1033,40 @@ export function SettingsPage() {
                         ? s.config.url
                         : ""}
                   </span>
-                  <button
-                    className="shrink-0 text-xs text-muted transition-colors hover:text-error"
-                    onClick={() => void removeMcp(s.name)}
-                    disabled={busy}
-                  >
-                    {t("common:actions.remove")}
-                  </button>
+                  {!s.config?.managedBy && s.config && (
+                    <>
+                      <select
+                        value={s.config.approvalMode ?? "writes"}
+                        onChange={(event) =>
+                          void updateMcp(s, {
+                            approvalMode: event.target.value as "auto" | "prompt" | "writes" | "approve",
+                          })
+                        }
+                        disabled={busy}
+                        aria-label={t("mcp.approvalFor", { name: s.name })}
+                        className="h-7 rounded-input border border-border bg-surface-2 px-1 text-[11px] text-muted"
+                      >
+                        <option value="writes">{t("mcp.approvalWrites")}</option>
+                        <option value="prompt">{t("mcp.approvalPrompt")}</option>
+                        <option value="approve">{t("mcp.approvalApprove")}</option>
+                        <option value="auto">{t("mcp.approvalAuto")}</option>
+                      </select>
+                      <button
+                        className="shrink-0 text-xs text-muted transition-colors hover:text-text"
+                        onClick={() => void updateMcp(s, { enabled: s.config?.enabled === false })}
+                        disabled={busy}
+                      >
+                        {s.config.enabled === false ? t("mcp.enable") : t("mcp.disable")}
+                      </button>
+                      <button
+                        className="shrink-0 text-xs text-muted transition-colors hover:text-error"
+                        onClick={() => void removeMcp(s.name)}
+                        disabled={busy}
+                      >
+                        {t("common:actions.remove")}
+                      </button>
+                    </>
+                  )}
                 </div>
               ))}
 

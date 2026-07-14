@@ -89,6 +89,40 @@ describe("datedWorkspaceName", () => {
 });
 
 describe("foldEvent", () => {
+  it("folds an audited skill load with source, path, content, and timing", () => {
+    const s = foldAll([
+      {
+        type: "tool.updated",
+        sessionId: S,
+        callId: "skill-1",
+        tool: "skill",
+        status: "success",
+        title: "Loaded open-targets skill",
+        input: {
+          action: "load",
+          name: "open-targets",
+          source: "user",
+          path: "/home/.agents/skills/open-targets/SKILL.md",
+        },
+        output: "# Open Targets\nUse GraphQL.",
+        startedAt: 100,
+        endedAt: 161,
+      },
+    ]);
+    expect(s.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      tool: "skill",
+      status: "success",
+      title: "Loaded open-targets skill",
+      skillName: "open-targets",
+      skillSource: "user",
+      skillPath: "/home/.agents/skills/open-targets/SKILL.md",
+      output: "# Open Targets\nUse GraphQL.",
+      startedAt: 100,
+      endedAt: 161,
+    });
+  });
+
   it("upserts a text part by id (idempotent full-text updates, not appends)", () => {
     const s = foldAll([
       { type: "text.updated", sessionId: S, partId: "p1", text: "Planning" },
@@ -263,6 +297,40 @@ describe("subagent activity", () => {
 });
 
 describe("historyToThread", () => {
+  it("restores an audited skill load from persisted history", () => {
+    const t = historyToThread([
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "tool",
+            tool: "skill",
+            state: {
+              status: "completed",
+              title: "Loaded open-targets skill",
+              input: {
+                action: "load",
+                name: "open-targets",
+                source: "user",
+                path: "/home/.agents/skills/open-targets/SKILL.md",
+              },
+              output: "# Open Targets",
+              time: { start: 100, end: 161 },
+            },
+          },
+        ],
+      },
+    ]);
+    expect(t.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      tool: "skill",
+      skillName: "open-targets",
+      output: "# Open Targets",
+      startedAt: 100,
+      endedAt: 161,
+    });
+  });
+
   it("converts user/assistant messages (text + tool parts) into blocks", () => {
     const msgs: HistoryMessage[] = [
       { role: "user", parts: [{ type: "text", text: "hi" }] },
@@ -277,6 +345,23 @@ describe("historyToThread", () => {
     const t = historyToThread(msgs);
     expect(t.blocks.map((b) => b.kind)).toEqual(["user", "agent", "tool-call"]);
     expect(t.blocks[2]).toMatchObject({ kind: "tool-call", status: "success" });
+  });
+
+  it("restores a persisted subagent parent/child link on task history", () => {
+    const t = historyToThread([{ role: "assistant", parts: [{
+      type: "tool",
+      tool: "task",
+      state: {
+        status: "completed",
+        title: "Literature Agent — evidence returned",
+        metadata: { sessionId: "ses_literature_1" },
+      },
+    }] }]);
+    expect(t.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      tool: "task",
+      childSessionId: "ses_literature_1",
+    });
   });
 
   it("renders a user-run '!' shell turn like the live path: '! cmd' + inline output", () => {

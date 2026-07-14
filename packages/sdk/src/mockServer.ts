@@ -203,6 +203,13 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
       setTimeout(() => streamTurn(decodeURIComponent(m[1])), 5);
       return;
     }
+    const review = url.match(/^\/session\/([^/]+)\/review_async/);
+    if (req.method === "POST" && review) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end("{}");
+      setTimeout(() => streamTurn(decodeURIComponent(review[1])), 5);
+      return;
+    }
     res.writeHead(404);
     res.end();
   });

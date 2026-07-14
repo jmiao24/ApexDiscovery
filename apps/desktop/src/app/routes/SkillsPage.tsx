@@ -1,9 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Bot, Boxes, Check, Package, Puzzle, X } from "lucide-react";
+import { Bot, Boxes, Check, Package, Plug, Puzzle, Trash2, X } from "lucide-react";
 import { useRuntimeStore } from "@/lib/runtime";
 import { cn } from "@/lib/cn";
+import {
+  installExtension,
+  isWebShell,
+  listExtensions,
+  removeExtension,
+  setExtensionEnabled,
+  type InstalledExtension,
+} from "@/lib/tauri";
 
 /**
  * Skills, agents, install-a-skill, and detected scientific environment — all real:
@@ -16,11 +24,70 @@ export function SkillsPage() {
   const connected = status === "ready";
   const [text, setText] = useState("");
   const [installing, setInstalling] = useState(false);
+  const [extensions, setExtensions] = useState<InstalledExtension[]>([]);
+  const [extensionSource, setExtensionSource] = useState("");
+  const [extensionBusy, setExtensionBusy] = useState<string | null>(null);
+  const [extensionError, setExtensionError] = useState<string | null>(null);
+
+  const refreshExtensions = async () => {
+    if (!isWebShell()) return;
+    try {
+      setExtensions(await listExtensions());
+    } catch (error) {
+      setExtensionError(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   useEffect(() => {
     if (connected) void loadCatalog();
     void detectTools();
+    void refreshExtensions();
+    // The shell type is fixed before React mounts; refreshExtensions is local
+    // to this route and intentionally does not participate in effect identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, loadCatalog, detectTools]);
+
+  const onInstallExtension = async () => {
+    const source = extensionSource.trim();
+    if (!source || extensionBusy) return;
+    setExtensionBusy("install");
+    setExtensionError(null);
+    try {
+      await installExtension(source);
+      setExtensionSource("");
+      await refreshExtensions();
+    } catch (error) {
+      setExtensionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setExtensionBusy(null);
+    }
+  };
+
+  const toggleExtension = async (extension: InstalledExtension) => {
+    setExtensionBusy(extension.name);
+    setExtensionError(null);
+    try {
+      await setExtensionEnabled(extension.name, !extension.enabled);
+      await Promise.all([refreshExtensions(), loadCatalog()]);
+    } catch (error) {
+      setExtensionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setExtensionBusy(null);
+    }
+  };
+
+  const uninstallExtension = async (extension: InstalledExtension) => {
+    setExtensionBusy(extension.name);
+    setExtensionError(null);
+    try {
+      await removeExtension(extension.name);
+      await Promise.all([refreshExtensions(), loadCatalog()]);
+    } catch (error) {
+      setExtensionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setExtensionBusy(null);
+    }
+  };
 
   const onInstall = async () => {
     if (!text.trim()) return;
@@ -43,6 +110,78 @@ export function SkillsPage() {
           <span className="font-mono">.opencode/skills/</span>
           {t("skills.description.suffix")}
         </p>
+
+        {isWebShell() && (
+          <Section title={t("skills.extensions.sectionTitle")} icon={<Plug size={15} />}>
+            {extensions.map((extension) => (
+              <div key={extension.name} className="flex items-start gap-3 px-4 py-3">
+                <Package size={16} className="mt-0.5 shrink-0 text-muted" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium text-text">{extension.name}</span>
+                    <span className="text-[11px] text-muted">{extension.version}</span>
+                  </div>
+                  <div className="line-clamp-2 text-xs text-muted">{extension.description}</div>
+                  <div className="mt-1 text-[11px] text-muted">
+                    {t("skills.extensions.capabilities", {
+                      skills: extension.skills.length,
+                      mcp: extension.mcpServers.length,
+                    })}
+                    {extension.hasScripts ? ` · ${t("skills.extensions.scripts")}` : ""}
+                    {extension.hasHooks ? ` · ${t("skills.extensions.hooks")}` : ""}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void toggleExtension(extension)}
+                  disabled={extensionBusy !== null}
+                  className={cn(
+                    "rounded-input px-2.5 py-1 text-xs ring-1 disabled:opacity-40",
+                    extension.enabled
+                      ? "bg-ok/10 text-ok ring-ok/30"
+                      : "bg-surface-2 text-muted ring-border",
+                  )}
+                >
+                  {extension.enabled
+                    ? t("skills.extensions.enabled")
+                    : t("skills.extensions.disabled")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void uninstallExtension(extension)}
+                  disabled={extensionBusy !== null}
+                  aria-label={t("skills.extensions.remove", { name: extension.name })}
+                  className="mt-0.5 text-muted hover:text-error disabled:opacity-40"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            {extensions.length === 0 && <Empty>{t("skills.extensions.empty")}</Empty>}
+            <div className="space-y-2 bg-surface-2/50 p-4">
+              <input
+                value={extensionSource}
+                onChange={(event) => setExtensionSource(event.target.value)}
+                placeholder={t("skills.extensions.sourcePlaceholder")}
+                className="w-full rounded-input border border-border bg-surface px-3 py-2 font-mono text-xs text-text outline-none placeholder:text-muted"
+              />
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void onInstallExtension()}
+                  disabled={!extensionSource.trim() || extensionBusy !== null}
+                  className="rounded-input bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg disabled:opacity-40"
+                >
+                  {extensionBusy === "install"
+                    ? t("skills.extensions.installing")
+                    : t("skills.extensions.install")}
+                </button>
+                <span className="text-xs text-muted">{t("skills.extensions.reviewHint")}</span>
+              </div>
+              {extensionError && <p className="text-xs text-error">{extensionError}</p>}
+            </div>
+          </Section>
+        )}
 
         {/* Install a skill (#1) */}
         <Section title={t("skills.install.sectionTitle")} icon={<Boxes size={15} />}>

@@ -172,7 +172,7 @@ export interface HistoryPart {
     /** Epoch ms the tool started/finished — persisted with the part. */
     time?: { start?: number; end?: number };
     /** Tool-specific extras (bash stdout tail, edit diff, task session link). */
-    metadata?: { output?: string; diff?: string };
+    metadata?: { output?: string; diff?: string; sessionId?: string };
   };
 }
 
@@ -242,14 +242,45 @@ export interface OAuthAuthorization {
 // ---- MCP servers ----
 
 export type McpConfig =
-  | { type: "local"; command: string[]; enabled?: boolean; environment?: Record<string, string> }
-  | { type: "remote"; url: string; enabled?: boolean; headers?: Record<string, string> };
+  | {
+      type: "local";
+      command: string[];
+      enabled?: boolean;
+      /** Literal values are accepted for the current process, but compatible
+       * runtimes persist only `$env:NAME` references. */
+      environment?: Record<string, string>;
+      approvalMode?: "auto" | "prompt" | "writes" | "approve";
+      enabledTools?: string[];
+      disabledTools?: string[];
+      /** Set for plugin-provided servers; lifecycle belongs to that plugin. */
+      managedBy?: string;
+    }
+  | {
+      type: "remote";
+      url: string;
+      enabled?: boolean;
+      headers?: Record<string, string>;
+      approvalMode?: "auto" | "prompt" | "writes" | "approve";
+      enabledTools?: string[];
+      disabledTools?: string[];
+      managedBy?: string;
+    };
 
 export interface McpServer {
   name: string;
   /** e.g. "connected" | "failed" | "disabled" | "pending" */
   status: string;
   config?: McpConfig;
+}
+
+/** Independent review started explicitly from the task UI. */
+export interface ReviewerConfig {
+  /** Legacy wire field retained for compatibility; manual review keeps it false. */
+  enabled: boolean;
+  /** Return actionable findings to the original Main Agent, then re-review. */
+  autoFix: boolean;
+  /** Reviewer v1 is bounded to initial review + one re-review. */
+  maxPasses: 2;
 }
 
 // ---- Raw OpenCode wire shapes (subset we consume) ----

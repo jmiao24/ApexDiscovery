@@ -5,6 +5,7 @@ import { Composer } from "./Composer";
 // Desktop-only attach behaviors, with the Tauri bridge mocked out.
 vi.mock("@/lib/tauri", () => ({
   isTauri: true,
+  hasShell: () => true,
   addFilesToWorkspace: vi.fn(async () => ["data.csv"]),
   addTextToWorkspace: vi.fn(async () => "pasted.txt"),
 }));

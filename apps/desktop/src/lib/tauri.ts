@@ -54,6 +54,68 @@ export async function webLogin(token: string): Promise<boolean> {
   return res.ok;
 }
 
+export interface InstalledExtension {
+  name: string;
+  version: string;
+  description: string;
+  path: string;
+  source: string;
+  enabled: boolean;
+  skills: string[];
+  mcpServers: string[];
+  hasScripts: boolean;
+  hasHooks: boolean;
+}
+
+async function extensionRequest<T>(path = "", init?: RequestInit): Promise<T> {
+  if (!webShell) throw new Error("extensions require the APEX local web server");
+  const res = await fetch(`/api/extensions${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  });
+  if (!res.ok) {
+    let message = `extension request failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) message = body.error;
+    } catch {
+      /* preserve status */
+    }
+    throw new Error(message);
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+export async function listExtensions(): Promise<InstalledExtension[]> {
+  if (!webShell) return [];
+  return extensionRequest<InstalledExtension[]>();
+}
+
+export async function installExtension(
+  source: string,
+  options?: { gitRef?: string; expectedCommit?: string },
+): Promise<InstalledExtension> {
+  return extensionRequest<InstalledExtension>("", {
+    method: "POST",
+    body: JSON.stringify({ source, ...options }),
+  });
+}
+
+export async function setExtensionEnabled(
+  name: string,
+  enabled: boolean,
+): Promise<InstalledExtension> {
+  return extensionRequest<InstalledExtension>(`/${encodeURIComponent(name)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function removeExtension(name: string): Promise<void> {
+  await extensionRequest<void>(`/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
 /** Run one shared shell command against the web server. */
 async function webCmd<T>(name: string, args?: object): Promise<T> {
   const res = await fetch(`/api/cmd/${name}`, {

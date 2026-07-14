@@ -36,6 +36,31 @@
     "send": {
       "aria": "Send"
     },
+    "review": {
+      "label": "Review",
+      "aria": "Review artifacts",
+      "title": "Run the independent Reviewer on this task's artifacts"
+    },
+    "skills": {
+      "label": "Skills",
+      "aria": "Choose skills",
+      "title": "Include installed skills in the next message",
+      "menuAria": "Installed skills",
+      "searchAria": "Search skills",
+      "searchPlaceholder": "Search skills",
+      "none": "No skills are installed",
+      "noMatches": "No matching skills",
+      "removeAria": "Remove {{name}} skill",
+      "selectedTitle": "This skill will be loaded for the next message",
+      "drawerTitle": "Skills",
+      "drawerDescription": "Search and attach skills to the next message from one place.",
+      "closeAria": "Close skills",
+      "all": "All skills",
+      "selected": "Selected",
+      "pickHint": "Pick skills to include with the next message.",
+      "manage": "Manage skills",
+      "toggleAria": "Toggle {{name}} skill"
+    },
     "approval": {
       "aria": "Approval mode",
       "title": "How agent actions get approved",
@@ -92,6 +117,9 @@
     },
     "connect": "Connect",
     "subagentFallback": "a subagent",
+    "subagent": {
+      "openSession": "Open full subagent session"
+    },
     "header": {
       "expandSidebarAria": "Expand sidebar",
       "expandSidebarTitle": "Expand sidebar ({{shortcut}})"

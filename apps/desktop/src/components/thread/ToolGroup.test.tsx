@@ -47,6 +47,17 @@ describe("groupToolBlocks", () => {
     expect(items.map((i) => i.kind)).toEqual(["group", "block", "group"]);
   });
 
+  it("keeps Reviewer and Main-Agent fix phases visible between folded tool runs", () => {
+    const items = groupToolBlocks([
+      tool({ title: "python analyze.py" }),
+      tool({ tool: "reviewer", verb: undefined, title: "Reviewer pass 1 — reviewing artifacts" }),
+      tool({ title: "python domain_check.py" }),
+      tool({ tool: "fix", verb: undefined, title: "Main Agent — fixing reviewer findings" }),
+      tool({ title: "python analyze.py" }),
+    ]);
+    expect(items.map((item) => item.kind)).toEqual(["group", "block", "group", "block", "group"]);
+  });
+
   it("shows a failure count on the collapsed summary", () => {
     render(
       <ToolGroup
@@ -140,5 +151,23 @@ describe("ToolGroup", () => {
     fireEvent.click(screen.getByRole("button"));
     expect(screen.getByText("- device: cpu")).toBeInTheDocument();
     expect(screen.getByText("+ device: mps")).toBeInTheDocument();
+  });
+
+  it("renders a skill load as an inspector row with millisecond timing", () => {
+    let opened: ToolCallBlock | undefined;
+    const skill = tool({
+      tool: "skill",
+      verb: undefined,
+      title: "Loaded open-targets skill",
+      skillName: "open-targets",
+      skillPath: "/home/.agents/skills/open-targets/SKILL.md",
+      startedAt: 100,
+      endedAt: 161,
+      output: "# Open Targets",
+    });
+    render(<ToolGroup blocks={[skill]} onToolOpen={(block) => { opened = block; }} />);
+    expect(screen.getByText("61ms")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button"));
+    expect(opened).toBe(skill);
   });
 });

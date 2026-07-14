@@ -36,6 +36,31 @@
     "send": {
       "aria": "Senden"
     },
+    "review": {
+      "label": "Prüfen",
+      "aria": "Artefakte prüfen",
+      "title": "Unabhängigen Reviewer für die Artefakte dieser Aufgabe starten"
+    },
+    "skills": {
+      "label": "Skills",
+      "aria": "Skills auswählen",
+      "title": "Installierte Skills in die nächste Nachricht aufnehmen",
+      "menuAria": "Installierte Skills",
+      "searchAria": "Skills suchen",
+      "searchPlaceholder": "Skills suchen",
+      "none": "Keine Skills installiert",
+      "noMatches": "Keine passenden Skills",
+      "removeAria": "Skill {{name}} entfernen",
+      "selectedTitle": "Dieser Skill wird für die nächste Nachricht geladen",
+      "drawerTitle": "Skills",
+      "drawerDescription": "Skills für die nächste Nachricht zentral suchen und auswählen.",
+      "closeAria": "Skills schließen",
+      "all": "Alle Skills",
+      "selected": "Ausgewählt",
+      "pickHint": "Skills für die nächste Nachricht auswählen.",
+      "manage": "Skills verwalten",
+      "toggleAria": "Skill {{name}} umschalten"
+    },
     "approval": {
       "aria": "Genehmigungsmodus",
       "title": "Wie Agentenaktionen genehmigt werden",
@@ -92,6 +117,9 @@
     },
     "connect": "Verbinden",
     "subagentFallback": "ein Subagent",
+    "subagent": {
+      "openSession": "Vollständige Subagent-Sitzung öffnen"
+    },
     "header": {
       "expandSidebarAria": "Seitenleiste ausklappen",
       "expandSidebarTitle": "Seitenleiste ausklappen ({{shortcut}})"

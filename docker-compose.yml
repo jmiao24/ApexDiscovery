@@ -1,5 +1,5 @@
 # Self-hosted ApexScience web server.
-#   APEX_TOKEN=<your-token> docker compose up -d
+#   APEX_TOKEN=<browser-token> OPENAI_API_KEY=<key> docker compose up -d
 # Open http://localhost:3411 and sign in with the token. For access beyond
 # localhost, terminate TLS in a reverse proxy in front of this service.
 services:
@@ -11,6 +11,9 @@ services:
       # Pin the login token; without it a fresh one is generated per start
       # (printed in the container log).
       APEX_TOKEN: ${APEX_TOKEN:-}
+      # Passed only to the local Codex bridge; it is not embedded in the image
+      # or sent to the browser.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY}
     volumes:
       # Workspaces, sessions, provenance, runtime config — everything durable.
       - apex-data:/data

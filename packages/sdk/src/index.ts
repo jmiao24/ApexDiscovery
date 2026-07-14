@@ -23,6 +23,7 @@ export {
   type OAuthAuthorization,
   type McpConfig,
   type McpServer,
+  type ReviewerConfig,
   type QuestionOption,
   type QuestionItem,
   type QuestionAskedEvent,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Loader2 } from "lucide-react";
+import { ChevronRight, ExternalLink, Loader2, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ThreadBlock, ToolCallBlock } from "@ai4s/shared";
 import i18n from "@/i18n";
@@ -30,7 +30,14 @@ export function groupToolBlocks(blocks: ThreadBlock[]): BlockListItem[] {
     group = null;
   };
   blocks.forEach((b, i) => {
-    if (b.kind === "tool-call" && b.status !== "waiting-approval") {
+    // Reviewer orchestration is a first-class phase boundary, not another
+    // low-level tool hidden inside "Ran N commands". Keep Review/Fix/Re-review
+    // visible in the timeline while their own bash/MCP steps can still fold.
+    const workflowPhase = b.kind === "tool-call" && (b.tool === "reviewer" || b.tool === "fix");
+    if (workflowPhase) {
+      flush();
+      items.push({ kind: "block", index: i, block: b });
+    } else if (b.kind === "tool-call" && b.status !== "waiting-approval") {
       group ??= { start: i, blocks: [] };
       group.blocks.push(b);
     } else {
@@ -74,6 +81,7 @@ export function summarizeGroup(blocks: ToolCallBlock[]): string {
 }
 
 function fmtDuration(ms: number): string {
+  if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
@@ -188,41 +196,72 @@ function detailFor(block: ToolCallBlock): React.ReactNode | null {
   return null;
 }
 
-function ToolRow({ block, activity }: { block: ToolCallBlock; activity?: string }) {
+function ToolRow({
+  block,
+  activity,
+  trace,
+  activityFor,
+  traceFor,
+  onSubagentOpen,
+  onOpen,
+}: {
+  block: ToolCallBlock;
+  activity?: string;
+  trace?: ThreadBlock[];
+  activityFor?: (childSessionId: string) => string | undefined;
+  traceFor?: (childSessionId: string) => ThreadBlock[] | undefined;
+  onSubagentOpen?: (childSessionId: string) => void;
+  onOpen?: (block: ToolCallBlock) => void;
+}) {
   const { t } = useTranslation(["session", "common"]);
   const s = STATUS[block.status];
   const running = block.status === "running";
   // While running the live tail is already on screen — the row only becomes
   // expandable once there is a settled detail to reveal.
-  const detail = running ? null : detailFor(block);
+  const opensInspector = block.tool === "skill" && !!onOpen;
+  const detail = running || opensInspector ? null : detailFor(block);
   // A user-typed "!" command ran for its output — its detail opens by default.
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const open = (userOpen ?? !!block.outputSummary) && !!detail;
+  const interactive = opensInspector || !!detail;
   const done = block.startedAt !== undefined && block.endedAt !== undefined;
   const duration = done ? block.endedAt! - block.startedAt! : 0;
+  const traceTools = (trace ?? []).filter(
+    (item): item is ToolCallBlock => item.kind === "tool-call",
+  );
+  const latestTrace = [...(trace ?? [])]
+    .reverse()
+    .find((item) => item.kind === "tool-call" || item.kind === "agent");
+  const traceHasRunningTool = traceTools.some(
+    (item) => item.status === "running" || item.status === "pending",
+  );
+  const showActivityPulse = Boolean(
+    activity && running && !traceHasRunningTool && (traceTools.length === 0 || latestTrace?.kind === "agent"),
+  );
   return (
     <div data-status={block.status}>
       <div
-        role={detail ? "button" : undefined}
-        tabIndex={detail ? 0 : undefined}
-        onClick={detail ? () => setUserOpen(!open) : undefined}
+        role={interactive ? "button" : undefined}
+        tabIndex={interactive ? 0 : undefined}
+        onClick={opensInspector ? () => onOpen(block) : detail ? () => setUserOpen(!open) : undefined}
         onKeyDown={
-          detail
+          interactive
             ? (e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  setUserOpen(!open);
+                  if (opensInspector) onOpen(block);
+                  else setUserOpen(!open);
                 }
               }
             : undefined
         }
         className={cn(
           "group flex items-center gap-2 rounded-input px-2 py-1 text-[12.5px]",
-          detail && "cursor-pointer hover:bg-surface-2",
+          interactive && "cursor-pointer hover:bg-surface-2",
         )}
       >
-        <span className={cn("shrink-0", s.className)} aria-label={t(`tool.status.${block.status}`)} role="img">
-          {s.icon}
+        <span className={cn("shrink-0", block.tool === "skill" ? "text-accent" : s.className)} aria-label={t(`tool.status.${block.status}`)} role="img">
+          {block.tool === "skill" && !running ? <Wrench size={13} /> : s.icon}
         </span>
         {block.verb && <span className="shrink-0 text-muted">{t(`tool.verb.${block.verb}`)}</span>}
         <span
@@ -231,34 +270,55 @@ function ToolRow({ block, activity }: { block: ToolCallBlock; activity?: string 
         >
           {block.title}
         </span>
-        {detail && (
+        {interactive && (
           <ChevronRight
             size={12}
             className={cn(
               "shrink-0 text-muted transition-transform duration-200",
-              open && "rotate-90",
-              !open && "opacity-0 group-hover:opacity-100",
+              open && !opensInspector && "rotate-90",
+              !opensInspector && !open && "opacity-0 group-hover:opacity-100",
             )}
           />
         )}
         <span className="min-w-0 flex-1" />
         {running && block.startedAt !== undefined && <Elapsed start={block.startedAt} />}
-        {!running && done && duration >= 1000 && (
+        {!running && done && (duration >= 1000 || block.tool === "skill") && (
           <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">
             {fmtDuration(duration)}
           </span>
         )}
         {block.meta && <span className="shrink-0 text-xs text-muted">{block.meta}</span>}
       </div>
-      {/* Live pulse of the subagent this task spawned. */}
-      {activity && running && (
-        <div className="flex items-center gap-2 px-2 pb-0.5 text-xs" data-subagent-activity>
-          <span
-            aria-hidden
-            className="mb-1.5 ml-[6px] h-2 w-2 shrink-0 rounded-bl border-b border-l border-border"
-          />
-          <span aria-hidden className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent" />
-          <span className="min-w-0 flex-1 truncate font-mono text-muted">{activity}</span>
+      {/* A spawned child keeps its full tool trace beneath the parent task.
+          The trace remains after completion; long traces use the same nested
+          collapsible grouping and detail panels as Main Agent tool calls. */}
+      {block.childSessionId && (traceTools.length > 0 || showActivityPulse || onSubagentOpen) && (
+        <div className="ml-[14px] border-l border-border pl-2" data-subagent-trace>
+          {traceTools.length > 0 && (
+            <ToolGroup
+              blocks={traceTools}
+              activityFor={activityFor}
+              traceFor={traceFor}
+              onSubagentOpen={onSubagentOpen}
+              onToolOpen={onOpen}
+            />
+          )}
+          {showActivityPulse && (
+            <div className="flex items-center gap-2 px-2 py-0.5 text-xs" data-subagent-activity>
+              <span aria-hidden className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent" />
+              <span className="min-w-0 flex-1 truncate font-mono text-muted">{activity}</span>
+            </div>
+          )}
+          {onSubagentOpen && (
+            <button
+              type="button"
+              onClick={() => onSubagentOpen(block.childSessionId!)}
+              className="flex items-center gap-1.5 rounded-input px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-text"
+            >
+              <ExternalLink size={12} />
+              <span>{t("live.subagent.openSession")}</span>
+            </button>
+          )}
         </div>
       )}
       {/* While running, the output tail is always visible — no click needed. */}
@@ -271,9 +331,15 @@ function ToolRow({ block, activity }: { block: ToolCallBlock; activity?: string 
 export function ToolGroup({
   blocks,
   activityFor,
+  traceFor,
+  onSubagentOpen,
+  onToolOpen,
 }: {
   blocks: ToolCallBlock[];
   activityFor?: (childSessionId: string) => string | undefined;
+  traceFor?: (childSessionId: string) => ThreadBlock[] | undefined;
+  onSubagentOpen?: (childSessionId: string) => void;
+  onToolOpen?: (block: ToolCallBlock) => void;
 }) {
   const { t } = useTranslation(["session", "common"]);
   // Once a step in the group runs, the group opens and STAYS open — it never
@@ -294,6 +360,11 @@ export function ToolGroup({
       key={i}
       block={b}
       activity={b.childSessionId ? activityFor?.(b.childSessionId) : undefined}
+      trace={b.childSessionId ? traceFor?.(b.childSessionId) : undefined}
+      activityFor={activityFor}
+      traceFor={traceFor}
+      onSubagentOpen={onSubagentOpen}
+      onOpen={onToolOpen}
     />
   ));
   if (blocks.length === 1) return <div>{rows}</div>;

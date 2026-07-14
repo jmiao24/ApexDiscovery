@@ -36,6 +36,31 @@
     "send": {
       "aria": "送信"
     },
+    "review": {
+      "label": "レビュー",
+      "aria": "成果物をレビュー",
+      "title": "このタスクの成果物を独立 Reviewer で確認"
+    },
+    "skills": {
+      "label": "スキル",
+      "aria": "スキルを選択",
+      "title": "次のメッセージで使用するインストール済みスキルを選択",
+      "menuAria": "インストール済みスキル",
+      "searchAria": "スキルを検索",
+      "searchPlaceholder": "スキルを検索",
+      "none": "スキルがインストールされていません",
+      "noMatches": "一致するスキルがありません",
+      "removeAria": "{{name}} スキルを削除",
+      "selectedTitle": "次のメッセージでこのスキルを読み込みます",
+      "drawerTitle": "スキル",
+      "drawerDescription": "次のメッセージで使用するスキルを検索して選択します。",
+      "closeAria": "スキルを閉じる",
+      "all": "すべてのスキル",
+      "selected": "選択済み",
+      "pickHint": "次のメッセージに含めるスキルを選択してください。",
+      "manage": "スキルを管理",
+      "toggleAria": "{{name}} スキルを切り替え"
+    },
     "approval": {
       "aria": "承認モード",
       "title": "エージェントの操作をどのように承認するか",
@@ -92,6 +117,9 @@
     },
     "connect": "接続",
     "subagentFallback": "サブエージェント",
+    "subagent": {
+      "openSession": "サブエージェントの全セッションを開く"
+    },
     "header": {
       "expandSidebarAria": "サイドバーを展開する",
       "expandSidebarTitle": "サイドバーを展開する（{{shortcut}}）"

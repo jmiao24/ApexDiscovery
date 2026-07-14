@@ -13,6 +13,15 @@
     "title": "Einstellungen",
     "subtitle": "Hier wird ausschließlich die gebündelte OpenCode-Runtime konfiguriert — eine Konfiguration, keine Kopien."
   },
+  "reviewer": {
+    "title": "Unabhängiger Reviewer-Agent",
+    "hint": "Die Prüfung startet nur nach einem Klick auf Prüfen in einem neuen schreibgeschützten Codex-Thread",
+    "connectPrompt": "Verbinden Sie die Laufzeit, um das Prüfverhalten zu konfigurieren.",
+    "autoFix": "Nach Klick auf Prüfen korrigieren und erneut prüfen",
+    "autoFixHint": "Gibt Befunde einmal an den Main Agent zurück und führt danach eine letzte unabhängige Prüfung aus.",
+    "updateFailed": "Reviewer-Einstellungen konnten nicht aktualisiert werden",
+    "updated": "Reviewer-Einstellungen aktualisiert"
+  },
   "runtime": {
     "title": "Agent-Runtime",
     "hint": "opencode serve, gesteuert über dessen HTTP- + SSE-API",
@@ -85,6 +94,13 @@
     "enterKeyFirstTitle": "Zuerst den API-Schlüssel eingeben",
     "settingUp": "Wird eingerichtet…",
     "enable": "Aktivieren",
+    "disable": "Disable",
+    "managedBy": "plugin {{plugin}}",
+    "approvalFor": "Approval policy for {{name}}",
+    "approvalWrites": "prompt for writes",
+    "approvalPrompt": "always prompt",
+    "approvalApprove": "pre-approved",
+    "approvalAuto": "server default",
     "freeKeySuffix": "(kostenloser Schlüssel)",
     "getFreeKey": "Kostenlosen Schlüssel anfordern",
     "jupyterLabel": "Jupyter",
@@ -138,6 +154,8 @@
     "mcpAdded": "MCP-Server {{name}} hinzugefügt",
     "couldNotRemoveMcp": "Der MCP-Server konnte nicht entfernt werden",
     "mcpRemoved": "MCP-Server {{name}} entfernt",
+    "couldNotUpdateMcp": "Could not update the MCP server",
+    "mcpUpdated": "MCP server {{name}} updated",
     "importFailed": "Import fehlgeschlagen",
     "noOpenCodeLoginFound": "Auf diesem Rechner wurde keine OpenCode-CLI-Anmeldung gefunden.",
     "importedLogin": "Ihre OpenCode-CLI-Anmeldung wurde importiert.",

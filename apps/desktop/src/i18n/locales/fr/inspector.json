@@ -4,6 +4,13 @@
     "restorePanel": "Restaurer le panneau",
     "closeInspector": "Fermer l'inspecteur"
   },
+  "skill": {
+    "title": "Skill {{name}} chargé",
+    "badge": "Skill",
+    "source": "Portée {{source}}",
+    "input": "Entrée",
+    "output": "Sortie"
+  },
   "artifact": {
     "previousVersionAria": "Version précédente",
     "nextVersionAria": "Version suivante",

@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { BlockList } from "./BlockList";
 
 describe("BlockList", () => {
@@ -29,5 +29,74 @@ describe("BlockList", () => {
       />,
     );
     expect(screen.getByText("ls -la")).toBeInTheDocument();
+  });
+
+  it("keeps every child action under the task and opens the full child session", () => {
+    const onSubagentOpen = vi.fn();
+    render(
+      <BlockList
+        blocks={[
+          {
+            kind: "tool-call",
+            tool: "task",
+            title: "Literature Agent — researching evidence",
+            status: "running",
+            childSessionId: "ses_literature",
+          },
+        ]}
+        handlers={{
+          subagentActivity: () => "Querying ClinicalTrials.gov",
+          subagentTrace: () => [
+            {
+              kind: "tool-call",
+              tool: "websearch",
+              verb: "Searched",
+              title: "MC4R obesity clinical trials",
+              status: "success",
+            },
+            {
+              kind: "tool-call",
+              tool: "websearch",
+              verb: "Searched",
+              title: "Querying ClinicalTrials.gov",
+              status: "running",
+            },
+          ],
+          onSubagentOpen,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("MC4R obesity clinical trials")).toBeInTheDocument();
+    expect(screen.getByText("Querying ClinicalTrials.gov")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open full subagent session" }));
+    expect(onSubagentOpen).toHaveBeenCalledWith("ses_literature");
+  });
+
+  it("retains a completed child's collapsed trace for later inspection", () => {
+    render(
+      <BlockList
+        blocks={[
+          {
+            kind: "tool-call",
+            tool: "task",
+            title: "Literature Agent — evidence returned",
+            status: "success",
+            childSessionId: "ses_literature",
+          },
+        ]}
+        handlers={{
+          subagentTrace: () => [
+            { kind: "tool-call", tool: "websearch", verb: "Searched", title: "PubMed", status: "success" },
+            { kind: "tool-call", tool: "websearch", verb: "Searched", title: "ClinicalTrials.gov", status: "success" },
+          ],
+        }}
+      />,
+    );
+
+    const summary = screen.getByRole("button", { name: /Ran 2 searches/ });
+    fireEvent.click(summary);
+    expect(screen.getByText("PubMed")).toBeInTheDocument();
+    expect(screen.getByText("ClinicalTrials.gov")).toBeInTheDocument();
   });
 });

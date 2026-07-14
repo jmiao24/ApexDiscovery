@@ -59,6 +59,20 @@
       "prefix": "Cargado en vivo desde el entorno de ejecución de OpenCode — el paquete ai4s-skills incluido, más todo lo que haya bajo ",
       "suffix": " en tu espacio de trabajo."
     },
+    "extensions": {
+      "sectionTitle": "Extensions",
+      "empty": "No plugins installed yet.",
+      "sourcePlaceholder": "Local plugin folder or HTTPS Git URL",
+      "install": "Install plugin",
+      "installing": "Installing…",
+      "reviewHint": "Plugins install disabled. Review their skills, MCP tools, scripts, and hooks before enabling.",
+      "capabilities": "{{skills}} skills · {{mcp}} MCP servers",
+      "scripts": "contains scripts",
+      "hooks": "contains hooks",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "remove": "Remove {{name}}"
+    },
     "install": {
       "sectionTitle": "Instalar una habilidad",
       "placeholder": "Pega una habilidad (Markdown) o una URL de GitHub — el agente la instalará en .opencode/skills/",

@@ -4,6 +4,13 @@
     "restorePanel": "パネルを元に戻す",
     "closeInspector": "インスペクタを閉じる"
   },
+  "skill": {
+    "title": "{{name}} skill を読み込みました",
+    "badge": "Skill",
+    "source": "{{source}} スコープ",
+    "input": "入力",
+    "output": "出力"
+  },
   "artifact": {
     "previousVersionAria": "前のバージョン",
     "nextVersionAria": "次のバージョン",

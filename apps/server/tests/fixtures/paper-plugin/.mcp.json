@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "papers": {
+      "url": "https://example.test/mcp",
+      "enabled": true,
+      "default_tools_approval_mode": "writes"
+    }
+  }
+}

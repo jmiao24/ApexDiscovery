@@ -36,6 +36,31 @@
     "send": {
       "aria": "Envoyer"
     },
+    "review": {
+      "label": "Réviser",
+      "aria": "Réviser les artefacts",
+      "title": "Lancer le Reviewer indépendant sur les artefacts de cette tâche"
+    },
+    "skills": {
+      "label": "Compétences",
+      "aria": "Choisir des compétences",
+      "title": "Inclure des compétences installées dans le prochain message",
+      "menuAria": "Compétences installées",
+      "searchAria": "Rechercher des compétences",
+      "searchPlaceholder": "Rechercher des compétences",
+      "none": "Aucune compétence installée",
+      "noMatches": "Aucune compétence correspondante",
+      "removeAria": "Retirer la compétence {{name}}",
+      "selectedTitle": "Cette compétence sera chargée pour le prochain message",
+      "drawerTitle": "Compétences",
+      "drawerDescription": "Recherchez et joignez des compétences au prochain message depuis un seul endroit.",
+      "closeAria": "Fermer les compétences",
+      "all": "Toutes",
+      "selected": "Sélectionnées",
+      "pickHint": "Choisissez les compétences à inclure dans le prochain message.",
+      "manage": "Gérer les compétences",
+      "toggleAria": "Activer ou désactiver la compétence {{name}}"
+    },
     "approval": {
       "aria": "Mode d'approbation",
       "title": "Comment les actions de l'agent sont approuvées",
@@ -92,6 +117,9 @@
     },
     "connect": "Connecter",
     "subagentFallback": "un sous-agent",
+    "subagent": {
+      "openSession": "Ouvrir la session complète du sous-agent"
+    },
     "header": {
       "expandSidebarAria": "Développer la barre latérale",
       "expandSidebarTitle": "Développer la barre latérale ({{shortcut}})"

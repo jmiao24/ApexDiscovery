@@ -59,6 +59,20 @@
       "prefix": "OpenCode 런타임에서 실시간으로 로드됩니다 — 내장된 ai4s-skills 팩과 워크스페이스의 ",
       "suffix": " 아래에 있는 모든 항목."
     },
+    "extensions": {
+      "sectionTitle": "Extensions",
+      "empty": "No plugins installed yet.",
+      "sourcePlaceholder": "Local plugin folder or HTTPS Git URL",
+      "install": "Install plugin",
+      "installing": "Installing…",
+      "reviewHint": "Plugins install disabled. Review their skills, MCP tools, scripts, and hooks before enabling.",
+      "capabilities": "{{skills}} skills · {{mcp}} MCP servers",
+      "scripts": "contains scripts",
+      "hooks": "contains hooks",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "remove": "Remove {{name}}"
+    },
     "install": {
       "sectionTitle": "스킬 설치",
       "placeholder": "스킬(Markdown) 또는 GitHub URL을 붙여넣으세요 — 에이전트가 .opencode/skills/에 설치합니다",

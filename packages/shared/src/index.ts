@@ -100,6 +100,10 @@ export interface ToolCallBlock {
   outputSummary?: string;
   /** Subagent session spawned by this task tool — lets the UI show its live activity. */
   childSessionId?: string;
+  /** Audited skill-load metadata (`tool === "skill"`). */
+  skillName?: string;
+  skillPath?: string;
+  skillSource?: string;
 }
 
 export type FindingLevel = "warn" | "ok" | "error";
@@ -203,7 +207,19 @@ export type Inspector =
   | NotebookInspector
   | PdfInspector
   | FilePreviewInspector
-  | NotebookFileInspector;
+  | NotebookFileInspector
+  | SkillInspector;
+
+/** Full instructions and provenance for an explicitly invoked skill. */
+export interface SkillInspector {
+  variant: "skill";
+  name: string;
+  path: string;
+  source: string;
+  content: string;
+  startedAt?: number;
+  endedAt?: number;
+}
 
 /** Folder tree a root-relative file path resolves in: the active session
  *  workspace (default) or the base folder all session workspaces live under. */

@@ -1,5 +1,5 @@
 // Shared server state: the ShellCtx every command uses, the login token, and
-// the supervised OpenCode sidecar (port + process + base URL).
+// the supervised agent sidecar (port + process + base URL).
 use std::path::PathBuf;
 
 use shell_core::ShellCtx;
@@ -9,8 +9,12 @@ use crate::sidecar;
 
 pub struct AppState {
     pub ctx: ShellCtx,
-    /// The login token a browser must present once (POST /api/login).
-    pub token: String,
+    /// Operator token for manual login / programmatic Bearer access. Normal
+    /// localhost launches use the one-time bootstrap nonce instead.
+    pub access_token: String,
+    /// Random cookie value, separate from both operator and bootstrap tokens.
+    pub session_token: String,
+    pub bootstrap_nonce: Mutex<Option<String>>,
     pub opencode_bin: PathBuf,
     /// Sidecar lifecycle — the mutex doubles as the restart lock so two
     /// config-changing commands can never double-spawn (same invariant as the
@@ -21,10 +25,17 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(ctx: ShellCtx, token: String, opencode_bin: PathBuf) -> Self {
+    pub fn new(
+        ctx: ShellCtx,
+        access_token: String,
+        bootstrap_nonce: Option<String>,
+        opencode_bin: PathBuf,
+    ) -> Self {
         Self {
             ctx,
-            token,
+            access_token,
+            session_token: shell_core::util::random_hex(32),
+            bootstrap_nonce: Mutex::new(bootstrap_nonce),
             opencode_bin,
             sidecar: Mutex::new(sidecar::Sidecar::default()),
             client: reqwest::Client::builder()
@@ -49,7 +60,8 @@ impl AppState {
     /// The sidecar base URL, or an error when it never started.
     pub async fn sidecar_url(&self) -> Result<String, String> {
         let s = self.sidecar.lock().await;
-        s.url().ok_or_else(|| "agent runtime is not running".to_string())
+        s.url()
+            .ok_or_else(|| "agent runtime is not running".to_string())
     }
 
     pub async fn kill_sidecar(&self) {

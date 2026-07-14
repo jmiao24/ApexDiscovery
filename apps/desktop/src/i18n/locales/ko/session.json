@@ -36,6 +36,31 @@
     "send": {
       "aria": "전송"
     },
+    "review": {
+      "label": "검토",
+      "aria": "결과물 검토",
+      "title": "이 작업의 결과물을 독립 Reviewer로 검토"
+    },
+    "skills": {
+      "label": "스킬",
+      "aria": "스킬 선택",
+      "title": "다음 메시지에 사용할 설치된 스킬 선택",
+      "menuAria": "설치된 스킬",
+      "searchAria": "스킬 검색",
+      "searchPlaceholder": "스킬 검색",
+      "none": "설치된 스킬이 없습니다",
+      "noMatches": "일치하는 스킬이 없습니다",
+      "removeAria": "{{name}} 스킬 제거",
+      "selectedTitle": "다음 메시지에서 이 스킬을 불러옵니다",
+      "drawerTitle": "스킬",
+      "drawerDescription": "다음 메시지에 사용할 스킬을 한 곳에서 검색하고 선택하세요.",
+      "closeAria": "스킬 닫기",
+      "all": "모든 스킬",
+      "selected": "선택됨",
+      "pickHint": "다음 메시지에 포함할 스킬을 선택하세요.",
+      "manage": "스킬 관리",
+      "toggleAria": "{{name}} 스킬 전환"
+    },
     "approval": {
       "aria": "승인 모드",
       "title": "에이전트 작업이 승인되는 방식",
@@ -92,6 +117,9 @@
     },
     "connect": "연결",
     "subagentFallback": "서브 에이전트",
+    "subagent": {
+      "openSession": "전체 서브 에이전트 세션 열기"
+    },
     "header": {
       "expandSidebarAria": "사이드바 펼치기",
       "expandSidebarTitle": "사이드바 펼치기 ({{shortcut}})"

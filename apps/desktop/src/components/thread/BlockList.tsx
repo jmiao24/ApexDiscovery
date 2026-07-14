@@ -14,6 +14,12 @@ export interface BlockHandlers {
   onFigureComment?: (annotation: FigureAnnotation, figureTitle: string) => void;
   /** Live one-line activity of the subagent a task tool spawned (live session). */
   subagentActivity?: (childSessionId: string) => string | undefined;
+  /** Complete folded child thread for an auditable subagent action trace. */
+  subagentTrace?: (childSessionId: string) => ThreadBlock[] | undefined;
+  /** Navigate into the spawned child's full persisted conversation. */
+  onSubagentOpen?: (childSessionId: string) => void;
+  /** Open the audited skill load in the right-side inspector. */
+  onSkillOpen?: (block: Extract<ThreadBlock, { kind: "tool-call" }>) => void;
 }
 
 export function renderBlock(block: ThreadBlock, i: number, handlers?: BlockHandlers) {
@@ -66,6 +72,9 @@ export function BlockList({
             key={`group:${item.start}`}
             blocks={item.blocks}
             activityFor={handlers?.subagentActivity}
+            traceFor={handlers?.subagentTrace}
+            onSubagentOpen={handlers?.onSubagentOpen}
+            onToolOpen={handlers?.onSkillOpen}
           />
         ) : (
           renderBlock(item.block, item.index, handlers)

@@ -145,7 +145,12 @@ interface RuntimeState {
   /** Switch to an existing folder, or (with `dated`) create a new dated one. */
   switchWorkspace: (target: { path: string } | { dated: string }) => Promise<void>;
   openSession: (id: string) => Promise<void>;
-  sendPrompt: (text: string) => Promise<string | null>;
+  /** Load another session's persisted thread without navigating to it. Used
+   *  to recover a spawned subagent's full action trace inside its parent. */
+  loadThread: (id: string) => Promise<void>;
+  sendPrompt: (text: string, skills?: string[]) => Promise<string | null>;
+  /** Run the independent Reviewer only after an explicit click. */
+  review: () => Promise<string | null>;
   /** Run a "!" shell command directly in the session's workspace folder —
    *  no model turn; the output folds into the thread as a bash tool row. */
   runShell: (command: string) => Promise<string | null>;
@@ -164,6 +169,10 @@ interface RuntimeState {
 
 let client: OpenCodeClient | null = null;
 let openSessionSeq = 0;
+/** A direct `/live/:id` route can render before bootstrap has created the
+ *  runtime client. Remember that open instead of silently abandoning it; the
+ *  first successful connect retries it after the session registry is ready. */
+let pendingSessionOpen: string | null = null;
 /** Unhook the current client's status listener BEFORE closing it — teardown
  *  emits "offline", and a reconnect attempt must not flash that at the user. */
 let clientStatusUnsub: (() => void) | null = null;
@@ -795,6 +804,13 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       void logDebug("connect OK");
       set({ error: null });
       await get().refreshSessions();
+      const pending = pendingSessionOpen;
+      if (pending && get().currentId === pending && !get().threads[pending]?.loaded) {
+        pendingSessionOpen = null;
+        // Do not block the connection handshake on history/workspace loading.
+        // openSession has its own sequence guard if the route changes again.
+        void get().openSession(pending);
+      }
       // Catalog (skills/agents/commands) fills in behind the page — a session
       // switch must not wait on it to show the conversation.
       void get().loadCatalog();
@@ -852,6 +868,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
 
   disconnect: () => {
     teardownClient();
+    pendingSessionOpen = null;
     set({ status: "offline" });
   },
 
@@ -875,6 +892,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   // A fresh draft also drops any pinned folder: back to the dated-folder default.
   startDraft: () =>
     set((s) => {
+      pendingSessionOpen = null;
       const threads = { ...s.threads };
       delete threads[DRAFT_KEY]; // leftovers from an aborted first message
       const panes = { ...s.panes };
@@ -887,6 +905,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   // folder; no session, database row, or file is deleted here.
   startDraftInCurrentWorkspace: () =>
     set((s) => {
+      pendingSessionOpen = null;
       const threads = { ...s.threads };
       threads[DRAFT_KEY] = {
         ...emptyThread(),
@@ -934,7 +953,15 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   openSession: async (id) => {
     const seq = ++openSessionSeq;
     set({ currentId: id });
-    if (!client) return;
+    // `connect()` installs the client before its event stream handshake is
+    // ready. React can render the route again inside that small window, so a
+    // non-null client alone is not enough to safely request history. Keep the
+    // route intent queued until the successful connect path retries it.
+    if (!client || get().status !== "ready") {
+      pendingSessionOpen = id;
+      return;
+    }
+    pendingSessionOpen = null;
     // Follow the session into its own workspace folder: record it as active and
     // reconnect the event stream scoped to it, so the agent, kernel and Files
     // all operate where the session's files live. Sessions with no recorded
@@ -1013,19 +1040,53 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     }
   },
 
+  loadThread: async (id) => {
+    if (!client || get().threads[id]?.loaded) return;
+    try {
+      const messages = await client.getMessages(id);
+      // Live SSE events may have populated the child while history was in
+      // flight. Never replace that newer folded state with an older snapshot.
+      set((s) => s.threads[id]?.loaded
+        ? s
+        : {
+            threads: {
+              ...s.threads,
+              [id]: { ...historyToThread(messages, s.commands), loaded: true },
+            },
+          });
+    } catch {
+      // A child trace is supplementary to the parent conversation. Keep the
+      // parent usable and let "Open full session" retry through openSession.
+    }
+  },
+
   // The send lifecycle (new → input → send → response) is shared by plain
   // prompts, "!" shell commands and "/" slash commands — see performTurn.
   // The FIRST message of a fresh conversation goes to the read-only "plan"
   // agent: the agent proposes a plan and asks for confirmation instead of
   // executing right away; the user's follow-up runs on the default agent.
-  sendPrompt: (text) => {
+  sendPrompt: (text, skills) => {
     const tid = get().currentId ?? DRAFT_KEY;
     const planFirst = (get().threads[tid]?.blocks ?? []).length === 0;
     return performTurn(
       set,
       get,
       text,
-      (sid) => withRetry(() => client!.sendPrompt(sid, text, planFirst ? { agent: "plan" } : undefined)),
+      (sid) => withRetry(() => client!.sendPrompt(sid, text, {
+        ...(planFirst ? { agent: "plan" } : {}),
+        ...(skills?.length ? { skills } : {}),
+      })),
+      false,
+    );
+  },
+
+  review: () => {
+    if (!get().currentId) return Promise.resolve(null);
+    return performTurn(
+      set,
+      get,
+      "Review artifacts",
+      (sid) => client!.reviewSession(sid),
       false,
     );
   },
@@ -1244,6 +1305,7 @@ export function foldCarriageReturns(text: string): string {
 const LIVE_TAIL_MAX = 4_000;
 /** Expanded-detail cap: plenty to read inline, never megabytes in the store. */
 const DETAIL_MAX = 64_000;
+const SKILL_DETAIL_MAX = 512 * 1024;
 const capTail = (t: string, max: number) => (t.length > max ? "…" + t.slice(-max) : t);
 const capHead = (t: string, max: number) => (t.length > max ? t.slice(0, max) + "\n…" : t);
 
@@ -1326,6 +1388,9 @@ export function foldEvent(
       const command = str(event.input?.command);
       const filePath = str(event.input?.filePath) || str(event.input?.path);
       const content = str(event.input?.content);
+      const skillName = event.tool === "skill" ? str(event.input?.name) : "";
+      const skillPath = event.tool === "skill" ? str(event.input?.path) : "";
+      const skillSource = event.tool === "skill" ? str(event.input?.source) : "";
       // Some updates omit fields earlier ones carried (a task tool names its
       // subagent session once; time.start only rides the first events) —
       // carry them over from the previous version of the block.
@@ -1361,11 +1426,16 @@ export function foldEvent(
           ? { partialOutput: capTail(foldCarriageReturns(event.partialOutput), LIVE_TAIL_MAX) }
           : {}),
         ...(event.output?.trim()
-          ? { output: capTail(foldCarriageReturns(event.output), DETAIL_MAX).replace(/\s+$/, "") }
+          ? {
+              output: (event.tool === "skill" ? capHead(event.output, SKILL_DETAIL_MAX) : capTail(foldCarriageReturns(event.output), DETAIL_MAX)).replace(/\s+$/, ""),
+            }
           : {}),
         ...(startedAt ? { startedAt } : {}),
         ...(endedAt ? { endedAt } : {}),
         ...(childSessionId ? { childSessionId } : {}),
+        ...(skillName ? { skillName } : {}),
+        ...(skillPath ? { skillPath } : {}),
+        ...(skillSource ? { skillSource } : {}),
         // A user-typed "!" command ran for its output — its detail opens by
         // default. Agent bash steps stay quiet one-liners until expanded.
         ...(opts?.shellTurn && event.tool === "bash" && event.output?.trim()
@@ -1483,6 +1553,10 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
           const command = str(p.state?.input?.command);
           const filePath = str(p.state?.input?.filePath) || str(p.state?.input?.path);
           const content = str(p.state?.input?.content);
+          const skillName = p.tool === "skill" ? str(p.state?.input?.name) : "";
+          const skillPath = p.tool === "skill" ? str(p.state?.input?.path) : "";
+          const skillSource = p.tool === "skill" ? str(p.state?.input?.source) : "";
+          const childSessionId = str(p.state?.metadata?.sessionId);
           const diff =
             str(p.state?.metadata?.diff) ||
             (EDIT_TOOLS.has(p.tool ?? "") &&
@@ -1506,10 +1580,16 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
             ...(content ? { content: capHead(content, DETAIL_MAX) } : {}),
             ...(diff ? { diff: capHead(diff, DETAIL_MAX) } : {}),
             ...(p.state?.output?.trim()
-              ? { output: capTail(foldCarriageReturns(p.state.output), DETAIL_MAX).replace(/\s+$/, "") }
+              ? {
+                  output: (p.tool === "skill" ? capHead(p.state.output, SKILL_DETAIL_MAX) : capTail(foldCarriageReturns(p.state.output), DETAIL_MAX)).replace(/\s+$/, ""),
+                }
               : {}),
             ...(typeof p.state?.time?.start === "number" ? { startedAt: p.state.time.start } : {}),
             ...(typeof p.state?.time?.end === "number" ? { endedAt: p.state.time.end } : {}),
+            ...(skillName ? { skillName } : {}),
+            ...(skillPath ? { skillPath } : {}),
+            ...(skillSource ? { skillSource } : {}),
+            ...(childSessionId ? { childSessionId } : {}),
             ...(userShell && p.state?.output?.trim()
               ? { outputSummary: p.state.output.replace(/\s+$/, "") }
               : {}),

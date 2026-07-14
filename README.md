@@ -1,15 +1,15 @@
 <div align="center">
 
-[![APEX Science Desktop — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+[![APEX Science — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
 
-# APEX Science Desktop
+# APEX Science
 
-**Local-first, model-agnostic AI research workbench for macOS, Windows & Linux.**
+**Local-first AI research workbench in your browser, powered by OpenAI Codex.**
 
-Formerly Open Science Desktop. An open-source desktop alternative to Claude Science and
-similar AI-for-science workbenches — built with Tauri, MCP, agent skills, and
-reproducible artifacts. It connects agents, notebooks, files, figures, reports,
-runs, and review into one auditable desktop workflow.
+APEX Science runs as a local process and opens the normal browser—no desktop
+webview and no APEX account. Bring an OpenAI API key; projects, skills, plugins,
+MCP tools, files, runs, and provenance remain local. The legacy Tauri shell is
+still available for existing users.
 
 <p>
   <b>English</b> ·
@@ -26,8 +26,8 @@ runs, and review into one auditable desktop workflow.
   <a href="https://internscience.github.io/ResearchClawBench-Home/"><img src="https://img.shields.io/badge/%F0%9F%8F%86%20%231-ResearchClawBench-FFB300" alt="#1 on ResearchClawBench"></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platforms">
   <img src="https://img.shields.io/badge/i18n-7%20languages-5B8DEF" alt="7 interface languages">
-  <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20React-24C8DB" alt="Built with Tauri + React">
-  <img src="https://img.shields.io/badge/runtime-OpenCode-success" alt="OpenCode runtime">
+  <img src="https://img.shields.io/badge/UI-local%20browser-24C8DB" alt="Local browser UI">
+  <img src="https://img.shields.io/badge/runtime-OpenAI%20Codex-success" alt="OpenAI Codex runtime">
   <a href="https://discord.gg/fWNMDKcd5P"><img src="https://img.shields.io/badge/Join-Discord-5865F2" alt="Join Discord"></a>
   <a href="http://makeapullrequest.com"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome"></a>
   <a href="https://linux.do"><img src="https://img.shields.io/badge/Join-linux.do-orange" alt="linux.do"></a>
@@ -130,16 +130,17 @@ office/document skills below.
 
 | Area | Current state |
 | --- | --- |
-| Desktop shell | Tauri 2 + React + TypeScript + Vite, with macOS, Windows, and Linux desktop builds. |
-| Runtime | Bundled OpenCode sidecar, auto-started by the app, isolated from the user's own OpenCode config/data. |
+| Browser shell | One local Rust process opens the normal browser on macOS, Windows, or Linux; the legacy Tauri shell remains available. |
+| Runtime | Bundled Codex bridge and pinned Codex runtime, isolated in app-private config/data. |
 | Sessions | Multi-session chat/history, dated workspace folders, global history across workspaces, `/` commands, and `!` shell mode. |
+| Agents | Explicit requests such as “launch a literature subagent to…” or `$literature-agent …` create a separate read-only Codex thread, stream its child-session activity under the Main task, and return its evidence memo to Main for synthesis. |
 | Files | Global and per-session file browsing, context menu actions, external open/reveal, copy path, and local preview server. |
 | Notebooks | `.ipynb` artifacts render in the built-in viewer with local kernel execution; the agent drives a managed Jupyter environment (bundled `uv`) via MCP. |
 | Runs | Append-only run logs, global SQLite run index, search/facets/pagination, local/remote surfaces, output links, logs, and reproduce prompts. |
 | Provenance | `.openscience/provenance.jsonl` tracks file versions and links produced artifacts back to the run or edit that created them. |
-| Review | Traceability, statistics-integrity, domain-check, large-file, publication-figure, remote-compute, and Modal run skills are bundled as first-party skills. |
+| Review | A task-level **Review** button starts a fresh, read-only Reviewer thread on demand. It loads the applicable traceability/domain/statistics skills, returns actionable findings to the original Main Agent once, then performs one independent re-review. Nothing runs automatically. |
 | Viewers | PDF, image, video, HTML, Markdown, code, CSV/TSV tables with charts, DOCX, XLSX, PPTX, molecules, 3D meshes, genome tracks, FITS, DOS/DOSCAR, EIGENVAL bands, qcode, anomaly maps, and phase files. |
-| Models | OpenCode provider catalog, OAuth/API-key provider flows, custom OpenAI-compatible endpoints, and local/provider-specific options supported by OpenCode. |
+| Models | OpenAI Codex via a user-provided API key in the browser distribution; legacy runtimes remain available to developers. |
 | Interface languages | English, Simplified Chinese, Japanese, Spanish, German, French, and Korean. Portuguese (Brazil) and Arabic are registered but not selectable yet. |
 
 ## Skills and connectors
@@ -172,6 +173,25 @@ For a neutral positioning note, see
 
 ## Install
 
+For the browser edition, download `apexscience-browser-<platform>` from the
+Releases page and extract it. No Node, Rust, Docker, or desktop app is required.
+
+- macOS: double-click `APEX Science.command`, or run `./apexscience`.
+- Windows: double-click `APEX Science.cmd`.
+- Linux: run `./apexscience`.
+
+The browser bundles are not code-signed yet. If macOS quarantines the extracted
+folder, run `xattr -cr apexscience-browser` once before launching it.
+
+The launcher opens a random localhost port and exchanges a one-time nonce for
+an HttpOnly session cookie. There is no APEX sign-in. Supply `OPENAI_API_KEY` in
+the launch environment, or enter the key in Settings for the current run.
+
+The release workflow produces self-contained arm64 and Intel macOS bundles,
+Windows x64, and Linux x64 bundles, and attaches them to tagged releases.
+
+### Legacy desktop installers
+
 Download the latest installer from the
 [Releases page](https://github.com/ai4s-research/open-science/releases/latest).
 
@@ -200,23 +220,29 @@ sudo rpm -i OpenScience_*.rpm
 
 ## Self-hosted web version
 
-The same workbench, served to a browser by one self-hosted process — for a lab
-server or a headless machine. Chat/sessions, the file explorer, artifact
-viewers, runs, and provenance work in the browser; notebooks, remote compute
-(SSH/Slurm), and Modal remain desktop-only for now.
+The same workbench, served to the normal browser by one local process. A local
+launch binds an automatic loopback port, opens the browser with a one-time
+nonce, exchanges it for an HttpOnly session cookie, and removes the nonce from
+the URL. There is no APEX account or token-entry step in this localhost flow.
+
+For a Docker/LAN deployment, keep the separate browser access token: binding a
+command- and filesystem-capable agent to a non-loopback interface without
+access control is unsafe.
 
 ```bash
-APEX_TOKEN=<pick-a-token> docker compose up -d
+APEX_TOKEN=<browser-token> OPENAI_API_KEY=<your-key> docker compose up -d
 # open http://localhost:3411 and sign in with the token
 ```
 
 Or without Docker: build the frontend (`pnpm --filter @ai4s/desktop build`),
-then `cargo run --release --manifest-path apps/server/Cargo.toml` — run
+then set `OPENAI_API_KEY` and run
+`cargo run --release --manifest-path apps/server/Cargo.toml` — the browser opens
+automatically. Run
 `apexscience-server --help` for the flags (data dir, opencode binary, bind
 host/port). The server binds `127.0.0.1` by default; to expose it beyond
 localhost, pass `--host 0.0.0.0` and terminate TLS in a reverse proxy in
-front. The browser only ever holds the login token — the agent-runtime
-password stays on the server, injected by its `/runtime` reverse proxy.
+front. The browser only holds an HttpOnly session cookie. Provider keys and the
+agent-runtime password stay in the local server/sidecar process.
 
 ### Claude Agent SDK backend (experimental)
 
@@ -244,24 +270,54 @@ snapshots are backend-independent and work unchanged.
 
 `apps/codex-bridge/` is the same idea on the
 [OpenAI Codex SDK](https://developers.openai.com/codex/sdk): same wire subset,
-same drop-in sidecar contract. It uses your existing `codex login`
-(~/.codex/auth.json) or `OPENAI_API_KEY`, and defaults to the model in your
-`~/.codex/config.toml`.
+same drop-in sidecar contract. For the browser distribution, provide
+`OPENAI_API_KEY`; it stays in process memory and is not written to the bridge's
+JSON configuration. The bridge uses an app-private `CODEX_HOME`.
 
 ```bash
-APEX_TOKEN=<token> APEX_OPENCODE_BIN=$PWD/apps/codex-bridge/src/server.mjs \
+OPENAI_API_KEY=<key> APEX_OPENCODE_BIN=$PWD/apps/codex-bridge/src/server.mjs \
   cargo run --release --manifest-path apps/server/Cargo.toml
 ```
 
-Codex has no per-tool approval callback — it sandboxes instead. The app's
-approve/full switch maps to Codex sandbox modes (approve → `workspace-write`,
-full → `danger-full-access`), so approval prompts never appear on this
-backend; plan-first routing is ignored. Chat with streaming, command/file-
-change tool rows, session history/resume, `!` shell mode, and abort work.
+The bridge discovers Codex-native repository/user skills (`.agents/skills`),
+loads enabled plugin skills, maps local and remote MCP servers into Codex
+configuration, and streams MCP arguments/results/errors into the tool log.
+The Extensions page installs a local plugin directory or HTTPS Git repository,
+validates `.codex-plugin/plugin.json`, shows skills/MCP/scripts/hooks, and keeps
+new installs and updates disabled until reviewed. Remote catalogs should pin an
+expected commit.
+
+The first specialist-agent path is intentionally explicit and bounded. Asking
+to launch a **literature subagent** (or using `$literature-agent`) creates a
+separate read-only Codex thread with live web search. If the user has installed
+the `paperclip` skill, the child loads it audibly before research. The child
+session is persisted with its parent link, hidden from top-level history, and
+its evidence memo returns to the original Main thread for synthesis. Ordinary
+mentions of agents do not trigger delegation; parallel/general agent spawning
+is not enabled yet.
+
+When a turn creates or changes a reviewable artifact (code, notebook, data,
+report, or figure), the bridge remembers the review targets but does nothing in
+the background. Clicking **Review** in the task composer starts a fresh Codex
+thread in a read-only filesystem sandbox. That Reviewer loads the applicable bundled
+`traceability-review`, `domain-check`, and `stats-integrity` skills. Actionable
+findings are returned once to the original Main Agent for correction, followed
+by one final independent re-review. Reviewer threads receive no MCP servers, so
+they cannot mutate external systems through a connector; network access is kept
+for citation verification. Settings controls whether a manually started review
+may perform the one bounded fix/re-review cycle. Each phase is persisted in the
+task timeline.
+
+Codex sandboxes agent commands: approve maps to `workspace-write`, full maps to
+`danger-full-access`. Direct `!` shell execution is disabled in approve mode
+because it bypasses Codex's sandbox. MCP tools default to the conservative
+`writes` approval policy; the current TypeScript SDK transport cannot relay
+interactive approval callbacks to the browser. Plan-first routing remains
+ignored.
 
 ## Build from source
 
-Prerequisites:
+Prerequisites for development:
 
 - Node.js >= 20
 - pnpm 9
@@ -279,6 +335,7 @@ bash scripts/dev/fetch-uv.sh
 bash scripts/dev/fetch-skills.sh
 
 # Run in development or build installers.
+OPENAI_API_KEY=<key> cargo run --release --manifest-path apps/server/Cargo.toml
 pnpm --filter @ai4s/desktop tauri dev
 pnpm --filter @ai4s/desktop tauri build
 ```
@@ -295,10 +352,10 @@ pnpm lint
 
 - Workspace files, raw data, session history, provenance, notebooks, and run records
   stay local by default.
-- Command execution, file deletion, dependency installation, and remote connections
-  are human-approved flows in the desktop app.
-- Provider credentials are written to app-private runtime config, not to the
-  workspace, provenance, git, exports, or global OpenCode config.
+- Browser-edition agent commands use Codex's workspace sandbox by default;
+  unrestricted Full mode is an explicit user choice. Plugins install disabled.
+- The OpenAI key stays in the server/bridge process and is not written to the
+  workspace, provenance, git, exports, or bridge JSON configuration.
 - Settings includes a plain-language data-flow view explaining what can be sent to
   the selected model provider.
 
@@ -306,8 +363,9 @@ pnpm lint
 
 | Path | Purpose |
 | --- | --- |
-| `apps/desktop/` | Tauri + React desktop app. |
+| `apps/desktop/` | Shared React frontend plus the legacy Tauri shell. |
 | `apps/server/` | Axum server for the self-hosted web version. |
+| `apps/codex-bridge/` | OpenCode-wire-compatible bridge to the OpenAI Codex SDK. |
 | `crates/shell-core/` | Shared Rust command core (desktop + web server). |
 | `packages/sdk/` | `OpenCodeClient`; keeps the UI from calling OpenCode directly. |
 | `packages/shared/` | Shared domain types and chart palette. |
@@ -318,6 +376,7 @@ pnpm lint
 | `runtime/mcp/` | MCP runtime notes/configuration. |
 | `examples/` | Built-in example workspaces. |
 | `scripts/dev/` | Sidecar, `uv`, skill fetchers, and focused regression probes. |
+| `scripts/release/` | Self-contained browser release assembler. |
 | `docs/` | Product, technical, operator, connector, and research notes. |
 
 ## Status

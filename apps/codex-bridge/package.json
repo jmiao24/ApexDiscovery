@@ -7,8 +7,15 @@
   "bin": {
     "codex-bridge": "./src/server.mjs"
   },
+  "files": [
+    "src/server.mjs",
+    "src/extensions.mjs",
+    "src/reviewer.mjs",
+    "src/subagents.mjs"
+  ],
   "scripts": {
-    "start": "node src/server.mjs serve --hostname 127.0.0.1 --port 4096"
+    "start": "node src/server.mjs serve --hostname 127.0.0.1 --port 4096",
+    "test": "node --test --test-concurrency=1 src/*.test.mjs"
   },
   "engines": {
     "node": ">=20"

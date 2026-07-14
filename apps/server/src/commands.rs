@@ -23,6 +23,7 @@ fn bad_request(message: impl std::fmt::Display) -> Response {
     err(StatusCode::BAD_REQUEST, message.to_string())
 }
 
+#[allow(clippy::result_large_err)] // Axum Response is the command router's direct error type.
 fn parse<T: serde::de::DeserializeOwned>(params: &Value) -> Result<T, Response> {
     serde_json::from_value(params.clone()).map_err(|e| bad_request(format!("bad params: {e}")))
 }
@@ -551,7 +552,7 @@ fn dispatch_blocking(ctx: &shell_core::ShellCtx, name: &str, params: Value) -> R
                 Ok(r) => r,
                 Err(e) => return bad_request(e),
             };
-            let encoded: Vec<String> = rel.split('/').map(|s| preview::encode_segment(s)).collect();
+            let encoded: Vec<String> = rel.split('/').map(preview::encode_segment).collect();
             ok(format!("/api/files/{scope}/{}", encoded.join("/")))
         }
         "probe_large_file" => {

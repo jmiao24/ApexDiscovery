@@ -9,6 +9,7 @@ const installCalls: string[] = [];
 let failInstall = false;
 vi.mock("@/lib/tauri", () => ({
   isTauri: true,
+  hasShell: () => true,
   installExample: async (name: string) => {
     installCalls.push(name);
     if (failInstall) throw new Error("resource missing");

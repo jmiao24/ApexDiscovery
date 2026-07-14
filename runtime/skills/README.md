@@ -51,3 +51,13 @@ default. Use curated install, enable by domain, and always surface each skill's
 license, dependencies, and risk.
 
 Each skill directory must contain a `SKILL.md`.
+
+## Codex and plugin discovery
+
+The Codex backend scans the documented `.agents/skills` repository hierarchy,
+`~/.agents/skills`, the admin skill directory, bundled APEX skills, and skills
+inside enabled `.codex-plugin` packages. Plugin skills are passed to Codex as a
+small name/description/path catalog; Codex reads the full `SKILL.md` only when
+the request invokes or matches the skill. The local server installs plugins
+under its private data directory and records enablement in
+`extensions/index.json`.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, Check, ChevronDown, Hand, Paperclip, Square, Terminal, X, Zap } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Hand, Paperclip, Plus, ShieldCheck, Sparkles, Square, Terminal, X, Zap } from "lucide-react";
 import { addFilesToWorkspace, addTextToWorkspace, hasShell, type ApprovalMode } from "@/lib/tauri";
 import { WorkspaceChip } from "@/components/thread/WorkspaceChip";
 import { useUiStore } from "@/lib/store";
@@ -43,6 +43,12 @@ export interface ComposerCommand {
   source?: string;
 }
 
+/** An installed skill the user can explicitly include in the next prompt. */
+export interface ComposerSkill {
+  name: string;
+  description?: string;
+}
+
 /** The two approval modes the composer can switch between (Codex-style). Copy
  *  (label/description) is translated at render time — see `approvalCopy`. */
 const APPROVAL_OPTIONS: { mode: ApprovalMode; icon: typeof Hand }[] = [
@@ -66,7 +72,12 @@ export function Composer({
   onSend,
   onRunShell,
   onRunCommand,
+  onReview,
   commands = [],
+  selectedSkills = [],
+  onSelectedSkillsChange,
+  onSkillsOpen,
+  skillsOpen = false,
   disabled,
   working,
   onStop,
@@ -74,10 +85,18 @@ export function Composer({
   approvalMode,
   onApprovalModeChange,
 }: {
-  onSend?: (text: string) => void;
+  onSend?: (text: string, skills?: string[]) => void;
   onRunShell?: (command: string) => void;
   onRunCommand?: (name: string, args: string) => void;
+  /** Explicitly start the independent artifact Reviewer for this task. */
+  onReview?: () => void;
   commands?: ComposerCommand[];
+  /** Skills pinned to the next ordinary prompt. Controlled by the session. */
+  selectedSkills?: string[];
+  onSelectedSkillsChange?: (skills: string[]) => void;
+  /** Opens the session's right-side skill drawer. */
+  onSkillsOpen?: () => void;
+  skillsOpen?: boolean;
   disabled?: boolean;
   /** A turn is running: the send button becomes Stop (wired to `onStop`). */
   working?: boolean;
@@ -240,10 +259,16 @@ export function Composer({
     if (!text && files.length === 0) return;
     const fileNote =
       files.length > 0 ? `Files added to the workspace: ${files.join(", ")}` : "";
-    onSend?.(text && fileNote ? `${text}\n\n${fileNote}` : text || fileNote);
+    const body = text && fileNote ? `${text}\n\n${fileNote}` : text || fileNote;
+    // Skill names travel out-of-band so the user's message stays clean. The
+    // Codex bridge resolves this structured list to real audited SKILL.md
+    // loads before the agent acts.
+    if (selectedSkills.length > 0) onSend?.(body, selectedSkills);
+    else onSend?.(body);
     if (text) recordHistory(text);
     setValue("");
     setFiles([]);
+    onSelectedSkillsChange?.([]);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -366,7 +391,7 @@ export function Composer({
   return (
     <div
       className={cn(
-        "relative rounded-card border bg-surface px-2 py-2 shadow-card",
+        "relative rounded-[22px] border bg-surface/95 px-3 py-3 shadow-[var(--shadow-composer)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 focus-within:shadow-[var(--shadow-composer-focus)]",
         shellMode ? "border-warn/60" : command ? "border-accent/50" : "border-border",
       )}
     >
@@ -404,8 +429,27 @@ export function Composer({
           ))}
         </div>
       )}
-      {files.length > 0 && (
+      {(files.length > 0 || selectedSkills.length > 0) && (
         <div className="flex flex-wrap gap-1.5 px-1 pb-2">
+          {selectedSkills.map((name) => (
+            <span
+              key={name}
+              className="flex items-center gap-1.5 rounded-full bg-surface-2 py-1 pl-2 pr-1 text-xs text-text ring-1 ring-border"
+              title={t("composer.skills.selectedTitle")}
+            >
+              <Sparkles size={11} className="shrink-0 text-accent" />
+              <span>{name}</span>
+              <button
+                className="rounded p-0.5 hover:bg-accent/15"
+                aria-label={t("composer.skills.removeAria", { name })}
+                onClick={() => onSelectedSkillsChange?.(
+                  selectedSkills.filter((item) => item !== name),
+                )}
+              >
+                <X size={11} />
+              </button>
+            </span>
+          ))}
           {files.map((name) => (
             <span
               key={name}
@@ -484,6 +528,43 @@ export function Composer({
         {/* Folder picker for a fresh draft — renders nothing once the session
             exists (its folder then shows in the header's Files toggle). */}
         <WorkspaceChip />
+        {!!onSend && onSkillsOpen && (
+          <div className="shrink-0">
+            <button
+              type="button"
+              className={cn(
+                "flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs hover:bg-surface-2 disabled:opacity-40",
+                selectedSkills.length > 0
+                  ? "bg-surface-2 text-text"
+                  : "text-muted hover:text-text",
+              )}
+              aria-label={t("composer.skills.aria")}
+              title={t("composer.skills.title")}
+              aria-pressed={skillsOpen}
+              onClick={onSkillsOpen}
+              disabled={disabled}
+            >
+              <Plus size={13} />
+              <span>
+                {t("composer.skills.label")}
+                {selectedSkills.length > 0 ? ` · ${selectedSkills.length}` : ""}
+              </span>
+            </button>
+          </div>
+        )}
+        {onReview && (
+          <button
+            type="button"
+            className="flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs text-muted hover:bg-surface-2 hover:text-text disabled:opacity-40"
+            aria-label={t("composer.review.aria")}
+            title={t("composer.review.title")}
+            onClick={onReview}
+            disabled={disabled}
+          >
+            <ShieldCheck size={13} />
+            <span>{t("composer.review.label")}</span>
+          </button>
+        )}
         {approvalMode && onApprovalModeChange && (
           <div className="relative shrink-0" ref={approvalRef}>
             {approvalOpen && (
@@ -525,8 +606,15 @@ export function Composer({
             <button
               aria-label={t("composer.approval.aria")}
               title={t("composer.approval.title")}
-              className="flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs text-muted hover:bg-surface-2 hover:text-text"
-              onClick={() => setApprovalOpen((o) => !o)}
+              className={cn(
+                "flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs hover:bg-surface-2",
+                approvalMode === "full"
+                  ? "text-warn hover:text-warn"
+                  : "text-muted hover:text-text",
+              )}
+              onClick={() => {
+                setApprovalOpen((open) => !open);
+              }}
             >
               {approvalMode === "full" ? <Zap size={12} /> : <Hand size={12} />}
               <span>{approvalCopy[approvalMode].label}</span>

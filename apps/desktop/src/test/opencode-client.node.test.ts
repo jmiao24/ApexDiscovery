@@ -21,6 +21,29 @@ async function waitFor(pred: () => boolean, timeout = 3000) {
 }
 
 describe("OpenCodeClient ↔ OpenCode server", () => {
+  it("sends selected skills as structured metadata instead of modifying prompt text", async () => {
+    let body: unknown;
+    const client = new OpenCodeClient({
+      baseUrl: "http://127.0.0.1:1",
+      fetchImpl: async (_input, init) => {
+        body = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+
+    await client.sendPrompt("ses_test", "Find MC4R evidence", {
+      skills: ["open-targets", "paperclip"],
+    });
+
+    expect(body).toEqual({
+      parts: [{ type: "text", text: "Find MC4R evidence" }],
+      skills: ["open-targets", "paperclip"],
+    });
+  });
+
   it("connects, creates a session, sends a prompt, and streams normalized events", async () => {
     const events: OpenCodeEvent[] = [];
     const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
@@ -90,6 +113,18 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
     await client.runCommand("ses_mock", "init", "focus on tests");
     await waitFor(() => events.some((e) => e.type === "session.idle"));
     expect(events.map((e) => e.type)).toContain("text.updated");
+    client.close();
+  });
+
+  it("starts the Reviewer only through the explicit review endpoint", async () => {
+    const events: OpenCodeEvent[] = [];
+    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    client.onEvent((e) => events.push(e));
+    await client.connect();
+    server.requests.length = 0;
+    await client.reviewSession("ses_mock");
+    await waitFor(() => events.some((e) => e.type === "session.idle"));
+    expect(server.requests).toContain("POST /session/ses_mock/review_async");
     client.close();
   });
 
@@ -263,5 +298,32 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
       requestTimeoutMs: 10,
     });
     await expect(client.getMessages("ses_hung")).rejects.toThrow("Timed out waiting for OpenCode");
+  });
+
+  it("reads and updates the bounded independent-review policy", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (init?.method === "PATCH") return new Response("{}", { status: 200 });
+      return new Response(
+        JSON.stringify({ reviewer: { enabled: true, autoFix: true, maxPasses: 99 } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+    const client = new OpenCodeClient({ baseUrl: "http://review.test", fetchImpl });
+
+    await expect(client.getReviewerConfig()).resolves.toEqual({
+      enabled: true,
+      autoFix: true,
+      maxPasses: 2,
+    });
+    await client.setReviewerConfig({ enabled: false, autoFix: false });
+
+    expect(requests[1].url).toBe("http://review.test/global/config");
+    expect(requests[1].init?.method).toBe("PATCH");
+    expect(JSON.parse(String(requests[1].init?.body))).toEqual({
+      reviewer: { enabled: false, autoFix: false, maxPasses: 2 },
+    });
   });
 });

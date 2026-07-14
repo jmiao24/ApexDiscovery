@@ -13,6 +13,15 @@
     "title": "Paramètres",
     "subtitle": "Tout ici configure le runtime OpenCode intégré — une seule configuration, aucune copie."
   },
+  "reviewer": {
+    "title": "Agent Reviewer indépendant",
+    "hint": "La révision démarre uniquement après un clic sur Réviser, dans un nouveau thread Codex en lecture seule",
+    "connectPrompt": "Connectez le runtime pour configurer la révision.",
+    "autoFix": "Corriger et réexaminer après un clic sur Réviser",
+    "autoFixHint": "Renvoie une fois les constats au Main Agent puis lance un dernier examen indépendant.",
+    "updateFailed": "Impossible de mettre à jour les paramètres du Reviewer",
+    "updated": "Paramètres du Reviewer mis à jour"
+  },
   "runtime": {
     "title": "Runtime de l'agent",
     "hint": "opencode serve, piloté via son API HTTP + SSE",
@@ -85,6 +94,13 @@
     "enterKeyFirstTitle": "Entrez d'abord la clé API",
     "settingUp": "Configuration en cours…",
     "enable": "Activer",
+    "disable": "Disable",
+    "managedBy": "plugin {{plugin}}",
+    "approvalFor": "Approval policy for {{name}}",
+    "approvalWrites": "prompt for writes",
+    "approvalPrompt": "always prompt",
+    "approvalApprove": "pre-approved",
+    "approvalAuto": "server default",
     "freeKeySuffix": "(clé gratuite)",
     "getFreeKey": "Obtenir une clé gratuite",
     "jupyterLabel": "Jupyter",
@@ -138,6 +154,8 @@
     "mcpAdded": "Serveur MCP {{name}} ajouté",
     "couldNotRemoveMcp": "Impossible de supprimer le serveur MCP",
     "mcpRemoved": "Serveur MCP {{name}} supprimé",
+    "couldNotUpdateMcp": "Could not update the MCP server",
+    "mcpUpdated": "MCP server {{name}} updated",
     "importFailed": "Échec de l'importation",
     "noOpenCodeLoginFound": "Aucune connexion CLI OpenCode trouvée sur cette machine.",
     "importedLogin": "Votre connexion CLI OpenCode a été importée.",

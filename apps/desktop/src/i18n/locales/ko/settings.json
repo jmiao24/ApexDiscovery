@@ -13,6 +13,15 @@
     "title": "설정",
     "subtitle": "여기서 내장된 OpenCode 런타임을 구성합니다 — 하나의 설정, 복사본 없음."
   },
+  "reviewer": {
+    "title": "독립 Reviewer Agent",
+    "hint": "작업에서 검토를 클릭한 경우에만 별도의 읽기 전용 Codex Thread에서 실행됩니다",
+    "connectPrompt": "검토 동작을 설정하려면 런타임에 연결하세요.",
+    "autoFix": "검토 클릭 후 수정 및 재검토",
+    "autoFixHint": "발견 사항을 Main Agent에 한 번 전달해 수정하고 마지막 독립 검토를 실행합니다.",
+    "updateFailed": "Reviewer 설정을 업데이트할 수 없습니다",
+    "updated": "Reviewer 설정이 업데이트되었습니다"
+  },
   "runtime": {
     "title": "에이전트 런타임",
     "hint": "opencode serve — HTTP + SSE API로 제어",
@@ -84,6 +93,13 @@
     "enterKeyFirstTitle": "먼저 API 키를 입력하세요",
     "settingUp": "설정 중…",
     "enable": "활성화",
+    "disable": "Disable",
+    "managedBy": "plugin {{plugin}}",
+    "approvalFor": "Approval policy for {{name}}",
+    "approvalWrites": "prompt for writes",
+    "approvalPrompt": "always prompt",
+    "approvalApprove": "pre-approved",
+    "approvalAuto": "server default",
     "freeKeySuffix": "(무료 키)",
     "getFreeKey": "무료 키 받기",
     "jupyterLabel": "Jupyter",
@@ -137,6 +153,8 @@
     "mcpAdded": "MCP 서버 {{name}}이(가) 추가되었습니다",
     "couldNotRemoveMcp": "MCP 서버를 제거할 수 없습니다",
     "mcpRemoved": "MCP 서버 {{name}}이(가) 제거되었습니다",
+    "couldNotUpdateMcp": "Could not update the MCP server",
+    "mcpUpdated": "MCP server {{name}} updated",
     "importFailed": "가져오기에 실패했습니다",
     "noOpenCodeLoginFound": "이 컴퓨터에서 OpenCode CLI 로그인을 찾을 수 없습니다.",
     "importedLogin": "OpenCode CLI 로그인 정보를 가져왔습니다.",

@@ -4,6 +4,13 @@
     "restorePanel": "恢复面板",
     "closeInspector": "关闭检查器"
   },
+  "skill": {
+    "title": "已加载 {{name}} skill",
+    "badge": "Skill",
+    "source": "{{source}} 作用域",
+    "input": "输入",
+    "output": "输出"
+  },
   "artifact": {
     "previousVersionAria": "上一个版本",
     "nextVersionAria": "下一个版本",

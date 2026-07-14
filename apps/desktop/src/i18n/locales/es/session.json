@@ -36,6 +36,31 @@
     "send": {
       "aria": "Enviar"
     },
+    "review": {
+      "label": "Revisar",
+      "aria": "Revisar artefactos",
+      "title": "Ejecutar el revisor independiente sobre los artefactos de esta tarea"
+    },
+    "skills": {
+      "label": "Habilidades",
+      "aria": "Elegir habilidades",
+      "title": "Incluir habilidades instaladas en el siguiente mensaje",
+      "menuAria": "Habilidades instaladas",
+      "searchAria": "Buscar habilidades",
+      "searchPlaceholder": "Buscar habilidades",
+      "none": "No hay habilidades instaladas",
+      "noMatches": "No hay habilidades coincidentes",
+      "removeAria": "Quitar la habilidad {{name}}",
+      "selectedTitle": "Esta habilidad se cargará para el siguiente mensaje",
+      "drawerTitle": "Habilidades",
+      "drawerDescription": "Busca y adjunta habilidades al siguiente mensaje desde un solo lugar.",
+      "closeAria": "Cerrar habilidades",
+      "all": "Todas",
+      "selected": "Seleccionadas",
+      "pickHint": "Elige habilidades para incluirlas en el siguiente mensaje.",
+      "manage": "Administrar habilidades",
+      "toggleAria": "Alternar la habilidad {{name}}"
+    },
     "approval": {
       "aria": "Modo de aprobación",
       "title": "Cómo se aprueban las acciones del agente",
@@ -92,6 +117,9 @@
     },
     "connect": "Conectar",
     "subagentFallback": "un subagente",
+    "subagent": {
+      "openSession": "Abrir la sesión completa del subagente"
+    },
     "header": {
       "expandSidebarAria": "Expandir barra lateral",
       "expandSidebarTitle": "Expandir barra lateral ({{shortcut}})"

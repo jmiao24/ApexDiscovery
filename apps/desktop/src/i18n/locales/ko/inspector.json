@@ -4,6 +4,13 @@
     "restorePanel": "패널 복원",
     "closeInspector": "인스펙터 닫기"
   },
+  "skill": {
+    "title": "{{name}} skill 로드됨",
+    "badge": "Skill",
+    "source": "{{source}} 범위",
+    "input": "입력",
+    "output": "출력"
+  },
   "artifact": {
     "previousVersionAria": "이전 버전",
     "nextVersionAria": "다음 버전",

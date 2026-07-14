@@ -101,10 +101,7 @@ export function Sidebar({ project }: { project: Project }) {
       )}
       style={{ width: sidebarCollapsed ? 0 : width }}
     >
-      <aside
-        className="flex h-full flex-col border-r border-border bg-surface"
-        style={{ width }}
-      >
+      <aside className="absolute inset-0 flex flex-col overflow-hidden border-r border-faint bg-[var(--sidebar)]">
       {/* The strip clears the traffic lights and hosts the collapse button just
           right of them — same spot the expand button lands when collapsed. */}
       {overlayTitlebar && (
@@ -113,7 +110,7 @@ export function Sidebar({ project }: { project: Project }) {
             onClick={toggleSidebar}
             aria-label={t("sidebar.collapse")}
             title={t("sidebar.collapseTitle", { shortcut: "⌘B" })}
-            className="rounded p-1 text-text hover:bg-surface-2"
+            className="rounded p-1 text-text hover:bg-[var(--sidebar-hover)]"
           >
             <PanelLeft size={14} strokeWidth={1.5} />
           </button>
@@ -132,7 +129,7 @@ export function Sidebar({ project }: { project: Project }) {
               onClick={toggleSidebar}
               aria-label={t("sidebar.collapse")}
               title={t("sidebar.collapseTitle", { shortcut: isMac ? "⌘B" : "Ctrl+B" })}
-              className="ml-auto self-center rounded p-1 text-text hover:bg-surface-2"
+              className="ml-auto self-center rounded p-1 text-text hover:bg-[var(--sidebar-hover)]"
             >
               <PanelLeft size={14} strokeWidth={1.5} />
             </button>
@@ -157,8 +154,8 @@ export function Sidebar({ project }: { project: Project }) {
             <NavLink
               to={row.to}
               className={cn(
-                "flex items-center gap-2 rounded-input py-1 pl-2 pr-8 text-[13px] hover:bg-surface-2",
-                location.pathname === row.to ? "bg-surface-2 text-text" : "text-text/90",
+                "flex items-center gap-2 rounded-input py-1 pl-2 pr-8 text-[13px] hover:bg-[var(--sidebar-hover)]",
+                location.pathname === row.to ? "bg-[var(--sidebar-hover)] text-text" : "text-text/90",
               )}
             >
               <span
@@ -188,7 +185,7 @@ export function Sidebar({ project }: { project: Project }) {
       <div className="border-t border-border px-3 py-3">
         <StatusPills />
         <button
-          className="relative mt-2 flex items-center gap-2 rounded-input px-2 py-1 text-[13px] text-muted hover:bg-surface-2 hover:text-text"
+          className="relative mt-2 flex items-center gap-2 rounded-input px-2 py-1 text-[13px] text-muted hover:bg-[var(--sidebar-hover)] hover:text-text"
           onClick={() => navigate("/settings")}
           aria-label={t("sidebar.settings")}
         >
@@ -254,7 +251,7 @@ function NavRow({ icon, label, onClick }: { icon: React.ReactNode; label: string
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2 rounded-input px-2 py-1 text-[13px] text-text hover:bg-surface-2"
+      className="flex items-center gap-2 rounded-input px-2 py-1 text-[13px] text-text hover:bg-[var(--sidebar-hover)]"
     >
       <span className="text-muted">{icon}</span>
       <span>{label}</span>

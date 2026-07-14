@@ -9,12 +9,15 @@ const mocks = vi.hoisted(() => ({
   kernelReset: vi.fn(async () => {}),
   /** Number of connect() attempts that fail before one succeeds. */
   failConnects: 0,
+  /** Optional gate that holds the event-stream handshake in "connecting". */
+  connectGate: null as Promise<void> | null,
   /** Number of createSession() attempts that fail before one succeeds. */
   failCreates: 0,
   /** Fire a normalized event into the store, as the SSE stream would. */
   fireEvent: (_e: unknown) => {},
   runShell: vi.fn(),
   runCommand: vi.fn(),
+  sendPrompt: vi.fn(),
   replyPermission: vi.fn(),
   abortSession: vi.fn(),
   /** SSE events the real server streams back DURING an abort POST's await — an
@@ -47,6 +50,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./tauri", () => ({
   isTauri: true,
+  hasShell: () => true,
   logDebug: async () => {},
   detectTools: async () => [],
   startRuntime: async () => "http://127.0.0.1:1",
@@ -77,6 +81,7 @@ vi.mock("@ai4s/sdk", () => {
     }
     async connect() {
       this.statusCb("connecting");
+      if (mocks.connectGate) await mocks.connectGate;
       if (mocks.failConnects > 0) {
         mocks.failConnects--;
         this.statusCb("error");
@@ -107,7 +112,9 @@ vi.mock("@ai4s/sdk", () => {
       }
       return "ses_new";
     }
-    async sendPrompt() {}
+    async sendPrompt(...args: unknown[]) {
+      mocks.sendPrompt(...args);
+    }
     async listCommands() {
       return [{ name: "init", description: "guided AGENTS.md setup", source: "command" }];
     }
@@ -173,6 +180,7 @@ import { DRAFT_KEY, rootSessionOf, useRuntimeStore } from "./runtime";
 beforeEach(async () => {
   vi.clearAllMocks();
   mocks.failConnects = 0;
+  mocks.connectGate = null;
   mocks.failCreates = 0;
   mocks.failShell = false;
   mocks.failCommand = false;
@@ -210,6 +218,27 @@ describe("runtime authentication", () => {
 });
 
 describe("per-session workspace folders", () => {
+  it("passes pinned skill names to the SDK without adding them to visible prompt text", async () => {
+    useRuntimeStore.setState({
+      currentId: "ses_existing",
+      threads: {
+        ses_existing: {
+          loaded: true,
+          index: {},
+          blocks: [{ kind: "agent", markdown: "Earlier response" }],
+        },
+      },
+    });
+
+    await useRuntimeStore.getState().sendPrompt("Find MC4R evidence", ["open-targets", "paperclip"]);
+
+    expect(mocks.sendPrompt).toHaveBeenCalledWith(
+      "ses_existing",
+      "Find MC4R evidence",
+      { skills: ["open-targets", "paperclip"] },
+    );
+  });
+
   it("creates a fresh dated folder before the first message of an unpinned draft", async () => {
     const id = await useRuntimeStore.getState().sendPrompt("hello");
     expect(id).toBe("ses_new");
@@ -480,6 +509,70 @@ describe("per-session workspace folders", () => {
     expect(thread.blocks).toEqual([
       { kind: "status-line", text: "Failed to load messages: history hung", tone: "error" },
     ]);
+  });
+
+  it("retries a direct session URL after the runtime client finishes connecting", async () => {
+    useRuntimeStore.getState().disconnect();
+    mocks.messages = [{
+      role: "assistant",
+      parts: [{ type: "text", text: "Recovered persisted session content" }],
+    }];
+    useRuntimeStore.setState({ currentId: null, threads: {} });
+
+    // This is the hard-refresh ordering: the route renders first, while
+    // bootstrap has not created an OpenCodeClient yet.
+    await useRuntimeStore.getState().openSession("ses_direct_url");
+    expect(useRuntimeStore.getState().currentId).toBe("ses_direct_url");
+    expect(mocks.getMessages).not.toHaveBeenCalled();
+
+    // Bootstrap creates a client before its event-stream handshake completes.
+    // A repeated route effect in this window must remain queued instead of
+    // trying history against a half-connected client and clearing the intent.
+    let releaseConnect!: () => void;
+    mocks.connectGate = new Promise<void>((resolve) => { releaseConnect = resolve; });
+    const connecting = useRuntimeStore.getState().connect();
+    await vi.waitFor(() => expect(useRuntimeStore.getState().status).toBe("connecting"));
+    await useRuntimeStore.getState().openSession("ses_direct_url");
+    expect(mocks.getMessages).not.toHaveBeenCalled();
+
+    releaseConnect();
+    await connecting;
+    await vi.waitFor(() => {
+      expect(useRuntimeStore.getState().threads.ses_direct_url?.loaded).toBe(true);
+    });
+
+    expect(mocks.getMessages).toHaveBeenCalledWith("ses_direct_url");
+    expect(useRuntimeStore.getState().threads.ses_direct_url.blocks).toEqual([
+      { kind: "agent", markdown: "Recovered persisted session content" },
+    ]);
+  });
+
+  it("loads a child thread in the background without leaving the parent session", async () => {
+    mocks.messages = [
+      { role: "user", parts: [{ type: "text", text: "research MC4R" }] },
+      {
+        role: "assistant",
+        parts: [{
+          type: "tool",
+          tool: "websearch",
+          state: { status: "completed", title: "MC4R clinical trials" },
+        }],
+      },
+    ];
+    useRuntimeStore.setState({ currentId: "ses_parent", threads: {} });
+
+    await useRuntimeStore.getState().loadThread("ses_child");
+    await useRuntimeStore.getState().loadThread("ses_child");
+
+    const state = useRuntimeStore.getState();
+    expect(state.currentId).toBe("ses_parent");
+    expect(state.threads.ses_child.loaded).toBe(true);
+    expect(state.threads.ses_child.blocks).toEqual([
+      { kind: "user", text: "research MC4R" },
+      expect.objectContaining({ kind: "tool-call", title: "MC4R clinical trials", status: "success" }),
+    ]);
+    expect(mocks.getMessages).toHaveBeenCalledTimes(1);
+    expect(mocks.getMessages).toHaveBeenCalledWith("ses_child");
   });
 
   it("switchWorkspace pins the chosen folder; startDraft un-pins it", async () => {

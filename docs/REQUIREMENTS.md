@@ -128,7 +128,14 @@ competitors.
 - **Acceptance.** The reviewer flags at least: (a) a citation it cannot resolve,
   (b) a number with no traceable source, (c) a figure whose underlying code
   changed. Copy never promises "no errors."
-- **Status.** 🟡 The bundled `traceability-review` skill runs all three checks
+- **Status.** 🟡 The Codex backend now orchestrates an independent review loop:
+  a turn records changed reviewable artifacts but never reviews automatically;
+  the task-level Review button starts a fresh thread with a read-only filesystem
+  sandbox and no MCP servers, which loads the applicable review skills,
+  emits structured findings, returns actionable findings to the original Main
+  Agent once, then runs one final independent re-review. The two-pass bound and
+  Settings controls prevent an unbounded correction loop. The bundled
+  `traceability-review` skill runs all three checks
   (Crossref/arXiv/PubMed resolution, unsourced-number flagging, figure↔code
   staleness via `provenance.jsonl`) and emits the structured review contract;
   reviewer cards tag each finding with its check type and are dismissible. **PDF
@@ -675,7 +682,7 @@ competitors.
 | P0-1 | Full workflow end to end (not chat) | P0 | ✅ Done — starters + real-data example |
 | P0-2 | Local data + local compute | P0 | ✅ Done — local Python **and** R + data-flow card |
 | P0-3 | Artifact provenance / reproducibility | P0 | ✅ Done — versioned records + env/package lockfile + Reproduce |
-| P0-4 | Reviewer: traceable claims (3 checks) | P0 | 🟡 Partial — 3 checks + PDF-manuscript extractor shipped; weak-model robustness pending |
+| P0-4 | Reviewer: traceable claims (3 checks) | P0 | 🟡 Partial — click-to-run independent read-only review → one Main fix → re-review orchestration, 3 checks, and PDF extraction shipped; weak-model robustness pending |
 | **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | 🟡 **Partial — 5 gates ship (physics/earth/biology/chemistry/social science), deterministic + pluggable; chemistry now uses real RDKit round-trip when installed; only POSCAR→pymatgen round-trip pending** |
 | P0-6 | Large files: reference, don't load | P0 | ✅ Done — memory-pointer probe (table/parquet/hdf5/fits/netcdf/log + genomics FASTQ/FASTA/VCF/BAM, GRIB, ROOT) + one-click "Inspect without loading" in the too-large-preview card |
 | **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — ALL critical items addressed (approval modes, sidecar/preview auth, kernel deadlock, Windows injection, owner-only key files); keychain-at-rest deferred to signed releases (P2-3); moderate/cleanup backlog remains** |

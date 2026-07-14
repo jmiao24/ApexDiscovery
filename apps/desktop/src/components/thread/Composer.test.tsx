@@ -65,6 +65,73 @@ describe("Composer", () => {
     expect(screen.queryByLabelText("Stop")).toBeNull();
     expect(screen.getByLabelText("Send")).toBeInTheDocument();
   });
+
+  it("starts review only after the user clicks the explicit Review button", () => {
+    const onReview = vi.fn();
+    const { rerender } = render(<Composer onSend={vi.fn()} onReview={onReview} />);
+    fireEvent.click(screen.getByRole("button", { name: "Review artifacts" }));
+    expect(onReview).toHaveBeenCalledTimes(1);
+
+    rerender(<Composer onSend={vi.fn()} onReview={onReview} disabled />);
+    expect(screen.getByRole("button", { name: "Review artifacts" })).toBeDisabled();
+  });
+
+  it("explicitly includes selected skills in the next prompt, then clears them", () => {
+    const onSend = vi.fn();
+    const onSelectedSkillsChange = vi.fn();
+    const onSkillsOpen = vi.fn();
+    const { rerender } = render(
+      <Composer
+        onSend={onSend}
+        selectedSkills={["open-targets", "paperclip"]}
+        onSelectedSkillsChange={onSelectedSkillsChange}
+        onSkillsOpen={onSkillsOpen}
+        skillsOpen
+      />,
+    );
+
+    const skillsButton = screen.getByRole("button", { name: "Choose skills" });
+    expect(skillsButton).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(skillsButton);
+    expect(onSkillsOpen).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Skills · 2")).toBeInTheDocument();
+
+    const input = screen.getByLabelText("Ask anything");
+    fireEvent.change(input, { target: { value: "Find the strongest MC4R opportunities" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onSend).toHaveBeenCalledWith(
+      "Find the strongest MC4R opportunities",
+      ["open-targets", "paperclip"],
+    );
+    expect(onSelectedSkillsChange).toHaveBeenCalledWith([]);
+    rerender(
+      <Composer
+        onSend={onSend}
+        selectedSkills={[]}
+        onSelectedSkillsChange={onSelectedSkillsChange}
+        onSkillsOpen={onSkillsOpen}
+      />,
+    );
+    expect(screen.getByText("Skills")).toBeInTheDocument();
+    expect(screen.queryByText("Skills · 2")).toBeNull();
+    expect(screen.queryByText("open-targets")).toBeNull();
+  });
+
+  it("lets a selected skill chip be removed", () => {
+    const onSelectedSkillsChange = vi.fn();
+    render(
+      <Composer
+        onSend={vi.fn()}
+        selectedSkills={["paperclip"]}
+        onSelectedSkillsChange={onSelectedSkillsChange}
+        onSkillsOpen={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove paperclip skill" }));
+    expect(onSelectedSkillsChange).toHaveBeenCalledWith([]);
+  });
 });
 
 const COMMANDS = [

@@ -8,7 +8,8 @@
     "claude-bridge": "./src/server.mjs"
   },
   "scripts": {
-    "start": "node src/server.mjs serve --hostname 127.0.0.1 --port 4096"
+    "start": "node src/server.mjs serve --hostname 127.0.0.1 --port 4096",
+    "test:gpt": "node scripts/test-gpt-model.mjs"
   },
   "engines": {
     "node": ">=20"

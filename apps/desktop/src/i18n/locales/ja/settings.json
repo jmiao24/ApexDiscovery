@@ -13,6 +13,15 @@
     "title": "設定",
     "subtitle": "ここでの設定はすべて、バンドルされた OpenCode ランタイムに対するものです — 設定は一つだけで、コピーはありません。"
   },
+  "reviewer": {
+    "title": "独立 Reviewer Agent",
+    "hint": "タスクでレビューをクリックした場合のみ、新しい読み取り専用 Codex Thread で実行します",
+    "connectPrompt": "ランタイムに接続してレビュー動作を設定してください。",
+    "autoFix": "レビューをクリック後に修正して再レビュー",
+    "autoFixHint": "指摘を Main Agent に一度返して修正し、最後に独立レビューを行います。",
+    "updateFailed": "Reviewer 設定を更新できませんでした",
+    "updated": "Reviewer 設定を更新しました"
+  },
   "runtime": {
     "title": "エージェントランタイム",
     "hint": "opencode serve を、その HTTP + SSE API 経由で操作します",
@@ -84,6 +93,13 @@
     "enterKeyFirstTitle": "先に API キーを入力してください",
     "settingUp": "セットアップ中…",
     "enable": "有効化",
+    "disable": "Disable",
+    "managedBy": "plugin {{plugin}}",
+    "approvalFor": "Approval policy for {{name}}",
+    "approvalWrites": "prompt for writes",
+    "approvalPrompt": "always prompt",
+    "approvalApprove": "pre-approved",
+    "approvalAuto": "server default",
     "freeKeySuffix": "（無料キー）",
     "getFreeKey": "無料キーを取得",
     "jupyterLabel": "Jupyter",
@@ -137,6 +153,8 @@
     "mcpAdded": "MCP サーバー {{name}} を追加しました",
     "couldNotRemoveMcp": "MCP サーバーを削除できませんでした",
     "mcpRemoved": "MCP サーバー {{name}} を削除しました",
+    "couldNotUpdateMcp": "Could not update the MCP server",
+    "mcpUpdated": "MCP server {{name}} updated",
     "importFailed": "インポートに失敗しました",
     "noOpenCodeLoginFound": "このマシンで OpenCode CLI のログインが見つかりませんでした。",
     "importedLogin": "OpenCode CLI のログインをインポートしました。",

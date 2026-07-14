@@ -4,6 +4,13 @@
     "restorePanel": "Restore panel",
     "closeInspector": "Close inspector"
   },
+  "skill": {
+    "title": "Loaded {{name}} skill",
+    "badge": "Skill",
+    "source": "{{source}} scope",
+    "input": "Input",
+    "output": "Output"
+  },
   "artifact": {
     "previousVersionAria": "Previous version",
     "nextVersionAria": "Next version",

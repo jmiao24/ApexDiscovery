@@ -1,4 +1,4 @@
-// OpenCode sidecar supervision for the server: the same spawn recipe as the
+// Agent sidecar supervision for the server: the same spawn recipe as the
 // desktop (shell_core::runtime::build_sidecar_spec — app-private XDG profile,
 // per-run password, enriched PATH, proxy env), launched with std::process and
 // killed on exit/restart.
@@ -12,10 +12,28 @@ use shell_core::ShellCtx;
 pub fn default_opencode_bin() -> PathBuf {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let bundled = dir.join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+            let codex = dir.join("codex-bridge").join("src").join("server.mjs");
+            if codex.is_file() {
+                return codex;
+            }
+            let bundled = dir.join(if cfg!(windows) {
+                "opencode.exe"
+            } else {
+                "opencode"
+            });
             if bundled.is_file() {
                 return bundled;
             }
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        let codex = cwd
+            .join("apps")
+            .join("codex-bridge")
+            .join("src")
+            .join("server.mjs");
+        if codex.is_file() {
+            return codex;
         }
     }
     PathBuf::from("opencode")
@@ -52,7 +70,21 @@ impl Sidecar {
         // Reuse a stable port across restarts so the proxy target never moves.
         let port = *self.port.get_or_insert_with(free_port);
         let spec = shell_core::runtime::build_sidecar_spec(ctx, port)?;
-        let mut cmd = shell_core::util::quiet_command(bin);
+        // JavaScript sidecars use an explicit Node executable so the same
+        // packaged layout works on Windows, where shebang execution is not
+        // available. Native OpenCode/other bridges still spawn directly.
+        let is_node_script = matches!(
+            bin.extension().and_then(|extension| extension.to_str()),
+            Some("js" | "mjs" | "cjs")
+        );
+        let mut cmd = if is_node_script {
+            let node = std::env::var("APEX_NODE_BIN").unwrap_or_else(|_| "node".to_string());
+            let mut command = shell_core::util::quiet_command(&node);
+            command.arg(bin);
+            command
+        } else {
+            shell_core::util::quiet_command(bin)
+        };
         cmd.args(&spec.args)
             .current_dir(&spec.cwd)
             // The server's own stdio is the operator's log; the sidecar's
@@ -62,9 +94,12 @@ impl Sidecar {
         for (k, v) in &spec.envs {
             cmd.env(k, v);
         }
+        // The Codex compatibility bridge reads the extension inventory on
+        // every turn. OpenCode ignores this environment variable.
+        cmd.env("APEX_EXTENSIONS_DIR", ctx.data_dir.join("extensions"));
         let child = cmd
             .spawn()
-            .map_err(|e| format!("failed to spawn opencode ({}): {e}", bin.display()))?;
+            .map_err(|e| format!("failed to spawn agent sidecar ({}): {e}", bin.display()))?;
         let url = format!("http://127.0.0.1:{port}");
         self.child = Some(child);
         self.url = Some(url.clone());

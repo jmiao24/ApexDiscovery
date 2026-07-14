@@ -4,6 +4,7 @@ import { NotebookInspector } from "./NotebookInspector";
 import { PdfInspector } from "./PdfInspector";
 import { FilePreviewInspector } from "./FilePreviewInspector";
 import { NotebookEditor } from "@/components/notebook/NotebookEditor";
+import { SkillInspector } from "./SkillInspector";
 
 /** Right pane. Renders the correct inspector variant for the active session. */
 export function InspectorShell({
@@ -35,6 +36,9 @@ export function InspectorShell({
       )}
       {inspector.variant === "notebook-file" && (
         <NotebookEditor path={inspector.path} root={inspector.root} onClose={onClose} controls={controls} />
+      )}
+      {inspector.variant === "skill" && (
+        <SkillInspector data={inspector} onClose={onClose} controls={controls} />
       )}
     </div>
   );

@@ -1,0 +1,7 @@
+{
+  "name": "paper-plugin",
+  "version": "1.0.0",
+  "description": "Fixture plugin for browser extension integration tests.",
+  "skills": "./skills",
+  "mcpServers": "./.mcp.json"
+}

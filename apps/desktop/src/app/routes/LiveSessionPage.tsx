@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { FlaskConical, FolderOpen, Loader2, NotebookPen, PanelLeft, PlugZap } from "lucide-react";
-import type { RuntimeStatus } from "@ai4s/shared";
+import type { RuntimeStatus, SkillInspector } from "@ai4s/shared";
 import { DRAFT_KEY, rootSessionOf, subagentActivity, useRuntimeStore } from "@/lib/runtime";
 import { queryRuns } from "@/lib/runs";
 import { useOverlayTitlebar, useUiStore } from "@/lib/store";
@@ -16,9 +16,11 @@ import { WorkflowStarters } from "@/components/thread/WorkflowStarters";
 import { InteractionPrompt } from "@/components/thread/InteractionPrompt";
 import { InspectorShell } from "@/components/inspector/InspectorShell";
 import { MaximizePaneButton, RightPane } from "@/components/inspector/RightPane";
+import { SkillPickerPane } from "@/components/inspector/SkillPickerPane";
 import { SessionFilesPane } from "./FilesPage";
 import { RunsPane } from "./RunsPage";
 import { cn } from "@/lib/cn";
+import { skillInspectorFromBlock } from "@/lib/skills";
 
 /** Live agent session backed by the OpenCode runtime. `/live` (no id) is a blank draft;
  *  the session is created lazily on the first message, then the URL updates to /live/:id. */
@@ -42,10 +44,13 @@ export function LiveSessionPage() {
     workspace,
     panes,
     commands,
+    skills,
     connect,
     openSession,
+    loadThread,
     startDraft,
     sendPrompt,
+    review,
     runShell,
     runCommand,
     openArtifact,
@@ -61,6 +66,9 @@ export function LiveSessionPage() {
     setApprovalMode,
   } = useRuntimeStore();
   const clearingLocalCommand = useRef(false);
+  const [activeSkill, setActiveSkill] = useState<SkillInspector | null>(null);
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
 
   // A deliberate workspace move restarts the sidecar — expected and brief, so
   // the UI stays "connected" (no badge flip, no Connect button, no help card).
@@ -86,7 +94,8 @@ export function LiveSessionPage() {
   const afterTurn = (id: string | null) => {
     if (id && !sessionId) navigate(`/live/${id}`);
   };
-  const onSend = async (text: string) => afterTurn(await sendPrompt(text));
+  const onSend = async (text: string, selectedSkills?: string[]) =>
+    afterTurn(await sendPrompt(text, selectedSkills));
   const onRunShell = async (command: string) => afterTurn(await runShell(command));
   const onRunCommand = async (name: string, args: string) => {
     const localClear = name === "new" || name === "clear";
@@ -110,18 +119,45 @@ export function LiveSessionPage() {
 
   // Interactions from the thread/inspector fold back into the conversation as follow-up prompts.
   const handlers: BlockHandlers = {
-    onArtifactOpen: openArtifact,
+    onArtifactOpen: (artifact) => {
+      setSkillPickerOpen(false);
+      setActiveSkill(null);
+      openArtifact(artifact);
+    },
     onFigureComment: (a, title) =>
       void sendPrompt(`On the figure ${title}, at (${a.x.toFixed(0)}%, ${a.y.toFixed(0)}%): ${a.note}`),
     // Subagent events fold into their own thread; a running task row reads
-    // its child's latest step from there.
+    // both the child's latest step and its complete auditable action trace.
     subagentActivity: (childId) => subagentActivity(threads[childId]?.blocks),
+    subagentTrace: (childId) => threads[childId]?.blocks,
+    onSubagentOpen: (childId) => navigate(`/live/${childId}`),
+    onSkillOpen: (block) => {
+      const inspector = skillInspectorFromBlock(block);
+      if (!inspector) return;
+      setSkillPickerOpen(false);
+      closeArtifact();
+      setShowFiles(false);
+      setShowRuns(false);
+      setActiveSkill(inspector);
+    },
   };
   const onEvaluate = (expr: string) => void sendPrompt(`Evaluate in the notebook kernel:\n\`\`\`python\n${expr}\n\`\`\``);
 
   // A draft shows its local thread (the first message echoes there instantly,
   // before any session exists) — it is grafted onto the session id on create.
   const thread = currentId ? threads[currentId] : threads[DRAFT_KEY];
+  const childSessionIds = useMemo(
+    () => [...new Set((thread?.blocks ?? []).flatMap((block) =>
+      block.kind === "tool-call" && block.childSessionId ? [block.childSessionId] : [],
+    ))],
+    [thread?.blocks],
+  );
+  // Live child events already populate these threads. After a browser reload,
+  // recover each persisted child in the background so the parent task still
+  // exposes every completed action without navigating away first.
+  useEffect(() => {
+    for (const childId of childSessionIds) void loadThread(childId);
+  }, [childSessionIds, loadThread]);
   // Opening a session fetches its history (cross-folder opens also restart the
   // sidecar) — show skeleton shapes meanwhile, never a blank page.
   const historyLoading = connected && !!sessionId && !thread?.loaded;
@@ -192,6 +228,20 @@ export function LiveSessionPage() {
   const activeArtifact = pane?.artifact ?? null;
   const showFiles = !activeArtifact && !!pane?.showFiles;
   const showRuns = !activeArtifact && !showFiles && !!pane?.showRuns;
+
+  useEffect(() => {
+    setActiveSkill(null);
+    setSkillPickerOpen(false);
+    setSelectedSkills([]);
+  }, [currentId]);
+
+  const openSkillPicker = () => {
+    setActiveSkill(null);
+    closeArtifact();
+    setShowFiles(false);
+    setShowRuns(false);
+    setSkillPickerOpen(true);
+  };
 
   // Show the Runs toggle only when this session has runs (like the Files/folder
   // affordance — present when there's content). Cheap count query on open.
@@ -267,7 +317,11 @@ export function LiveSessionPage() {
               names this session's folder; a draft has none yet. */}
           {sessionId && (
             <button
-              onClick={() => setShowFiles(!showFiles)}
+              onClick={() => {
+                setSkillPickerOpen(false);
+                setActiveSkill(null);
+                setShowFiles(!showFiles);
+              }}
               className={cn(
                 "flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-surface-2",
                 showFiles ? "bg-surface-2 text-text" : "text-muted",
@@ -283,7 +337,11 @@ export function LiveSessionPage() {
           )}
           {sessionId && hasRuns && (
             <button
-              onClick={() => setShowRuns(!showRuns)}
+              onClick={() => {
+                setSkillPickerOpen(false);
+                setActiveSkill(null);
+                setShowRuns(!showRuns);
+              }}
               className={cn(
                 "flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-surface-2",
                 showRuns ? "bg-surface-2 text-text" : "text-muted",
@@ -299,7 +357,11 @@ export function LiveSessionPage() {
           {uniqueNotebooks.map((nb) => (
             <button
               key={nb.path}
-              onClick={() => openArtifact(nb)}
+              onClick={() => {
+                setSkillPickerOpen(false);
+                setActiveSkill(null);
+                openArtifact(nb);
+              }}
               className={cn(
                 "flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-xs transition-colors hover:bg-surface-2",
                 activeArtifact?.path === nb.path ? "bg-surface-2 text-text" : "text-muted",
@@ -383,7 +445,7 @@ export function LiveSessionPage() {
           </div>
         </div>
 
-        <div className="px-8 pb-5 pt-2">
+        <div className="px-8 pb-7 pt-3">
           <div className="mx-auto max-w-[760px] space-y-3">
             {activeRequest && (
               <InteractionPrompt
@@ -397,9 +459,14 @@ export function LiveSessionPage() {
             )}
             <Composer
               onSend={onSend}
+              onReview={currentId ? () => void review() : undefined}
               onRunShell={(c) => void onRunShell(c)}
               onRunCommand={(n, a) => void onRunCommand(n, a)}
               commands={composerCommands}
+              selectedSkills={selectedSkills}
+              onSelectedSkillsChange={setSelectedSkills}
+              onSkillsOpen={openSkillPicker}
+              skillsOpen={skillPickerOpen}
               disabled={!connected || working}
               working={running}
               onStop={() => void interrupt()}
@@ -417,11 +484,26 @@ export function LiveSessionPage() {
         </div>
       </div>
 
-      {(activeArtifact || showFiles || showRuns) && (
+      {(skillPickerOpen || activeSkill || activeArtifact || showFiles || showRuns) && (
         <RightPane
-          onClose={activeArtifact ? closeArtifact : showRuns ? () => setShowRuns(false) : () => setShowFiles(false)}
+          onClose={skillPickerOpen ? () => setSkillPickerOpen(false) : activeSkill ? () => setActiveSkill(null) : activeArtifact ? closeArtifact : showRuns ? () => setShowRuns(false) : () => setShowFiles(false)}
         >
-          {activeArtifact ? (
+          {skillPickerOpen ? (
+            <SkillPickerPane
+              skills={skills}
+              selected={selectedSkills}
+              onChange={setSelectedSkills}
+              onClose={() => setSkillPickerOpen(false)}
+              onManage={() => navigate("/skills")}
+              controls={<MaximizePaneButton />}
+            />
+          ) : activeSkill ? (
+            <InspectorShell
+              inspector={activeSkill}
+              onClose={() => setActiveSkill(null)}
+              controls={<MaximizePaneButton />}
+            />
+          ) : activeArtifact ? (
             <InspectorShell
               inspector={fileInspectorFromBlock(activeArtifact)}
               onClose={closeArtifact}

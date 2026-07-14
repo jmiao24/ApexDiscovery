@@ -15,6 +15,7 @@ import type {
   ProviderInfo,
   QuestionAskedEvent,
   PermissionAskedEvent,
+  ReviewerConfig,
   RuntimeStatus,
   SessionMeta,
   SkillInfo,
@@ -377,6 +378,36 @@ export class OpenCodeClient {
     // applied by the config PATCH; the reconnect picks it up.
   }
 
+  /** Manual independent-review policy. Older runtimes return the safe UI default. */
+  async getReviewerConfig(): Promise<ReviewerConfig> {
+    const fallback: ReviewerConfig = {
+      enabled: false,
+      autoFix: false,
+      maxPasses: 2,
+    };
+    const res = await this.fetchImpl(`${this.baseUrl}/global/config`, { headers: this.headers() });
+    if (!res.ok) return fallback;
+    const cfg = (await res.json()) as {
+      reviewer?: Partial<ReviewerConfig>;
+    };
+    if (!cfg.reviewer) return fallback;
+    return {
+      enabled: cfg.reviewer.enabled === true,
+      autoFix: cfg.reviewer.autoFix === true,
+      maxPasses: 2,
+    };
+  }
+
+  /** Configure the single bounded Main-Agent fix pass after a manual review. */
+  async setReviewerConfig(config: Pick<ReviewerConfig, "enabled" | "autoFix">): Promise<void> {
+    const res = await this.fetchImpl(`${this.baseUrl}/global/config`, {
+      method: "PATCH",
+      headers: this.headers(true),
+      body: JSON.stringify({ reviewer: { ...config, maxPasses: 2 } }),
+    });
+    if (!res.ok) throw await this.apiError(res, "Failed to update reviewer settings");
+  }
+
   /** Providers OpenCode can use right now, with their models. */
   async listProviders(): Promise<ProviderInfo[]> {
     const res = await this.fetchImpl(`${this.baseUrl}/config/providers`, {
@@ -453,6 +484,19 @@ export class OpenCodeClient {
       body: JSON.stringify({ mcp: { [name]: config } }),
     });
     if (!res.ok) throw await this.apiError(res, "Failed to add the MCP server");
+  }
+
+  /** Remove an MCP server through the runtime when it supports the portable
+   * endpoint. Returns false for older OpenCode runtimes so the shell can use
+   * its legacy config-file removal path. */
+  async removeMcpServer(name: string): Promise<boolean> {
+    const res = await this.fetchImpl(`${this.baseUrl}/mcp/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (res.status === 404 || res.status === 405) return false;
+    if (!res.ok) throw await this.apiError(res, "Failed to remove the MCP server");
+    return true;
   }
 
   /** The full provider catalog (~150 entries) and which ids are connected. */
@@ -628,7 +672,11 @@ export class OpenCodeClient {
    *  `agent` routes the turn to a specific primary agent — the app sends the
    *  FIRST message of a session to "plan" (read-only: propose a plan, ask for
    *  confirmation) and later messages to the default build agent. */
-  async sendPrompt(sessionId: string, text: string, opts?: { agent?: string }): Promise<void> {
+  async sendPrompt(
+    sessionId: string,
+    text: string,
+    opts?: { agent?: string; skills?: string[] },
+  ): Promise<void> {
     const res = await this.fetchWithTimeout(
       `${this.baseUrl}/session/${encodeURIComponent(sessionId)}/prompt_async`,
       {
@@ -637,10 +685,20 @@ export class OpenCodeClient {
         body: JSON.stringify({
           parts: [{ type: "text", text }],
           ...(opts?.agent ? { agent: opts.agent } : {}),
+          ...(opts?.skills?.length ? { skills: opts.skills } : {}),
         }),
       },
     );
     if (!res.ok) throw await this.apiError(res, "Failed to send prompt");
+  }
+
+  /** Start the independent artifact Reviewer on explicit user action. */
+  async reviewSession(sessionId: string): Promise<void> {
+    const res = await this.fetchWithTimeout(
+      `${this.baseUrl}/session/${encodeURIComponent(sessionId)}/review_async`,
+      { method: "POST", headers: this.headers(true), body: "{}" },
+    );
+    if (!res.ok) throw await this.apiError(res, "Failed to start artifact review");
   }
 
   // ---- interactive requests (question / permission) ----

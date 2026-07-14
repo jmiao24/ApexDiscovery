@@ -59,6 +59,20 @@
       "prefix": "OpenCode ランタイムからライブで読み込まれます — バンドルされた ai4s-skills パックと、ワークスペース内の ",
       "suffix": " にあるものすべて。"
     },
+    "extensions": {
+      "sectionTitle": "Extensions",
+      "empty": "No plugins installed yet.",
+      "sourcePlaceholder": "Local plugin folder or HTTPS Git URL",
+      "install": "Install plugin",
+      "installing": "Installing…",
+      "reviewHint": "Plugins install disabled. Review their skills, MCP tools, scripts, and hooks before enabling.",
+      "capabilities": "{{skills}} skills · {{mcp}} MCP servers",
+      "scripts": "contains scripts",
+      "hooks": "contains hooks",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "remove": "Remove {{name}}"
+    },
     "install": {
       "sectionTitle": "スキルをインストール",
       "placeholder": "スキル（Markdown）または GitHub URL を貼り付けてください — エージェントが .opencode/skills/ にインストールします",
