@@ -161,7 +161,7 @@ function emptyNotebook(language) {
     metadata: {
       kernelspec: specs[language],
       language_info: { name: language },
-      apex_science: { execution_trace: true, schema_version: 1 },
+      apex_discovery: { execution_trace: true, schema_version: 1 },
     },
     nbformat: 4,
     nbformat_minor: 5,
@@ -380,7 +380,7 @@ export class ScienceExecutionRuntime {
           outputs: outputCells(result),
           execution_count: null,
           metadata: {
-            apex_science: {
+            apex_discovery: {
               human_description: input.human_description,
               environment: input.environment,
               session_id: this.sessionId,

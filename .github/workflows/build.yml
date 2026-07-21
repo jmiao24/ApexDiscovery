@@ -86,7 +86,7 @@ jobs:
           # On a v* tag push, attach installers to a draft GitHub Release.
           # Empty tagName (workflow_dispatch) skips release creation.
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: ${{ github.ref_type == 'tag' && format('APEX Science {0}', github.ref_name) || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && format('APEX Discovery {0}', github.ref_name) || '' }}
           releaseDraft: true
           # Standing install/first-launch notes — every draft is born with these
           # (the builds are unsigned/un-notarized, so users must clear Gatekeeper /
@@ -97,10 +97,10 @@ jobs:
             These installers are **not code-signed or notarized**, so your OS warns on first launch. This is expected; clear it once:
 
             **macOS** — Apple Silicon: `…_aarch64.dmg` · Intel: `…_x64.dmg` (requires macOS 13+)
-            1. Open the DMG and drag **APEX Science** into Applications.
+            1. Open the DMG and drag **APEX Discovery** into Applications.
             2. If you see *"… is damaged and can't be opened"* or *"unidentified developer"*, clear the quarantine attribute in Terminal, then open normally:
                ```
-               xattr -cr "/Applications/APEX Science.app"
+               xattr -cr "/Applications/APEX Discovery.app"
                ```
 
             **Windows** — `…_x64-setup.exe` or `…_x64_en-US.msi`
@@ -180,28 +180,28 @@ jobs:
       - name: Assemble self-contained browser release
         shell: bash
         run: |
-          server=apps/server/target/release/apexscience-server
+          server=apps/server/target/release/apexdiscovery-server
           if [ "${{ runner.os }}" = "Windows" ]; then server="$server.exe"; fi
           node scripts/release/package-browser.mjs \
             --server "$server" \
             --bridge .browser-build/codex-bridge \
-            --out .browser-release/apexscience-browser
+            --out .browser-release/apexdiscovery-browser
 
       - name: Archive Unix browser release
         if: runner.os != 'Windows'
         shell: bash
-        run: tar -czf apexscience-browser-${{ matrix.name }}.tar.gz -C .browser-release apexscience-browser
+        run: tar -czf apexdiscovery-browser-${{ matrix.name }}.tar.gz -C .browser-release apexdiscovery-browser
 
       - name: Archive Windows browser release
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path .browser-release/apexscience-browser -DestinationPath apexscience-browser-${{ matrix.name }}.zip
+        run: Compress-Archive -Path .browser-release/apexdiscovery-browser -DestinationPath apexdiscovery-browser-${{ matrix.name }}.zip
 
       - name: Upload browser bundle
         uses: actions/upload-artifact@v4
         with:
-          name: apexscience-browser-${{ matrix.name }}
-          path: apexscience-browser-${{ matrix.name }}.*
+          name: apexdiscovery-browser-${{ matrix.name }}
+          path: apexdiscovery-browser-${{ matrix.name }}.*
           if-no-files-found: error
 
       - name: Attach browser bundle to tagged release
@@ -212,8 +212,8 @@ jobs:
         run: |
           if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release create "$GITHUB_REF_NAME" --draft \
-              --title "APEX Science $GITHUB_REF_NAME" \
+              --title "APEX Discovery $GITHUB_REF_NAME" \
               --notes "Self-contained browser bundles and legacy desktop installers." \
               || gh release view "$GITHUB_REF_NAME"
           fi
-          gh release upload "$GITHUB_REF_NAME" apexscience-browser-${{ matrix.name }}.* --clobber
+          gh release upload "$GITHUB_REF_NAME" apexdiscovery-browser-${{ matrix.name }}.* --clobber

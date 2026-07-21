@@ -5,7 +5,7 @@ import { z } from "zod";
 import { OpenAIWebResearch } from "./web-research.mjs";
 
 const research = new OpenAIWebResearch();
-const server = new McpServer({ name: "apex-science-research", version: "1.0.0" });
+const server = new McpServer({ name: "apex-discovery-research", version: "1.0.0" });
 const humanDescription = z.string().min(3).max(120).describe(
   "Required distinct 3-8 word action label, such as 'Checking FDA setmelanotide labeling'",
 );

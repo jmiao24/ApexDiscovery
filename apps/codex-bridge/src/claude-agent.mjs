@@ -57,7 +57,7 @@ function localClaudeExecutable(env = process.env) {
 
 export function claudeAuthentication({ apiKey, env = process.env } = {}) {
   const mode = env.APEX_CLAUDE_AUTH === "subscription" ? "subscription" : "api-key";
-  const childEnv = { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: "apex-science/0.1" };
+  const childEnv = { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: "apex-discovery/0.1" };
   // The Claude process needs ordinary runtime configuration (PATH, HOME,
   // proxies), not credentials belonging to the Main Agent or app server. MCP
   // credentials are passed only in each server's own env/headers configuration.

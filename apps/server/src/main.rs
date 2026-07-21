@@ -1,4 +1,4 @@
-// ApexScience web server: the desktop app's shell commands (shell-core) behind
+// ApexDiscovery web server: the desktop app's shell commands (shell-core) behind
 // an authenticated HTTP API, a Codex-compatible sidecar it supervises, and the built
 // React frontend — one self-hosted process a browser talks to.
 //
@@ -37,7 +37,7 @@ use tower_http::services::{ServeDir, ServeFile};
 use shell_core::ShellCtx;
 use state::AppState;
 
-const DEFAULT_DATA_DIR_NAME: &str = ".apex-science";
+const DEFAULT_DATA_DIR_NAME: &str = ".apex-discovery";
 const LEGACY_DATA_DIR_NAME: &str = ".openscience-server";
 
 fn env_path(key: &str) -> Option<PathBuf> {
@@ -116,12 +116,12 @@ async fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--help" || a == "-h") {
         eprintln!(
-            "apexscience-server — self-hosted web workbench\n\n\
+            "apexdiscovery-server — self-hosted web workbench\n\n\
              Options (flag > env > default):\n\
              --host <ip>            bind address            APEX_HOST      (default 127.0.0.1)\n\
              --port <port>          bind port               APEX_PORT      (default: automatic on localhost)\n\
              --token <token>        login token             APEX_TOKEN     (default: generated, printed)\n\
-             --data-dir <dir>       app-private data dir    APEX_DATA_DIR  (default ~/.apex-science)\n\
+             --data-dir <dir>       app-private data dir    APEX_DATA_DIR  (default ~/.apex-discovery)\n\
              --frontend-dir <dir>   built frontend to serve APEX_FRONTEND_DIR (default ./dist)\n\
              --resource-dir <dir>   bundled skills/harness  APEX_RESOURCE_DIR (optional)\n\
              --opencode-bin <path>  agent sidecar           APEX_OPENCODE_BIN (default: next to server, then PATH)\n\
@@ -281,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    fn uses_the_apex_science_directory_for_new_installs() {
+    fn uses_the_apex_discovery_directory_for_new_installs() {
         let home = temporary_home("new");
         fs::create_dir_all(&home).unwrap();
 

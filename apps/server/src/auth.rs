@@ -121,7 +121,7 @@ pub async fn bootstrap(
 /// SPA can decide between "show login" and "no web shell here at all".
 pub async fn ping(State(state): State<Arc<AppState>>, req: Request<Body>) -> Response {
     Json(serde_json::json!({
-        "app": "apexscience-server",
+        "app": "apexdiscovery-server",
         "version": env!("CARGO_PKG_VERSION"),
         "authenticated": is_authenticated(&state, &req),
     }))

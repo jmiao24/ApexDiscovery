@@ -43,7 +43,7 @@ for (const path of required) {
 rmSync(output, { recursive: true, force: true });
 mkdirSync(output, { recursive: true });
 
-const serverName = windows ? "apexscience-server.exe" : "apexscience-server";
+const serverName = windows ? "apexdiscovery-server.exe" : "apexdiscovery-server";
 const nodeName = windows ? "node.exe" : "node";
 copyFileSync(server, join(output, serverName));
 copyFileSync(join(root, "LICENSE"), join(output, "LICENSE"));
@@ -108,10 +108,10 @@ writeFileSync(
     "",
     windows
       ? "Double-click APEX Discovery.cmd."
-      : "Double-click APEX Discovery.command on macOS, or run ./apexscience in a terminal.",
+      : "Double-click APEX Discovery.command on macOS, or run ./apexdiscovery in a terminal.",
     windows
       ? "The bundle is unsigned, so Windows may show a SmartScreen warning."
-      : "If macOS quarantines the unsigned bundle, run: xattr -cr apexscience-browser",
+      : "If macOS quarantines the unsigned bundle, run: xattr -cr apexdiscovery-browser",
     "The launcher opens your normal browser. There is no APEX account or sign-in.",
     "Set OPENAI_API_KEY before launching, or enter the key in Settings for the current run.",
     "Keep this process running while you use APEX Discovery; stop it with Ctrl+C.",
@@ -131,7 +131,7 @@ if (windows) {
       "set \"APEX_OPENCODE_BIN=%ROOT%codex-bridge\\src\\server.mjs\"",
       "set \"APEX_FRONTEND_DIR=%ROOT%dist\"",
       "set \"APEX_RESOURCE_DIR=%ROOT%resources\"",
-      "\"%ROOT%apexscience-server.exe\" %*",
+      "\"%ROOT%apexdiscovery-server.exe\" %*",
       "endlocal",
       "",
     ].join("\r\n"),
@@ -145,15 +145,15 @@ if (windows) {
     'export APEX_OPENCODE_BIN="$ROOT/codex-bridge/src/server.mjs"',
     'export APEX_FRONTEND_DIR="$ROOT/dist"',
     'export APEX_RESOURCE_DIR="$ROOT/resources"',
-    'exec "$ROOT/apexscience-server" "$@"',
+    'exec "$ROOT/apexdiscovery-server" "$@"',
     "",
   ].join("\n");
-  writeFileSync(join(output, "apexscience"), launcher);
+  writeFileSync(join(output, "apexdiscovery"), launcher);
   writeFileSync(join(output, "APEX Discovery.command"), launcher);
   for (const path of [
     join(output, serverName),
     join(runtimeBin, nodeName),
-    join(output, "apexscience"),
+    join(output, "apexdiscovery"),
     join(output, "APEX Discovery.command"),
   ]) {
     chmodSync(path, 0o755);

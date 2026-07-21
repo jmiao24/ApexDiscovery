@@ -75,7 +75,7 @@ test("ExecuteCode keeps Python state and appends every call to an ipynb trace", 
     const notebook = JSON.parse(readFileSync(join(root, second.notebook_path), "utf8"));
     assert.equal(notebook.nbformat, 4);
     assert.equal(notebook.cells.length, 2);
-    assert.equal(notebook.cells[1].metadata.apex_science.human_description, "Calculating the adjusted cohort size");
+    assert.equal(notebook.cells[1].metadata.apex_discovery.human_description, "Calculating the adjusted cohort size");
   } finally {
     runtime.close();
     rmSync(root, { recursive: true, force: true });
@@ -186,7 +186,7 @@ test("concurrent background code safely appends both notebook cells", async () =
     const notebook = JSON.parse(readFileSync(join(root, firstDone.notebook_path), "utf8"));
     assert.equal(notebook.cells.length, 2);
     assert.deepEqual(
-      new Set(notebook.cells.map((cell) => cell.metadata.apex_science.human_description)),
+      new Set(notebook.cells.map((cell) => cell.metadata.apex_discovery.human_description)),
       new Set(["Writing the first background cell", "Writing the second background cell"]),
     );
   } finally {

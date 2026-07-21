@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "apexscience-server"
+name = "apexdiscovery-server"
 version = "0.1.9"
 dependencies = [
  "axum",

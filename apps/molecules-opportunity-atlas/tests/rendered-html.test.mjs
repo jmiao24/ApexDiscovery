@@ -29,7 +29,7 @@ test("server-renders the APEX Discovery landing page", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>APEX Discovery \| APEX Science<\/title>/i);
+  assert.match(html, /<title>Molecules Opportunity Atlas \| APEX Discovery<\/title>/i);
   assert.match(html, /Agent-native discovery of molecule opportunities\./);
   assert.match(html, /Data sources in APEX Discovery/);
   assert.match(html, /FDA Purple Book/);

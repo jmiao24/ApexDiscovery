@@ -17,7 +17,7 @@ from typing import Any
 
 
 BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-TOOL = "apex_science_clinvar"
+TOOL = "apex_discovery_clinvar"
 _LAST_REQUEST = 0.0
 
 STAR_MAP = {

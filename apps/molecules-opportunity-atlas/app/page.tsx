@@ -1,4 +1,4 @@
-const APEX_SCIENCE_URL = "http://127.0.0.1:3411";
+const APEX_DISCOVERY_URL = "http://127.0.0.1:49369";
 
 const dataSources = [
   {
@@ -102,7 +102,7 @@ export default function Home() {
           <span>APEX Discovery</span>
         </a>
         <a className="header-link" href="#sources">Data sources</a>
-        <a className="button button-small" href={APEX_SCIENCE_URL} target="_blank" rel="noreferrer">
+        <a className="button button-small" href={APEX_DISCOVERY_URL} target="_blank" rel="noreferrer">
           Try APEX Discovery <span aria-hidden="true">↗</span>
         </a>
       </header>
@@ -116,9 +116,9 @@ export default function Home() {
         <p>
           APEX Discovery connects regulatory records, clinical trials, target biology,
           molecular structure, bioactivity, scientific literature, and market context.
-          Ask one question and investigate the evidence inside APEX Science.
+          Ask one question and investigate the evidence inside APEX Discovery.
         </p>
-        <a className="button" href={APEX_SCIENCE_URL} target="_blank" rel="noreferrer">
+        <a className="button" href={APEX_DISCOVERY_URL} target="_blank" rel="noreferrer">
           Try APEX Discovery <span aria-hidden="true">→</span>
         </a>
       </section>
@@ -149,7 +149,7 @@ export default function Home() {
 
       <footer>
         <span>APEX Discovery</span>
-        <span>Powered by APEX Science</span>
+        <span>Powered by APEX Discovery</span>
         <span>Research use only</span>
       </footer>
     </main>

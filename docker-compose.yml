@@ -1,9 +1,9 @@
-# Self-hosted ApexScience web server.
+# Self-hosted ApexDiscovery web server.
 #   APEX_TOKEN=<browser-token> OPENAI_API_KEY=<key> docker compose up -d
 # Open http://localhost:3411 and sign in with the token. For access beyond
 # localhost, terminate TLS in a reverse proxy in front of this service.
 services:
-  apexscience:
+  apexdiscovery:
     build: .
     ports:
       - "3411:3411"

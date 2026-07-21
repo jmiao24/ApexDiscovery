@@ -22,7 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
     "APEX Discovery connects regulatory, clinical, biological, structural, literature, and market data for molecule opportunity research.";
 
   return {
-    title: "APEX Discovery | APEX Science",
+    title: "Molecules Opportunity Atlas | APEX Discovery",
     description,
     icons: {
       icon: "/favicon.svg",
@@ -33,7 +33,7 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       type: "website",
       url: origin,
-      images: [{ url: `${origin}/og.png`, width: 1731, height: 909, alt: "APEX Discovery by APEX Science" }],
+      images: [{ url: `${origin}/og.png`, width: 1731, height: 909, alt: "Molecules Opportunity Atlas by APEX Discovery" }],
     },
     twitter: {
       card: "summary_large_image",

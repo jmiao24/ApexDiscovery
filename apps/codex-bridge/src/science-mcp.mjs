@@ -10,7 +10,7 @@ const runtime = new ScienceExecutionRuntime({
   allowExecution: process.env.APEX_EXECUTION_ALLOWED === "1",
 });
 
-const server = new McpServer({ name: "apex-science-execution", version: "1.0.0" });
+const server = new McpServer({ name: "apex-discovery-execution", version: "1.0.0" });
 const description = z
   .string()
   .min(1)

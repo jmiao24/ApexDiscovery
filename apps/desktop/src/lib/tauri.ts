@@ -1,7 +1,7 @@
 // Bridge to the shell hosting the app. Three environments share these
 // functions, with unchanged signatures at every call site:
 //  - Tauri desktop: invoke Rust commands (the original path).
-//  - Web shell: the self-hosted apexscience-server — the same commands over
+//  - Web shell: the self-hosted apexdiscovery-server — the same commands over
 //    `POST /api/cmd/<name>` (session-cookie auth), detected via `/api/ping`
 //    before the app renders (see initShell / main.tsx).
 //  - Plain browser dev (`pnpm dev`): no shell — everything degrades to the
@@ -10,7 +10,7 @@
 export const isTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-/** True when the same-origin apexscience-server answered /api/ping. Settled by
+/** True when the same-origin apexdiscovery-server answered /api/ping. Settled by
  *  initShell() before the app renders, so render-time reads are stable. */
 let webShell = false;
 
@@ -33,7 +33,7 @@ export async function initShell(): Promise<{ shell: "tauri" | "web" | "none"; au
     const res = await fetch("/api/ping");
     if (res.ok) {
       const info = (await res.json()) as { app?: string; authenticated?: boolean };
-      if (info.app === "apexscience-server") {
+      if (info.app === "apexdiscovery-server") {
         webShell = true;
         return { shell: "web", authenticated: Boolean(info.authenticated) };
       }

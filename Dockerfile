@@ -1,6 +1,6 @@
-# ApexScience web server — the desktop workbench, self-hosted for a browser.
-# Build:  docker build -t apexscience .
-# Run:    docker run -p 3411:3411 -e APEX_TOKEN=<token> -e OPENAI_API_KEY=<key> -v apex-data:/data apexscience
+# ApexDiscovery web server — the desktop workbench, self-hosted for a browser.
+# Build:  docker build -t apexdiscovery .
+# Run:    docker run -p 3411:3411 -e APEX_TOKEN=<token> -e OPENAI_API_KEY=<key> -v apex-data:/data apexdiscovery
 # Then open http://localhost:3411 and sign in with the token.
 
 # ---- 1. Frontend: the same React app the desktop ships ----------------------
@@ -63,7 +63,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --from=server /src/apps/server/target/release/apexscience-server /app/apexscience-server
+COPY --from=server /src/apps/server/target/release/apexdiscovery-server /app/apexdiscovery-server
 COPY --from=frontend /src/apps/desktop/dist /app/dist
 COPY --from=assets /resources /app/resources
 COPY --from=codex-bridge /codex-bridge /app/codex-bridge
@@ -80,4 +80,4 @@ ENV HOME=/data \
 VOLUME /data
 EXPOSE 3411
 
-CMD ["/app/apexscience-server"]
+CMD ["/app/apexdiscovery-server"]

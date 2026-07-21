@@ -1,6 +1,6 @@
 <div align="center">
 
-[![APEX Discovery — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+[![APEX Discovery — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/jmiao24/ApexDiscovery)
 
 # APEX Discovery
 
@@ -162,15 +162,15 @@ For a neutral positioning note, see
 
 ## Install
 
-For the browser edition, download `apexscience-browser-<platform>` from the
+For the browser edition, download `apexdiscovery-browser-<platform>` from the
 Releases page and extract it. No Node, Rust, Docker, or desktop app is required.
 
-- macOS: double-click `APEX Discovery.command`, or run `./apexscience`.
+- macOS: double-click `APEX Discovery.command`, or run `./apexdiscovery`.
 - Windows: double-click `APEX Discovery.cmd`.
-- Linux: run `./apexscience`.
+- Linux: run `./apexdiscovery`.
 
 The browser bundles are not code-signed yet. If macOS quarantines the extracted
-folder, run `xattr -cr apexscience-browser` once before launching it.
+folder, run `xattr -cr apexdiscovery-browser` once before launching it.
 
 The launcher opens a random localhost port and exchanges a one-time nonce for
 an HttpOnly session cookie. There is no APEX sign-in. Supply `OPENAI_API_KEY` in
@@ -182,7 +182,7 @@ Windows x64, and Linux x64 bundles, and attaches them to tagged releases.
 ### Legacy desktop installers
 
 Download the latest installer from the
-[Releases page](https://github.com/ai4s-research/open-science/releases/latest).
+[Releases page](https://github.com/jmiao24/ApexDiscovery/releases/latest).
 
 - **macOS**: `.dmg` / `.app`, Apple Silicon and Intel, macOS 13 Ventura or later.
 - **Windows**: NSIS `.exe` and `.msi`, Windows 10/11 x64.
@@ -227,7 +227,7 @@ Or without Docker: build the frontend (`pnpm --filter @ai4s/desktop build`),
 then set `OPENAI_API_KEY` and run
 `cargo run --release --manifest-path apps/server/Cargo.toml` — the browser opens
 automatically. Run
-`apexscience-server --help` for the flags (data dir, opencode binary, bind
+`apexdiscovery-server --help` for the flags (data dir, opencode binary, bind
 host/port). The server binds `127.0.0.1` by default; to expose it beyond
 localhost, pass `--host 0.0.0.0` and terminate TLS in a reverse proxy in
 front. The browser only holds an HttpOnly session cookie. Provider keys and the
@@ -273,13 +273,13 @@ For the current local APEX Discovery development build, launch the prebuilt
 server and frontend with a fixed browser port and access token:
 
 ```bash
-cd /Users/jiachengmiao/Desktop/APEX_Science/ApexScience
+cd /Users/jiachengmiao/Desktop/APEX_Science/ApexDiscovery
 
 CODEX_HOME="$HOME/.codex" \
 APEX_CLAUDE_AUTH=subscription \
 APEX_CLAUDE_EXECUTABLE="$HOME/.local/bin/claude" \
 APEX_OPENCODE_BIN="$PWD/apps/codex-bridge/src/server.mjs" \
-apps/server/target/release/apexscience-server \
+apps/server/target/release/apexdiscovery-server \
   --port 49369 \
   --token apex-demo \
   --frontend-dir "$PWD/apps/desktop/dist"
@@ -342,8 +342,8 @@ Prerequisites for development:
 - macOS, Windows, or Linux system dependencies required by Tauri
 
 ```bash
-git clone https://github.com/ai4s-research/open-science
-cd open-science
+git clone https://github.com/jmiao24/ApexDiscovery
+cd ApexDiscovery
 pnpm install
 
 # Fetch pinned sidecars and bundled skills. These are git-ignored.
@@ -425,7 +425,7 @@ If you use APEX Discovery Desktop in your research, please cite it:
   title   = {APEX Discovery Desktop: a local-first, model-agnostic AI research workbench},
   year    = {2026},
   version = {0.1.9},
-  url     = {https://github.com/ai4s-research/open-science},
+  url     = {https://github.com/jmiao24/ApexDiscovery},
   license = {MIT}
 }
 ```

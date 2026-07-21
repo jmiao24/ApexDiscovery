@@ -3,7 +3,7 @@
 // Claude Agent SDK. It speaks the exact wire subset packages/sdk's
 // OpenCodeClient consumes, and accepts the same CLI/env contract as
 // `opencode serve` (`serve --hostname H --port P`, OPENCODE_SERVER_PASSWORD,
-// XDG_* dirs, cwd = workspace) — so the desktop shell and apexscience-server
+// XDG_* dirs, cwd = workspace) — so the desktop shell and apexdiscovery-server
 // can spawn it as a drop-in sidecar and the React app runs unchanged.
 //
 // Protocol surface implemented (see OpenCodeClient.ts for the consumer):

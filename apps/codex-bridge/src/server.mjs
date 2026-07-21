@@ -2,7 +2,7 @@
 // codex-bridge: an OpenCode-compatible HTTP+SSE server whose agent is the
 // OpenAI Codex SDK. It speaks the same wire subset as claude-bridge (see
 // packages/sdk's OpenCodeClient for the consumer) and accepts the same CLI/env
-// contract as `opencode serve` — so the desktop shell and apexscience-server
+// contract as `opencode serve` — so the desktop shell and apexdiscovery-server
 // can spawn it as a drop-in sidecar and the React app runs unchanged.
 //
 // Codex-specific notes:
