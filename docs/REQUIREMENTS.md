@@ -106,13 +106,13 @@ competitors.
 - **Acceptance.** For any artifact, one click reveals its generating code +
   environment + inputs + originating conversation turn; re-running reproduces it.
 - **Status.** ✅ Every agent write appends a version record to
-  `.openscience/provenance.jsonl` (code, tool, model, session, timestamp, and
+  `.apex-discovery/provenance.jsonl` (code, tool, model, session, timestamp, and
   captured environment — Python version, OS/arch, app build). The History panel
   reveals per-version data + a link back to the originating conversation; a
   per-version **Reproduce** action drafts (never auto-sends) a prompt that re-runs
   the recorded code and reports whether the file matches. Package capture too:
   each record captures `pip freeze` (once per app run) into a content-addressed
-  lockfile `.openscience/env/<hash>.txt`; the record carries `{count, hash}`, the
+  lockfile `.apex-discovery/env/<hash>.txt`; the record carries `{count, hash}`, the
   History panel shows an "N packages" chip, and the Reproduce prompt points at
   the lockfile to reinstall matching versions.
 
@@ -340,7 +340,7 @@ competitors.
 
   **Cleanup — structure (not urgent):**
   - [ ] Split `lib/runtime.ts` (1,014 lines, ~6 concerns): extract the pure
-    fold/history reducers and connection/retry; stop hardcoding `OpenScience/`
+    fold/history reducers and connection/retry; stop hardcoding `ApexDiscovery/`
     in `tidyToolTitle` (`runtime.ts:835`).
   - [ ] Extract ProvidersCard/McpCard from `SettingsPage.tsx` (903 lines, 20
     `useState`, zero tests) following the existing ClusterCard pattern.
@@ -515,7 +515,7 @@ competitors.
 - **Status.** 🟡 One documented chart design system — a validated
   categorical/sequential/status palette as single source of truth in three synced
   places (`@ai4s/shared` chartPalette, `index.css --series-*`,
-  `openscience.mplstyle` applied by the `publication-figures` skill) — so agent
+  `apex-discovery.mplstyle` applied by the `publication-figures` skill) — so agent
   matplotlib and native UI read as one system in light+dark. Command palette
   reaches every primary action; live streaming text + file-path tool rows;
   per-session panes + scroll memory; slimmed one-line session header. **Native

@@ -218,7 +218,7 @@ describe("artifactBlockToInspector", () => {
       callId: "call_1",
       tool: "execute_code",
       status: "success",
-      input: { notebook_path: ".openscience/execution_trace/worker-0-python.ipynb" },
+      input: { notebook_path: ".apex-discovery/execution_trace/worker-0-python.ipynb" },
     });
     expect(artifact).toBeNull();
   });

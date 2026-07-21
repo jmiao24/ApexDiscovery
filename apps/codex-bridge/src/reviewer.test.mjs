@@ -18,7 +18,7 @@ import {
 
 test("selects reviewable artifacts and the applicable APEX reviewer skills", () => {
   assert.equal(isReviewablePath("report.md"), true);
-  assert.equal(isReviewablePath(".openscience/runs.jsonl"), false);
+  assert.equal(isReviewablePath(".apex-discovery/runs.jsonl"), false);
   assert.equal(isReviewablePath("node_modules/pkg/index.js"), false);
   assert.deepEqual(
     reviewTargets(["analysis.py", "report.md", "notes.tmp", "analysis.py"], ["figure.png"]),
@@ -31,9 +31,9 @@ test("selects reviewable artifacts and the applicable APEX reviewer skills", () 
 });
 
 test("reviews execution notebooks without exposing other runtime state", () => {
-  assert.equal(isReviewablePath(".openscience/execution_trace/worker-0-python.ipynb"), true);
-  assert.equal(isReviewablePath(".openscience/execution_jobs/job.json"), false);
-  assert.equal(isReviewablePath(".openscience/private.ipynb"), false);
+  assert.equal(isReviewablePath(".apex-discovery/execution_trace/worker-0-python.ipynb"), true);
+  assert.equal(isReviewablePath(".apex-discovery/execution_jobs/job.json"), false);
+  assert.equal(isReviewablePath(".apex-discovery/private.ipynb"), false);
 });
 
 test("finds command-generated artifacts without walking runtime and dependency trees", () => {

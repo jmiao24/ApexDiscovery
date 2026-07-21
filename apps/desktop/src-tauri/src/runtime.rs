@@ -128,7 +128,7 @@ pub fn workspace_path(app: AppHandle) -> Result<String, String> {
     Ok(workspace_dir(&app)?.to_string_lossy().to_string())
 }
 
-/// The base folder new dated workspaces are created under (`~/Documents/OpenScience`).
+/// The base folder new dated workspaces are created under (`~/Documents/ApexDiscovery`).
 #[tauri::command]
 pub fn workspace_base(app: AppHandle) -> Result<String, String> {
     Ok(base_workspace_dir(&app)?.to_string_lossy().to_string())
@@ -171,7 +171,7 @@ pub fn set_workspace(
 }
 
 /// Record which session owns the active workspace (written to
-/// `.openscience/session.txt`) so skill helpers can attribute remote runs.
+/// `.apex-discovery/session.txt`) so skill helpers can attribute remote runs.
 #[tauri::command]
 pub fn mark_session(app: AppHandle, session_id: String) -> Result<(), String> {
     shell_core::runtime::mark_session(&ctx(&app)?, &session_id)

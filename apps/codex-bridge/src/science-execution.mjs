@@ -16,7 +16,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
-const STORE_DIR = ".openscience";
+const STORE_DIR = ".apex-discovery";
 const TRACE_DIR = "execution_trace";
 const JOB_DIR = "execution_jobs";
 const AUDIT_FILE = "execution-audit.jsonl";

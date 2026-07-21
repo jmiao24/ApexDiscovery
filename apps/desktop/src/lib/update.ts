@@ -1,13 +1,13 @@
 import { create } from "zustand";
 import { latestRelease } from "./tauri";
 
-const RELEASE_URL = "https://api.github.com/repos/ai4s-research/open-science/releases/latest";
+const RELEASE_URL = "https://api.github.com/repos/jmiao24/ApexDiscovery/releases/latest";
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const ENABLED_KEY = "openscience.update.enabled";
-const BADGE_KEY = "openscience.update.badge";
-const DISMISSED_KEY = "openscience.update.dismissed";
-const LAST_CHECKED_KEY = "openscience.update.lastCheckedAt";
-const LATEST_KEY = "openscience.update.latest";
+const ENABLED_KEY = "apexdiscovery.update.enabled";
+const BADGE_KEY = "apexdiscovery.update.badge";
+const DISMISSED_KEY = "apexdiscovery.update.dismissed";
+const LAST_CHECKED_KEY = "apexdiscovery.update.lastCheckedAt";
+const LATEST_KEY = "apexdiscovery.update.latest";
 
 export interface UpdateInfo {
   version: string;

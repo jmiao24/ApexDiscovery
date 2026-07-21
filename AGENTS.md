@@ -1,8 +1,8 @@
 # APEX Discovery Desktop
 
 Brand name: **APEX Discovery Desktop** — "Local-first, model-agnostic AI research
-workbench for macOS, Windows & Linux." Formerly Open Science Desktop. Bundle identifier stays
-`com.ai4s.workbench` and internal `@ai4s/*` package names are unchanged.
+workbench for macOS, Windows & Linux." Bundle identifier stays `com.ai4s.workbench`
+and internal `@ai4s/*` package names are unchanged.
 
 Project rules and working context for AI agents (Claude Code, Cursor, Codex, etc.).
 `CLAUDE.md` is a symlink to this file — edit only `AGENTS.md`.

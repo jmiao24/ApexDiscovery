@@ -158,7 +158,7 @@ describe("reproduceRunPrompt", () => {
     expect(p).toContain("linux-x86_64");
     expect(p).toContain("NVIDIA A100-SXM4-40GB");
     // The lockfile pointer so a differing result can be pinned to versions.
-    expect(p).toContain(".openscience/env/deadbeef.txt");
+    expect(p).toContain(".apex-discovery/env/deadbeef.txt");
     // Compares the recorded outputs, not source text.
     expect(p).toContain("output/metrics.json");
     expect(p).toContain("output/model.pt");
@@ -171,7 +171,7 @@ describe("reproduceRunPrompt", () => {
     expect(p).toContain("python train.py --lr 3e-4");
     // No env clause, no crash, no phantom files.
     expect(p).not.toContain("undefined");
-    expect(p).not.toContain(".openscience/env/");
+    expect(p).not.toContain(".apex-discovery/env/");
   });
 
   it("survives records with code/outputs fields absent (empty arrays omitted by the store)", () => {

@@ -404,7 +404,7 @@ export interface PdfSection {
 
 // ---- Provenance / citations ----
 
-/** One recorded write of an artifact — a line in `.openscience/provenance.jsonl`.
+/** One recorded write of an artifact — a line in `.apex-discovery/provenance.jsonl`.
  *  Every agent write appends one, so any artifact can reveal its generating
  *  code, environment, and originating conversation, per version. */
 export interface ProvenanceRecord {
@@ -465,7 +465,7 @@ export interface HardwareInfo {
  * One experiment/analysis execution — the reproducibility recipe. Unlike a
  * `ProvenanceRecord` (an authored file's text), a run captures WHAT ran, WHERE
  * (env + hardware), and WHAT it produced, so a result can be regenerated and
- * compared. Stored append-only in `.openscience/runs.jsonl`.
+ * compared. Stored append-only in `.apex-discovery/runs.jsonl`.
  */
 export interface RunRecord {
   /** Short content+time id, e.g. "run_ab12cd34". */
@@ -498,7 +498,7 @@ export interface RunRecord {
   /** Files created or modified during the run's time window — its outputs.
    *  May be absent (the store omits empty arrays). */
   outputs?: RunArtifact[];
-  /** Captured stdout/stderr, content-addressed to `.openscience/logs/<hash>.txt`. */
+  /** Captured stdout/stderr, content-addressed to `.apex-discovery/logs/<hash>.txt`. */
   logHash?: string;
   /** Runtime environment (software + hardware) the run executed in. */
   env?: ProvenanceEnv;
@@ -517,7 +517,7 @@ export interface RunArtifact {
 export interface PackageSnapshot {
   /** Number of installed packages captured. */
   count: number;
-  /** Short content hash; the lockfile is `.openscience/env/<hash>.txt`. */
+  /** Short content hash; the lockfile is `.apex-discovery/env/<hash>.txt`. */
   hash: string;
 }
 
@@ -531,7 +531,7 @@ export interface Citation {
 // ---- Chart design system (P1-5) ----
 // One validated palette, the single source of truth for BOTH native app charts
 // (SVG stat tiles, mini-bars) and agent-generated figures (matplotlib, via the
-// bundled `openscience.mplstyle` which carries the same hexes). Validated with
+// bundled `apex-discovery.mplstyle` which carries the same hexes). Validated with
 // the dataviz skill against the app's real surfaces — light #ffffff, dark
 // #1e1d24 — for the lightness band, chroma floor, CVD separation, and contrast.
 // Categorical hues are assigned in this fixed order, never cycled.

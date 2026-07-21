@@ -1,6 +1,6 @@
 // Artifact provenance (P0-3) — Tauri wrappers over shell_core::provenance.
 // Every agent write of a workspace file appends a version record to
-// <workspace>/.openscience/provenance.jsonl (append-only, one JSON object per
+// <workspace>/.apex-discovery/provenance.jsonl (append-only, one JSON object per
 // line), so any artifact can reveal its generating code, environment, and
 // originating conversation, per version.
 use tauri::AppHandle;
@@ -50,7 +50,7 @@ pub fn list_provenance(app: AppHandle, path: String) -> Result<Vec<ProvenanceRec
     provenance::versions_for(&workspace_dir(&app)?, &path)
 }
 
-/// Read a content-addressed package lockfile (`.openscience/env/<hash>.txt`).
+/// Read a content-addressed package lockfile (`.apex-discovery/env/<hash>.txt`).
 /// `hash` is validated to hex so it cannot escape the env directory.
 #[tauri::command]
 pub fn read_env_lockfile(app: AppHandle, hash: String) -> Result<String, String> {

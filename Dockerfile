@@ -69,7 +69,7 @@ COPY --from=assets /resources /app/resources
 COPY --from=codex-bridge /codex-bridge /app/codex-bridge
 
 # Everything the app writes lives under /data (mount a volume to persist):
-# HOME=/data puts the default workspace base at /data/Documents/OpenScience.
+# HOME=/data puts the default workspace base at /data/Documents/ApexDiscovery.
 ENV HOME=/data \
     APEX_DATA_DIR=/data/app \
     APEX_FRONTEND_DIR=/app/dist \

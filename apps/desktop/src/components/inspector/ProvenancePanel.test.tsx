@@ -94,7 +94,7 @@ describe("ProvenancePanel", () => {
     expect(draft).toContain("print(2)");
     // The reproduce prompt references the captured package lockfile.
     expect(draft).toContain("3 installed Python packages");
-    expect(draft).toContain(".openscience/env/deadbeef.txt");
+    expect(draft).toContain(".apex-discovery/env/deadbeef.txt");
   });
 
   it("reveals the captured package lockfile on demand", async () => {
@@ -187,6 +187,6 @@ describe("reproducePrompt", () => {
   it("flags truncated records and points at the full provenance store", () => {
     const prompt = reproducePrompt(record("big = 1\n… [truncated]"));
     expect(prompt).toContain("truncated");
-    expect(prompt).toContain(".openscience/provenance.jsonl");
+    expect(prompt).toContain(".apex-discovery/provenance.jsonl");
   });
 });

@@ -11,7 +11,7 @@ const REVIEWABLE_EXTENSIONS = new Set([
 const CODE_EXTENSIONS = new Set([".py", ".r", ".jl", ".m", ".js", ".jsx", ".ts", ".tsx", ".ipynb"]);
 const REPORT_EXTENSIONS = new Set([".md", ".rst", ".tex", ".pdf", ".docx", ".html"]);
 const FIGURE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]);
-const SKIP_PARTS = new Set([".git", ".openscience", ".opencode", ".agents", "node_modules", "target", "dist", "build"]);
+const SKIP_PARTS = new Set([".git", ".apex-discovery", ".opencode", ".agents", "node_modules", "target", "dist", "build"]);
 
 function extension(path) {
   const name = String(path).toLowerCase().split(/[\\/]/).pop() ?? "";
@@ -24,7 +24,7 @@ export function isReviewablePath(path) {
   const traceIndex = parts.lastIndexOf("execution_trace");
   if (
     traceIndex > 0
-    && parts[traceIndex - 1] === ".openscience"
+    && parts[traceIndex - 1] === ".apex-discovery"
     && traceIndex === parts.length - 2
     && extension(path) === ".ipynb"
   ) return true;
@@ -134,7 +134,7 @@ export function reviewerPrompt({ pass, targets, skillContext }) {
     "Use deterministic scripts and provenance before model judgment. Verify only what the evidence supports; never claim the work is error-free.",
     "Focus on concrete, fixable findings with exact identifiers, quoted claims, file paths, and code/output evidence.",
     `This is review pass ${pass}. Review targets:\n${targets.map((path) => `- ${path}`).join("\n")}`,
-    "Inspect related source code, run outputs, and .openscience/provenance.jsonl when needed.",
+    "Inspect related source code, run outputs, and .apex-discovery/provenance.jsonl when needed.",
     skillContext,
     "Return exactly one final fenced ```review JSON block and no other prose.",
     'Schema: {"findings":[{"level":"error|warn|ok","check":"citation|number|figure|domain|integrity","tag":"optional","title":"...","evidence":"..."}],"note":"..."}',

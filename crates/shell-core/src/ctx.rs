@@ -80,7 +80,7 @@ pub fn workspace_dir(ctx: &ShellCtx) -> Result<PathBuf, String> {
 }
 
 /// The workspace root new dated session folders are created under. A folder
-/// the user picked in Settings wins; the default is `~/Documents/OpenScience`
+/// the user picked in Settings wins; the default is `~/Documents/ApexDiscovery`
 /// (no space — the agent runs shell commands against this path, and unquoted
 /// spaces break them), falling back to `$HOME/Documents`.
 pub fn base_workspace_dir(ctx: &ShellCtx) -> Result<PathBuf, String> {
@@ -99,12 +99,12 @@ pub fn base_workspace_dir(ctx: &ShellCtx) -> Result<PathBuf, String> {
             PathBuf::from(home).join("Documents")
         }
     };
-    let dir = docs.join("OpenScience");
+    let dir = docs.join("ApexDiscovery");
 
     // One-time migrations, oldest name last. A failed rename (e.g. cross-volume)
     // keeps the existing location rather than splitting the user's files.
     if !dir.exists() {
-        for old in [docs.join("Open Science"), ctx.runtime_root().join("workspace")] {
+        for old in [docs.join("APEX Discovery"), ctx.runtime_root().join("workspace")] {
             if old.is_dir() {
                 if std::fs::rename(&old, &dir).is_ok() {
                     break;

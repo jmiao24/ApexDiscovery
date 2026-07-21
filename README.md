@@ -126,7 +126,7 @@ office/document skills below.
 | Files | Global and per-session file browsing, context menu actions, external open/reveal, copy path, and local preview server. |
 | Notebooks | `.ipynb` artifacts render in the built-in viewer with local kernel execution; the agent drives a managed Jupyter environment (bundled `uv`) via MCP. |
 | Runs | Append-only run logs, global SQLite run index, search/facets/pagination, local/remote surfaces, output links, logs, and reproduce prompts. |
-| Provenance | `.openscience/provenance.jsonl` tracks file versions and links produced artifacts back to the run or edit that created them. |
+| Provenance | `.apex-discovery/provenance.jsonl` tracks file versions and links produced artifacts back to the run or edit that created them. |
 | Review | A task-level **Review** button starts a fresh, read-only Reviewer thread on demand. It loads the applicable traceability/statistics skills, returns actionable findings to the original Main Agent once, then performs one independent re-review. Nothing runs automatically. |
 | Viewers | PDF, image, video, HTML, Markdown, code, CSV/TSV tables with charts, DOCX, XLSX, PPTX, molecules, 3D meshes, genome tracks, FITS, DOS/DOSCAR, EIGENVAL bands, qcode, anomaly maps, and phase files. |
 | Models | OpenAI Codex via a user-provided API key in the browser distribution; legacy runtimes remain available to developers. |
@@ -156,9 +156,6 @@ One-click science MCP connectors currently include:
 
 You can also add any local or remote MCP server from Settings. See
 [`docs/CONNECT_YOUR_TOOLS.md`](./docs/CONNECT_YOUR_TOOLS.md).
-
-For a neutral positioning note, see
-[`APEX Discovery Desktop vs OpenScience`](./docs/open-science-desktop-vs-openscience.md).
 
 ## Install
 
@@ -202,9 +199,9 @@ xattr -cr "/Applications/APEX Discovery.app"
 **Linux**:
 
 ```bash
-sudo apt install ./OpenScience_*.deb
+sudo apt install ./*.deb
 # or
-sudo rpm -i OpenScience_*.rpm
+sudo rpm -i ./*.rpm
 ```
 
 ## Self-hosted web version
@@ -420,7 +417,7 @@ join the [APEX Discovery Discord](https://discord.gg/fWNMDKcd5P) or the
 If you use APEX Discovery Desktop in your research, please cite it:
 
 ```bibtex
-@software{open_science_desktop,
+@software{apex_discovery_desktop,
   author  = {{The APEX Discovery Desktop Contributors}},
   title   = {APEX Discovery Desktop: a local-first, model-agnostic AI research workbench},
   year    = {2026},

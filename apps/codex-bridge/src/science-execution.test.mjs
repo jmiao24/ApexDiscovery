@@ -10,7 +10,7 @@ function workspace() {
 }
 
 async function waitForJob(root, id, timeoutMs = 5_000) {
-  const path = join(root, ".openscience", "execution_jobs", `${id}.json`);
+  const path = join(root, ".apex-discovery", "execution_jobs", `${id}.json`);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (existsSync(path)) {
@@ -41,7 +41,7 @@ test("Bash is stateless, audited, and does not create a notebook", async () => {
     assert.equal(job.status, "completed");
     assert.equal(job.output, "hello");
     assert.equal(job.notebook_path, null);
-    const audit = readFileSync(join(root, ".openscience", "execution-audit.jsonl"), "utf8");
+    const audit = readFileSync(join(root, ".apex-discovery", "execution-audit.jsonl"), "utf8");
     assert.match(audit, /"tool":"Bash"/);
     assert.match(audit, /"human_description":"Checking the shell runtime"/);
   } finally {
@@ -71,7 +71,7 @@ test("ExecuteCode keeps Python state and appends every call to an ipynb trace", 
     assert.equal(first.status, "completed");
     assert.equal(second.status, "completed");
     assert.equal(second.output, "42");
-    assert.equal(first.notebook_path, ".openscience/execution_trace/worker-0-python.ipynb");
+    assert.equal(first.notebook_path, ".apex-discovery/execution_trace/worker-0-python.ipynb");
     const notebook = JSON.parse(readFileSync(join(root, second.notebook_path), "utf8"));
     assert.equal(notebook.nbformat, 4);
     assert.equal(notebook.cells.length, 2);
@@ -148,7 +148,7 @@ test("background Bash survives closing its requesting runtime", async () => {
     assert.equal(finished.output, "background-ok");
     assert.equal(finished.background, true);
     assert.equal(
-      existsSync(join(root, ".openscience", "execution_jobs", `${started.id}.request.json`)),
+      existsSync(join(root, ".apex-discovery", "execution_jobs", `${started.id}.request.json`)),
       false,
     );
   } finally {

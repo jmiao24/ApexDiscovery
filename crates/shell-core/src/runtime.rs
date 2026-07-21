@@ -305,7 +305,7 @@ pub fn build_sidecar_spec(ctx: &ShellCtx, port: u16) -> Result<SidecarSpec, Stri
         // Lets bundled skill helpers (e.g. remote-compute's record_run.py) stamp
         // the recording app version into provenance — they run outside the app
         // and can't otherwise know it.
-        ("OPENSCIENCE_APP_VERSION".into(), ctx.app_version.clone()),
+        ("APEX_DISCOVERY_APP_VERSION".into(), ctx.app_version.clone()),
         // GUI-launched apps get a minimal PATH; give the agent the user's real tools.
         ("PATH".into(), enriched_path()),
     ];
@@ -389,13 +389,13 @@ pub fn new_dated_workspace(ctx: &ShellCtx, name: &str) -> Result<String, String>
 /// Record which session owns the active workspace, so bundled skill helpers
 /// (record_run.py) can stamp remote runs with their `sessionId` — the app knows
 /// the id but the off-app helper only sees the workspace. Written as
-/// `<workspace>/.openscience/session.txt`; best-effort, empty ids are ignored.
+/// `<workspace>/.apex-discovery/session.txt`; best-effort, empty ids are ignored.
 pub fn mark_session(ctx: &ShellCtx, session_id: &str) -> Result<(), String> {
     let id = session_id.trim();
     if id.is_empty() {
         return Ok(());
     }
-    let dir = workspace_dir(ctx)?.join(".openscience");
+    let dir = workspace_dir(ctx)?.join(".apex-discovery");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join("session.txt");
     // Write-then-rename so a concurrent read never sees a half-written id.

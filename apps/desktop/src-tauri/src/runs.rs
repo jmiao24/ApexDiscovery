@@ -1,6 +1,6 @@
 // Run provenance (reproducibility recipe) — Tauri wrappers over
 // shell_core::runs. Every agent experiment execution appends a run record to
-// <workspace>/.openscience/runs.jsonl; a run-produced file's provenance version
+// <workspace>/.apex-discovery/runs.jsonl; a run-produced file's provenance version
 // carries the run's id, so an artifact links back to its recipe.
 use tauri::AppHandle;
 

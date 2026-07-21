@@ -38,7 +38,6 @@ use shell_core::ShellCtx;
 use state::AppState;
 
 const DEFAULT_DATA_DIR_NAME: &str = ".apex-discovery";
-const LEGACY_DATA_DIR_NAME: &str = ".openscience-server";
 
 fn env_path(key: &str) -> Option<PathBuf> {
     std::env::var(key)
@@ -48,32 +47,7 @@ fn env_path(key: &str) -> Option<PathBuf> {
 }
 
 fn default_data_dir(home: &str) -> PathBuf {
-    let home = PathBuf::from(home);
-    let current = home.join(DEFAULT_DATA_DIR_NAME);
-    let legacy = home.join(LEGACY_DATA_DIR_NAME);
-
-    if current.exists() || !legacy.exists() {
-        return current;
-    }
-
-    match std::fs::rename(&legacy, &current) {
-        Ok(()) => {
-            eprintln!(
-                "migrated APEX Discovery data from {} to {}",
-                legacy.display(),
-                current.display()
-            );
-            current
-        }
-        Err(error) => {
-            eprintln!(
-                "warning: could not migrate {} to {}: {error}; using the legacy directory for this run",
-                legacy.display(),
-                current.display()
-            );
-            legacy
-        }
-    }
+    PathBuf::from(home).join(DEFAULT_DATA_DIR_NAME)
 }
 
 /// One `--flag value` from argv, or None.
@@ -269,7 +243,7 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_data_dir, DEFAULT_DATA_DIR_NAME, LEGACY_DATA_DIR_NAME};
+    use super::{default_data_dir, DEFAULT_DATA_DIR_NAME};
     use std::fs;
 
     fn temporary_home(name: &str) -> std::path::PathBuf {
@@ -293,42 +267,4 @@ mod tests {
         fs::remove_dir_all(home).unwrap();
     }
 
-    #[test]
-    fn migrates_the_legacy_directory_when_the_new_directory_is_absent() {
-        let home = temporary_home("migrate");
-        let legacy = home.join(LEGACY_DATA_DIR_NAME);
-        fs::create_dir_all(legacy.join("runtime")).unwrap();
-        fs::write(legacy.join("runtime/session.txt"), "session-state").unwrap();
-
-        let current = default_data_dir(home.to_str().unwrap());
-
-        assert_eq!(current, home.join(DEFAULT_DATA_DIR_NAME));
-        assert!(!legacy.exists());
-        assert_eq!(
-            fs::read_to_string(current.join("runtime/session.txt")).unwrap(),
-            "session-state"
-        );
-
-        fs::remove_dir_all(home).unwrap();
-    }
-
-    #[test]
-    fn preserves_both_directories_when_the_new_directory_already_exists() {
-        let home = temporary_home("existing");
-        let current = home.join(DEFAULT_DATA_DIR_NAME);
-        let legacy = home.join(LEGACY_DATA_DIR_NAME);
-        fs::create_dir_all(&current).unwrap();
-        fs::create_dir_all(&legacy).unwrap();
-        fs::write(current.join("owner"), "current").unwrap();
-        fs::write(legacy.join("owner"), "legacy").unwrap();
-
-        assert_eq!(default_data_dir(home.to_str().unwrap()), current);
-        assert_eq!(
-            fs::read_to_string(current.join("owner")).unwrap(),
-            "current"
-        );
-        assert_eq!(fs::read_to_string(legacy.join("owner")).unwrap(), "legacy");
-
-        fs::remove_dir_all(home).unwrap();
-    }
 }

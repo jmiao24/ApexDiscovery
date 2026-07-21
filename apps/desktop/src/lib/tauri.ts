@@ -507,7 +507,7 @@ export async function setWorkspace(path: string): Promise<string> {
 }
 
 /** Record which session owns the active workspace (written to
- *  `.openscience/session.txt`) so skill helpers can attribute remote runs. */
+ *  `.apex-discovery/session.txt`) so skill helpers can attribute remote runs. */
 export async function markSession(sessionId: string): Promise<void> {
   if (!hasShell()) return;
   await command("mark_session", { sessionId });

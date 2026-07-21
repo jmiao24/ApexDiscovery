@@ -1,5 +1,5 @@
 // Artifact provenance (P0-3): every agent write of a workspace file appends a
-// version record to <workspace>/.openscience/provenance.jsonl — append-only,
+// version record to <workspace>/.apex-discovery/provenance.jsonl — append-only,
 // one JSON object per line, so any artifact can reveal its generating code,
 // environment, and originating conversation, per version.
 use std::path::{Component, Path, PathBuf};
@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::util::quiet_command;
 
-const STORE_DIR: &str = ".openscience";
+const STORE_DIR: &str = ".apex-discovery";
 const STORE_FILE: &str = "provenance.jsonl";
 /// Per-record content cap: keeps the store bounded; larger writes are truncated.
 const CONTENT_CAP: usize = 100_000;
@@ -93,14 +93,14 @@ pub struct HardwareInfo {
 
 /// A snapshot of the installed Python packages at record time. The full
 /// `name==version` list is stored once, content-addressed, at
-/// `.openscience/env/<hash>.txt`; records carry only the count + hash so the
+/// `.apex-discovery/env/<hash>.txt`; records carry only the count + hash so the
 /// store stays small and identical environments dedupe to one lockfile.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackageSnapshot {
     /// Number of installed packages captured.
     pub count: u32,
-    /// Short content hash; the lockfile is `.openscience/env/<hash>.txt`.
+    /// Short content hash; the lockfile is `.apex-discovery/env/<hash>.txt`.
     pub hash: String,
 }
 
@@ -439,7 +439,7 @@ pub fn versions_for(root: &Path, path: &str) -> Result<Vec<ProvenanceRecord>, St
     Ok(v)
 }
 
-/// Read a content-addressed package lockfile (`.openscience/env/<hash>.txt`).
+/// Read a content-addressed package lockfile (`.apex-discovery/env/<hash>.txt`).
 /// `hash` is validated to hex so it cannot escape the env directory.
 pub fn read_env_lockfile(root: &Path, hash: &str) -> Result<String, String> {
     if hash.is_empty() || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -523,7 +523,7 @@ mod tests {
         // Blank lines are not counted as packages.
         assert_eq!(s1.count, 3);
         assert_eq!(s1.hash, content_hash(freeze)); // deterministic addressing
-        let lock = root.join(".openscience/env").join(format!("{}.txt", s1.hash));
+        let lock = root.join(".apex-discovery/env").join(format!("{}.txt", s1.hash));
         assert_eq!(std::fs::read_to_string(&lock).unwrap(), freeze);
 
         // Same environment -> same hash, no duplicate file rewrite.
@@ -560,7 +560,7 @@ mod tests {
         append_record(&root, "x.py", "write", None, None, None, None, None, None, None).unwrap();
         // A corrupt line must not lose the rest of the history.
         use std::io::Write;
-        let file = root.join(".openscience/provenance.jsonl");
+        let file = root.join(".apex-discovery/provenance.jsonl");
         let mut f = std::fs::OpenOptions::new().append(true).open(&file).unwrap();
         writeln!(f, "not json").unwrap();
         append_record(&root, "x.py", "write", None, None, None, None, None, None, None).unwrap();

@@ -40,6 +40,7 @@ venv/
 docs/superpowers/
 
 # Local runtime & secrets (never commit)
+.apex-discovery/
 .ai4s-workbench/
 secrets/
 *.key
