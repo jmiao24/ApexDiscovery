@@ -1,7 +1,5 @@
 <div align="center">
 
-[![APEX Discovery — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/jmiao24/ApexDiscovery)
-
 # APEX Discovery
 
 **Local-first AI research workbench in your browser, powered by OpenAI Codex.**
@@ -33,7 +31,6 @@ still available for existing users.
 ## Contents
 
 - [✨ What it does](#what-it-does)
-- [🎬 See it in action](#see-it-in-action)
 - [🧪 Current capabilities](#current-capabilities)
 - [🔌 Skills and connectors](#skills-and-connectors)
 - [📦 Install](#install)
@@ -66,35 +63,6 @@ write-up, in one continuous, auditable session.
   are captured as reproducible run records, not loose terminal scrollback.
 - **Extensible** — agent skills, MCP servers and one-click science connectors,
   `/` commands, `!` shell mode, and a model-agnostic SDK.
-
-## See it in action
-
-**One prompt -> a complete, traceable analysis.** Simulate data, fit a model, save a
-publication-grade figure, and write a report where every number traces to the code.
-
-![End-to-end dose-response analysis: the agent runs code and produces a fitted figure and a report](./docs/assets/showcase-workflow.webp)
-
-**Every artifact traces back to its code, inputs, and conversation.**
-
-![Artifact inspector showing a figure's generating code, inputs, and provenance](./docs/assets/showcase-provenance.webp)
-
-**Literature -> verifiable report.** Search papers, draft a manuscript rendered as a
-PDF, and audit citations, unsourced numbers, and figure/code consistency.
-
-![Literature survey producing a rendered PDF manuscript with a traceability review](./docs/assets/showcase-literature.webp)
-
-<details>
-<summary><b>More screenshots</b></summary>
-
-<br>
-
-![The agent driving a Jupyter notebook with a live matplotlib figure](./docs/assets/showcase-notebook.webp)
-
-![An experiment sweep table alongside a live analysis notebook](./docs/assets/showcase-experiment.webp)
-
-![The skills library listing bundled scientific skills](./docs/assets/showcase-skills.webp)
-
-</details>
 
 ## Current capabilities
 
