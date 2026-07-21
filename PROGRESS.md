@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-21 · docs(readme-badges): removed the complete README badge and community-button row for a cleaner, product-focused introduction.
+
 2026-07-21 · docs(readme): removed the branded banner and all screenshot figures from the README, including the obsolete visual showcase section and its contents link.
 
 2026-07-21 · cleanup(apex-discovery-only): removed legacy product branding and identifiers from the current repository tree, standardized runtime/provenance storage under `.apex-discovery`, removed the obsolete comparison document, and updated release metadata, tests, and documentation for the `jmiao24/ApexDiscovery` repository.

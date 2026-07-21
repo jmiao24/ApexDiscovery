@@ -9,17 +9,6 @@ webview and no APEX account. Bring an OpenAI API key; projects, skills, plugins,
 MCP tools, files, runs, and provenance remain local. The legacy Tauri shell is
 still available for existing users.
 
-<p>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="https://internscience.github.io/ResearchClawBench-Home/"><img src="https://img.shields.io/badge/%F0%9F%8F%86%20%231-ResearchClawBench-FFB300" alt="#1 on ResearchClawBench"></a>
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platforms">
-  <img src="https://img.shields.io/badge/UI-local%20browser-24C8DB" alt="Local browser UI">
-  <img src="https://img.shields.io/badge/runtime-OpenAI%20Codex-success" alt="OpenAI Codex runtime">
-  <a href="https://discord.gg/fWNMDKcd5P"><img src="https://img.shields.io/badge/Join-Discord-5865F2" alt="Join Discord"></a>
-  <a href="http://makeapullrequest.com"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome"></a>
-  <a href="https://linux.do"><img src="https://img.shields.io/badge/Join-linux.do-orange" alt="linux.do"></a>
-</p>
-
 </div>
 
 ---
