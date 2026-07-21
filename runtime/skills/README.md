@@ -4,8 +4,8 @@ Scientific skills, layered:
 
 ```text
 skills/
-  core/      # self-authored skills specific to this app (traceability-review;
-             # other dirs are roadmap placeholders until they get a SKILL.md)
+  core/      # self-authored skills specific to this app (including
+             # traceability-review and the Open Targets profile workflow)
   external/  # third-party skill packs, fetched by script — git-ignored
   user/      # user-installed / custom skills (live in the runtime workspace)
 ```

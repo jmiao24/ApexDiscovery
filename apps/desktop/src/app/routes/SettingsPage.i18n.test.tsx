@@ -1,25 +1,6 @@
-import { screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { renderAt } from "@/test/render";
-import { useUiStore } from "@/lib/store";
-import { shippedLocales } from "@/i18n/config";
-
-describe("Settings language selector", () => {
-  it("shows a Language control with one button per shipped locale", async () => {
-    renderAt("/settings");
-    const group = await screen.findByRole("group", { name: "Language" });
-    expect(within(group).getAllByRole("button")).toHaveLength(shippedLocales().length);
-  });
-
-  it("updates the store locale on change", async () => {
-    renderAt("/settings");
-    const group = await screen.findByRole("group", { name: "Language" });
-    await userEvent.click(within(group).getByRole("button", { name: /日本語/ }));
-    expect(useUiStore.getState().locale).toBe("ja");
-    useUiStore.getState().setLocale("en");
-  });
-});
 
 describe("Settings page strings (i18n)", () => {
   it("renders the page title, subtitle, and card titles in English", async () => {

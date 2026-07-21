@@ -6,9 +6,6 @@
       "dark": "Dark"
     }
   },
-  "language": {
-    "label": "Language"
-  },
   "page": {
     "title": "Settings",
     "subtitle": "Everything here configures the bundled OpenCode runtime — one config, no copies."

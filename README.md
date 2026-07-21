@@ -1,31 +1,20 @@
 <div align="center">
 
-[![APEX Science — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
+[![APEX Discovery — Local-first AI research workbench](./docs/assets/banner.webp)](https://github.com/ai4s-research/open-science)
 
-# APEX Science
+# APEX Discovery
 
 **Local-first AI research workbench in your browser, powered by OpenAI Codex.**
 
-APEX Science runs as a local process and opens the normal browser—no desktop
+APEX Discovery runs as a local process and opens the normal browser—no desktop
 webview and no APEX account. Bring an OpenAI API key; projects, skills, plugins,
 MCP tools, files, runs, and provenance remain local. The legacy Tauri shell is
 still available for existing users.
 
 <p>
-  <b>English</b> ·
-  <a href="./README.zh.md">简体中文</a> ·
-  <a href="./README.ja.md">日本語</a> ·
-  <a href="./README.es.md">Español</a> ·
-  <a href="./README.de.md">Deutsch</a> ·
-  <a href="./README.fr.md">Français</a> ·
-  <a href="./README.ko.md">한국어</a>
-</p>
-
-<p>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://internscience.github.io/ResearchClawBench-Home/"><img src="https://img.shields.io/badge/%F0%9F%8F%86%20%231-ResearchClawBench-FFB300" alt="#1 on ResearchClawBench"></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platforms">
-  <img src="https://img.shields.io/badge/i18n-7%20languages-5B8DEF" alt="7 interface languages">
   <img src="https://img.shields.io/badge/UI-local%20browser-24C8DB" alt="Local browser UI">
   <img src="https://img.shields.io/badge/runtime-OpenAI%20Codex-success" alt="OpenAI Codex runtime">
   <a href="https://discord.gg/fWNMDKcd5P"><img src="https://img.shields.io/badge/Join-Discord-5865F2" alt="Join Discord"></a>
@@ -37,7 +26,7 @@ still available for existing users.
 
 ---
 
-🎉 **Recognition:** APEX Science Desktop ranks #1 by scored-task average on [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/), an end-to-end benchmark for autonomous scientific research agents (Pass@1 leaderboard, July 9, 2026).
+🎉 **Recognition:** APEX Discovery Desktop ranks #1 by scored-task average on [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/), an end-to-end benchmark for autonomous scientific research agents (Pass@1 leaderboard, July 9, 2026).
 
 ---
 
@@ -138,10 +127,10 @@ office/document skills below.
 | Notebooks | `.ipynb` artifacts render in the built-in viewer with local kernel execution; the agent drives a managed Jupyter environment (bundled `uv`) via MCP. |
 | Runs | Append-only run logs, global SQLite run index, search/facets/pagination, local/remote surfaces, output links, logs, and reproduce prompts. |
 | Provenance | `.openscience/provenance.jsonl` tracks file versions and links produced artifacts back to the run or edit that created them. |
-| Review | A task-level **Review** button starts a fresh, read-only Reviewer thread on demand. It loads the applicable traceability/domain/statistics skills, returns actionable findings to the original Main Agent once, then performs one independent re-review. Nothing runs automatically. |
+| Review | A task-level **Review** button starts a fresh, read-only Reviewer thread on demand. It loads the applicable traceability/statistics skills, returns actionable findings to the original Main Agent once, then performs one independent re-review. Nothing runs automatically. |
 | Viewers | PDF, image, video, HTML, Markdown, code, CSV/TSV tables with charts, DOCX, XLSX, PPTX, molecules, 3D meshes, genome tracks, FITS, DOS/DOSCAR, EIGENVAL bands, qcode, anomaly maps, and phase files. |
 | Models | OpenAI Codex via a user-provided API key in the browser distribution; legacy runtimes remain available to developers. |
-| Interface languages | English, Simplified Chinese, Japanese, Spanish, German, French, and Korean. Portuguese (Brazil) and Arabic are registered but not selectable yet. |
+| Interface language | English. |
 
 ## Skills and connectors
 
@@ -152,8 +141,8 @@ git history:
 - Office/document skills from the Apache-2.0 `anthropics/skills` repository:
   `docx`, `pdf`, `pptx`, and `xlsx`.
 - First-party core skills in `runtime/skills/core/`:
-  `traceability-review`, `stats-integrity`, `domain-check`, `large-file`,
-  `publication-figures`, `remote-compute`, and `modal-run`.
+  `traceability-review`, `stats-integrity`, `large-file`,
+  `publication-figures`, `remote-compute`, `modal-run`, and `open-targets`.
 
 One-click science MCP connectors currently include:
 
@@ -169,15 +158,15 @@ You can also add any local or remote MCP server from Settings. See
 [`docs/CONNECT_YOUR_TOOLS.md`](./docs/CONNECT_YOUR_TOOLS.md).
 
 For a neutral positioning note, see
-[`APEX Science Desktop vs OpenScience`](./docs/open-science-desktop-vs-openscience.md).
+[`APEX Discovery Desktop vs OpenScience`](./docs/open-science-desktop-vs-openscience.md).
 
 ## Install
 
 For the browser edition, download `apexscience-browser-<platform>` from the
 Releases page and extract it. No Node, Rust, Docker, or desktop app is required.
 
-- macOS: double-click `APEX Science.command`, or run `./apexscience`.
-- Windows: double-click `APEX Science.cmd`.
+- macOS: double-click `APEX Discovery.command`, or run `./apexscience`.
+- Windows: double-click `APEX Discovery.cmd`.
 - Linux: run `./apexscience`.
 
 The browser bundles are not code-signed yet. If macOS quarantines the extracted
@@ -205,7 +194,7 @@ Builds are not code-signed or notarized yet.
 install it into Applications and run:
 
 ```bash
-xattr -cr "/Applications/APEX Science.app"
+xattr -cr "/Applications/APEX Discovery.app"
 ```
 
 **Windows**: if SmartScreen appears, choose **More info -> Run anyway**.
@@ -250,9 +239,10 @@ agent-runtime password stay in the local server/sidecar process.
 runs the agent on the [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk/overview)
 instead: a small Node server speaking the same HTTP+SSE wire subset the
 frontend consumes, and accepting the same CLI/env contract as `opencode serve`
-— so neither the frontend nor the Rust server changes. It uses your existing
-Claude Code login (or `ANTHROPIC_API_KEY`) and honors the app's approval mode
-(the approve switch maps to the SDK's permission callback).
+— so neither the frontend nor the Rust server changes. Product deployments use
+`ANTHROPIC_API_KEY` and honor the app's approval mode (the approve switch maps
+to the SDK's permission callback). An existing Claude CLI subscription is only
+supported as an explicitly enabled personal local-testing mode.
 
 ```bash
 pnpm install   # installs @anthropic-ai/claude-agent-sdk for the bridge
@@ -279,6 +269,26 @@ OPENAI_API_KEY=<key> APEX_OPENCODE_BIN=$PWD/apps/codex-bridge/src/server.mjs \
   cargo run --release --manifest-path apps/server/Cargo.toml
 ```
 
+For the current local APEX Discovery development build, launch the prebuilt
+server and frontend with a fixed browser port and access token:
+
+```bash
+cd /Users/jiachengmiao/Desktop/APEX_Science/ApexScience
+
+CODEX_HOME="$HOME/.codex" \
+APEX_CLAUDE_AUTH=subscription \
+APEX_CLAUDE_EXECUTABLE="$HOME/.local/bin/claude" \
+APEX_OPENCODE_BIN="$PWD/apps/codex-bridge/src/server.mjs" \
+apps/server/target/release/apexscience-server \
+  --port 49369 \
+  --token apex-demo \
+  --frontend-dir "$PWD/apps/desktop/dist"
+```
+
+Open `http://127.0.0.1:49369/` and use `apex-demo` if the browser asks for the
+access token. This command uses Claude CLI subscription authentication only for
+explicitly launched Claude child agents; the Main Agent continues to use Codex.
+
 The bridge discovers Codex-native repository/user skills (`.agents/skills`),
 loads enabled plugin skills, maps local and remote MCP servers into Codex
 configuration, and streams MCP arguments/results/errors into the tool log.
@@ -287,20 +297,27 @@ validates `.codex-plugin/plugin.json`, shows skills/MCP/scripts/hooks, and keeps
 new installs and updates disabled until reviewed. Remote catalogs should pin an
 expected commit.
 
-The first specialist-agent path is intentionally explicit and bounded. Asking
-to launch a **literature subagent** (or using `$literature-agent`) creates a
-separate read-only Codex thread with live web search. If the user has installed
-the `paperclip` skill, the child loads it audibly before research. The child
-session is persisted with its parent link, hidden from top-level history, and
-its evidence memo returns to the original Main thread for synthesis. Ordinary
-mentions of agents do not trigger delegation; parallel/general agent spawning
-is not enabled yet.
+Subagent paths are explicit and bounded. Asking to launch a **literature
+subagent** creates a separate Codex thread with the Main Agent's APEX tools,
+skills, MCP servers, and current permission mode, but nested subagent launch is
+disabled. The Main Agent also has a `LaunchClaudeAgent` tool backed by the
+Claude Agent SDK. A Claude child receives the same APEX capability catalog,
+runs in a separate persisted child session with live activity, and returns its
+memo to the Main thread; it likewise cannot launch another child.
+
+Production Claude children use `ANTHROPIC_API_KEY`. For personal local testing
+only, an already authenticated Claude CLI subscription can be selected
+explicitly with `APEX_CLAUDE_AUTH=subscription`; this mode is never inferred or
+exposed as an end-user login flow. `APEX_CLAUDE_EXECUTABLE` can override the
+local CLI path and `APEX_CLAUDE_MODEL` can select a Claude model. Ordinary
+mentions of agents do not trigger delegation: the Main Agent must invoke the
+dedicated tool.
 
 When a turn creates or changes a reviewable artifact (code, notebook, data,
 report, or figure), the bridge remembers the review targets but does nothing in
 the background. Clicking **Review** in the task composer starts a fresh Codex
 thread in a read-only filesystem sandbox. That Reviewer loads the applicable bundled
-`traceability-review`, `domain-check`, and `stats-integrity` skills. Actionable
+`traceability-review` and `stats-integrity` skills. Actionable
 findings are returned once to the original Main Agent for correction, followed
 by one final independent re-review. Reviewer threads receive no MCP servers, so
 they cannot mutate external systems through a connector; network access is kept
@@ -395,17 +412,17 @@ review.
 
 Issues and PRs are welcome. Keep changes minimal and verifiable, follow
 [`AGENTS.md`](./AGENTS.md), and run the checks before opening a PR. For discussion,
-join the [APEX Science Discord](https://discord.gg/fWNMDKcd5P) or the
+join the [APEX Discovery Discord](https://discord.gg/fWNMDKcd5P) or the
 [linux.do](https://linux.do) community.
 
 ## Citation
 
-If you use APEX Science Desktop in your research, please cite it:
+If you use APEX Discovery Desktop in your research, please cite it:
 
 ```bibtex
 @software{open_science_desktop,
-  author  = {{The APEX Science Desktop Contributors}},
-  title   = {APEX Science Desktop: a local-first, model-agnostic AI research workbench},
+  author  = {{The APEX Discovery Desktop Contributors}},
+  title   = {APEX Discovery Desktop: a local-first, model-agnostic AI research workbench},
   year    = {2026},
   version = {0.1.9},
   url     = {https://github.com/ai4s-research/open-science},
@@ -420,5 +437,5 @@ GitHub's **"Cite this repository"** button (top of the repo page, generated from
 
 [MIT](./LICENSE). Bundled third-party skills and connectors keep their own licenses.
 
-> APEX Science Desktop is beta research tooling. Treat outputs as drafts: verify numbers,
+> APEX Discovery Desktop is beta research tooling. Treat outputs as drafts: verify numbers,
 > citations, code, and conclusions before publication or decision-making.

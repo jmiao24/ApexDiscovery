@@ -576,8 +576,8 @@ function dayLabel(ts: number): string {
   const days = Math.round((startOf(now) - startOf(d)) / 86_400_000);
   if (days <= 0) return i18n.t("runs:relative.today");
   if (days === 1) return i18n.t("runs:relative.yesterday");
-  if (days < 7) return d.toLocaleDateString(i18n.language, { weekday: "long" });
-  return d.toLocaleDateString(i18n.language, { month: "long", day: "numeric", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+  if (days < 7) return d.toLocaleDateString("en", { weekday: "long" });
+  return d.toLocaleDateString("en", { month: "long", day: "numeric", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
 }
 
 function relativeTs(ts: number): string {
@@ -585,11 +585,11 @@ function relativeTs(ts: number): string {
   if (secs < 60) return i18n.t("runs:relative.justNow");
   if (secs < 3600) return i18n.t("runs:relative.minutesAgo", { count: Math.floor(secs / 60) });
   if (secs < 86_400) return i18n.t("runs:relative.hoursAgo", { count: Math.floor(secs / 3600) });
-  return new Date(ts * 1000).toLocaleDateString(i18n.language, { hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" });
+  return new Date(ts * 1000).toLocaleDateString("en", { hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" });
 }
 
 function absoluteTs(ts: number): string {
-  return new Date(ts * 1000).toLocaleString(i18n.language, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(ts * 1000).toLocaleString("en", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function formatDuration(ms: number): string {

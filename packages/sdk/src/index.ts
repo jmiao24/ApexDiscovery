@@ -12,6 +12,7 @@ export {
   type ToolCallStatus,
   type SessionMeta,
   type SkillInfo,
+  type SkillDocument,
   type AgentInfo,
   type CommandInfo,
   type HistoryMessage,

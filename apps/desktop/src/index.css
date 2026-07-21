@@ -15,6 +15,8 @@
   --bg: #fafbfa;
   --surface: #ffffff;
   --surface-2: #f2f3f2;
+  --user-bubble: #eceeec;
+  --activity-surface: #f0f1f0;
   --sidebar: #eef0ef;
   --sidebar-hover: #e2e4e3;
   --border: #dfe1df;
@@ -48,6 +50,8 @@
   --bg: #171717;
   --surface: #202020;
   --surface-2: #2a2a2a;
+  --user-bubble: #101010;
+  --activity-surface: #242424;
   --sidebar: #202120;
   --sidebar-hover: #2a2b2a;
   --border: #363636;
@@ -73,6 +77,78 @@
   --series-8: #d95926;
   --chart-grid: #343434;
   --chart-axis: #4b4b4b;
+}
+
+/* ExecuteCode input uses a restrained editor palette. Scope every token to
+   the inline execution panel so artifact previews can keep their own theme. */
+.apex-syntax-highlight .hljs-comment,
+.apex-syntax-highlight .hljs-quote {
+  color: #6e7781;
+}
+.apex-syntax-highlight .hljs-keyword,
+.apex-syntax-highlight .hljs-selector-tag,
+.apex-syntax-highlight .hljs-literal,
+.apex-syntax-highlight .hljs-section,
+.apex-syntax-highlight .hljs-link {
+  color: #0550ae;
+}
+.apex-syntax-highlight .hljs-string,
+.apex-syntax-highlight .hljs-regexp,
+.apex-syntax-highlight .hljs-attribute,
+.apex-syntax-highlight .hljs-meta .hljs-string {
+  color: #0a3069;
+}
+.apex-syntax-highlight .hljs-title,
+.apex-syntax-highlight .hljs-title.function_,
+.apex-syntax-highlight .hljs-title.class_,
+.apex-syntax-highlight .hljs-built_in {
+  color: #8250df;
+}
+.apex-syntax-highlight .hljs-number,
+.apex-syntax-highlight .hljs-symbol,
+.apex-syntax-highlight .hljs-bullet {
+  color: #953800;
+}
+.apex-syntax-highlight .hljs-variable,
+.apex-syntax-highlight .hljs-template-variable,
+.apex-syntax-highlight .hljs-params,
+.apex-syntax-highlight .hljs-type {
+  color: #116329;
+}
+
+[data-theme="dark"] .apex-syntax-highlight .hljs-comment,
+[data-theme="dark"] .apex-syntax-highlight .hljs-quote {
+  color: #6a9955;
+}
+[data-theme="dark"] .apex-syntax-highlight .hljs-keyword,
+[data-theme="dark"] .apex-syntax-highlight .hljs-selector-tag,
+[data-theme="dark"] .apex-syntax-highlight .hljs-literal,
+[data-theme="dark"] .apex-syntax-highlight .hljs-section,
+[data-theme="dark"] .apex-syntax-highlight .hljs-link {
+  color: #569cd6;
+}
+[data-theme="dark"] .apex-syntax-highlight .hljs-string,
+[data-theme="dark"] .apex-syntax-highlight .hljs-regexp,
+[data-theme="dark"] .apex-syntax-highlight .hljs-attribute,
+[data-theme="dark"] .apex-syntax-highlight .hljs-meta .hljs-string {
+  color: #ce9178;
+}
+[data-theme="dark"] .apex-syntax-highlight .hljs-title,
+[data-theme="dark"] .apex-syntax-highlight .hljs-title.function_,
+[data-theme="dark"] .apex-syntax-highlight .hljs-title.class_,
+[data-theme="dark"] .apex-syntax-highlight .hljs-built_in {
+  color: #dcdcaa;
+}
+[data-theme="dark"] .apex-syntax-highlight .hljs-number,
+[data-theme="dark"] .apex-syntax-highlight .hljs-symbol,
+[data-theme="dark"] .apex-syntax-highlight .hljs-bullet {
+  color: #b5cea8;
+}
+[data-theme="dark"] .apex-syntax-highlight .hljs-variable,
+[data-theme="dark"] .apex-syntax-highlight .hljs-template-variable,
+[data-theme="dark"] .apex-syntax-highlight .hljs-params,
+[data-theme="dark"] .apex-syntax-highlight .hljs-type {
+  color: #9cdcfe;
 }
 
 html,

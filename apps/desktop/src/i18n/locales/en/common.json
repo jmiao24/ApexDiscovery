@@ -5,7 +5,7 @@
     "remove": "Remove"
   },
   "login": {
-    "title": "APEX Science",
+    "title": "APEX Discovery",
     "hint": "Enter the access token printed by the server (or set via APEX_TOKEN).",
     "placeholder": "Access token",
     "signIn": "Sign in",

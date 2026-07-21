@@ -104,17 +104,17 @@ cpSync(join(root, "examples/climate-trends"), join(resources, "examples/climate-
 writeFileSync(
   join(output, "README.txt"),
   [
-    "APEX Science — local browser edition",
+    "APEX Discovery — local browser edition",
     "",
     windows
-      ? "Double-click APEX Science.cmd."
-      : "Double-click APEX Science.command on macOS, or run ./apexscience in a terminal.",
+      ? "Double-click APEX Discovery.cmd."
+      : "Double-click APEX Discovery.command on macOS, or run ./apexscience in a terminal.",
     windows
       ? "The bundle is unsigned, so Windows may show a SmartScreen warning."
       : "If macOS quarantines the unsigned bundle, run: xattr -cr apexscience-browser",
     "The launcher opens your normal browser. There is no APEX account or sign-in.",
     "Set OPENAI_API_KEY before launching, or enter the key in Settings for the current run.",
-    "Keep this process running while you use APEX Science; stop it with Ctrl+C.",
+    "Keep this process running while you use APEX Discovery; stop it with Ctrl+C.",
     "Only use --host 0.0.0.0 behind TLS with an explicit APEX_TOKEN.",
     "",
   ].join(windows ? "\r\n" : "\n"),
@@ -122,7 +122,7 @@ writeFileSync(
 
 if (windows) {
   writeFileSync(
-    join(output, "APEX Science.cmd"),
+    join(output, "APEX Discovery.cmd"),
     [
       "@echo off",
       "setlocal",
@@ -149,12 +149,12 @@ if (windows) {
     "",
   ].join("\n");
   writeFileSync(join(output, "apexscience"), launcher);
-  writeFileSync(join(output, "APEX Science.command"), launcher);
+  writeFileSync(join(output, "APEX Discovery.command"), launcher);
   for (const path of [
     join(output, serverName),
     join(runtimeBin, nodeName),
     join(output, "apexscience"),
-    join(output, "APEX Science.command"),
+    join(output, "APEX Discovery.command"),
   ]) {
     chmodSync(path, 0o755);
   }

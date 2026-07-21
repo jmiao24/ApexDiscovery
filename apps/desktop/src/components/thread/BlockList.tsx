@@ -6,6 +6,7 @@ import { ReviewerCard } from "./ReviewerCard";
 import { StepSummaryRow } from "./StepSummaryRow";
 import { FigureBlock } from "./FigureBlock";
 import { ArtifactCard } from "./ArtifactCard";
+import { SubagentCard } from "./SubagentCard";
 
 export interface BlockHandlers {
   /** Open an artifact in the inspector (live session). */
@@ -18,8 +19,12 @@ export interface BlockHandlers {
   subagentTrace?: (childSessionId: string) => ThreadBlock[] | undefined;
   /** Navigate into the spawned child's full persisted conversation. */
   onSubagentOpen?: (childSessionId: string) => void;
+  /** Cancel a running spawned child without navigating away. */
+  onSubagentCancel?: (childSessionId: string) => void;
   /** Open the audited skill load in the right-side inspector. */
   onSkillOpen?: (block: Extract<ThreadBlock, { kind: "tool-call" }>) => void;
+  /** Open an installed SKILL.md linked from an agent response. */
+  onSkillPathOpen?: (path: string) => void;
 }
 
 export function renderBlock(block: ThreadBlock, i: number, handlers?: BlockHandlers) {
@@ -27,10 +32,22 @@ export function renderBlock(block: ThreadBlock, i: number, handlers?: BlockHandl
     case "user":
       return <UserMessage key={i} block={block} />;
     case "agent":
-      return <AgentMessage key={i} markdown={block.markdown} onOpenArtifact={handlers?.onArtifactOpen} />;
+      return <AgentMessage key={i} markdown={block.markdown} onOpenArtifact={handlers?.onArtifactOpen} onOpenSkillPath={handlers?.onSkillPathOpen} />;
     case "step-summary":
       return <StepSummaryRow key={i} block={block} />;
     case "tool-call":
+      if (block.tool === "task" && block.childSessionId) {
+        return (
+          <SubagentCard
+            key={i}
+            block={block}
+            activity={handlers?.subagentActivity?.(block.childSessionId)}
+            trace={handlers?.subagentTrace?.(block.childSessionId)}
+            onOpen={handlers?.onSubagentOpen}
+            onCancel={handlers?.onSubagentCancel}
+          />
+        );
+      }
       return (
         <ToolCallRow
           key={i}

@@ -4,6 +4,47 @@
 export type RuntimeStatus = "connecting" | "ready" | "error" | "offline";
 export type ModelStatus = "connected" | "disconnected" | "error";
 
+// ---- Audited science execution tools ----
+
+export type ExecutionLanguage = "python" | "r" | "bash";
+export type ExecutionJobStatus = "running" | "completed" | "failed";
+
+export interface ExecutionCommonInput {
+  /** Required model-authored 3-8 word action label shown before execution. */
+  human_description: string;
+  /** v1 exposes the active workspace environment; future providers may add ids. */
+  environment: "workspace";
+  /** Existing path relative to the active workspace. */
+  working_dir?: string;
+  timeout_minutes?: number;
+  run_in_background?: boolean;
+  /** Kernel and background-job isolation key. */
+  machine_id?: string;
+}
+
+/** Stateless, one-shot shell work. Audited, but never written to a notebook. */
+export interface BashToolInput extends ExecutionCommonInput {
+  command: string;
+}
+
+/** Formal reproducible analysis. Code and output are appended to an ipynb trace. */
+export interface ExecuteCodeToolInput extends ExecutionCommonInput {
+  code: string;
+  language?: ExecutionLanguage;
+}
+
+export interface ExecutionJob {
+  id: string;
+  tool: "Bash" | "ExecuteCode";
+  human_description: string;
+  status: ExecutionJobStatus;
+  started_at: number;
+  ended_at: number | null;
+  output: string;
+  notebook_path: string | null;
+  background?: boolean;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -70,6 +111,23 @@ export type ToolCallStatus =
  *  translation (`session:tool.verb.<Verb>`), not raw text. */
 export type ToolVerb = "Ran" | "Created" | "Edited" | "Read" | "Searched" | "Listed" | "Fetched";
 
+export interface WebResearchSource {
+  title: string;
+  url: string;
+  /** Short answer span associated with the source citation, not scraped page text. */
+  context?: string;
+}
+
+export interface WebResearchResult {
+  kind: "search" | "fetch";
+  query?: string;
+  url?: string;
+  answer: string;
+  sources: WebResearchSource[];
+  resultCount: number;
+  durationMs: number;
+}
+
 export interface ToolCallBlock {
   kind: "tool-call";
   /** What to recognize the step by: a de-noised command, a file path, a
@@ -80,10 +138,19 @@ export interface ToolCallBlock {
   meta?: string;
   /** Display verb rendered before the title ("Ran", "Created", "Edited"…). */
   verb?: ToolVerb;
+  /** The title already describes the activity ("Checking Python syntax"), so
+   *  rows omit the mechanical verb while group summaries can still count it. */
+  naturalTitle?: boolean;
   /** OpenCode tool name ("bash", "write", …) — picks the detail renderer. */
   tool?: string;
   /** Full command line as executed (bash) — shown in the expanded detail. */
   command?: string;
+  /** ExecuteCode language shown in the inline REPL detail. */
+  language?: string;
+  /** Exact query emitted by Codex's built-in web-search tool. */
+  query?: string;
+  /** Rich APEX WebSearch/WebFetch result with inspectable source metadata. */
+  webResult?: WebResearchResult;
   filePath?: string;
   /** Written file content (write tools), for the inline detail view. */
   content?: string;
@@ -100,6 +167,13 @@ export interface ToolCallBlock {
   outputSummary?: string;
   /** Subagent session spawned by this task tool — lets the UI show its live activity. */
   childSessionId?: string;
+  /** Delegated subagent metadata used by the first-class activity card. */
+  subagentName?: string;
+  subagentTask?: string;
+  subagentSandbox?: string;
+  subagentTools?: string[];
+  subagentSkills?: string[];
+  subagentAvailableSkillCount?: number;
   /** Audited skill-load metadata (`tool === "skill"`). */
   skillName?: string;
   skillPath?: string;
@@ -109,10 +183,9 @@ export interface ToolCallBlock {
 export type FindingLevel = "warn" | "ok" | "error";
 
 /**
- * Which check produced a finding: P0-4's three traceability audits, `domain`
- * for P0-5's domain-correctness gates, and `integrity` for P1-6's
- * analysis-integrity gate. `domain`/`integrity` findings carry their own `tag`
- * (e.g. "physics · units", "stats · prereg") so new checks need no UI change.
+ * Which check produced a finding: P0-4's three traceability audits plus the
+ * cross-cutting analysis-integrity gate. The legacy `domain` value remains in
+ * the wire type so older persisted review cards still render.
  */
 export type ReviewCheck = "citation" | "number" | "figure" | "domain" | "integrity";
 
@@ -122,8 +195,7 @@ export interface ReviewFinding {
   /** Monospace evidence body. */
   evidence?: string;
   check?: ReviewCheck;
-  /** Freeform label shown on the card, overriding the check name (used by
-   *  domain-correctness findings, e.g. "earth · crs"). */
+  /** Freeform label shown on the card, overriding the check name. */
   tag?: string;
 }
 
@@ -366,7 +438,7 @@ export interface ProvenanceEnv {
   python?: string;
   /** OS and architecture, e.g. "macos-aarch64". */
   platform: string;
-  /** APEX Science app version that recorded it. */
+  /** APEX Discovery app version that recorded it. */
   app: string;
   /** Installed Python packages (pip freeze), content-addressed to a lockfile. */
   packages?: PackageSnapshot;

@@ -1,7 +1,7 @@
 [package]
 name = "shell-core"
 version = "0.1.9"
-description = "Shared shell-command core for APEX Science Desktop and the web server"
+description = "Shared shell-command core for APEX Discovery Desktop and the web server"
 authors = ["AI4S Workbench contributors"]
 edition = "2021"
 license = "MIT"

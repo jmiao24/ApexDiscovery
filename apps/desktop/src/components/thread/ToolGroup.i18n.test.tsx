@@ -1,14 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
-import { useUiStore } from "@/lib/store";
+import { describe, expect, it } from "vitest";
 import { ArtifactCard } from "./ArtifactCard";
 import { StepSummaryRow } from "./StepSummaryRow";
 import { ThreadView } from "./ThreadView";
-
-// COPYCAT RULE: useUiStore is module-global; reset the locale after each test
-// so this suite never bleeds a non-English locale into other test files.
-afterEach(() => useUiStore.getState().setLocale("en"));
 
 describe("ArtifactCard strings (i18n)", () => {
   it("renders the artifact kind, the producing tool, and the Open action in English", () => {

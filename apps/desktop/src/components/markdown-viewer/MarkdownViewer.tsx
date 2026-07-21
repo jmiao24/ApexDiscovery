@@ -9,13 +9,13 @@ type Variant = "chat" | "document";
 
 const STYLES: Record<Variant, Record<string, string>> = {
   chat: {
-    root: "text-[15px] leading-relaxed text-text",
-    p: "my-2 first:mt-0 last:mb-0",
+    root: "text-[16px] leading-[1.75] text-text",
+    p: "my-3 first:mt-0 last:mb-0",
     a: "text-link underline underline-offset-2",
     code: "rounded bg-surface-2 px-1 py-0.5 font-mono text-[13px] text-link",
     pre: "my-3 overflow-x-auto rounded-input bg-surface-2 p-3 font-mono text-[13px] leading-5 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-text",
-    ul: "my-2 ml-5 list-disc space-y-1",
-    ol: "my-2 ml-5 list-decimal space-y-1",
+    ul: "my-3 ml-5 list-disc space-y-1.5",
+    ol: "my-3 ml-5 list-decimal space-y-1.5",
     h1: "mb-3 mt-5 text-2xl font-semibold first:mt-0",
     h2: "mb-2 mt-5 text-xl font-semibold first:mt-0",
     h3: "mb-2 mt-4 text-lg font-semibold first:mt-0",
@@ -61,10 +61,13 @@ export function MarkdownViewer({
   children,
   className,
   variant = "chat",
+  onLinkClick,
 }: {
   children: string;
   className?: string;
   variant?: Variant;
+  /** Return true to handle a link inside the app and prevent navigation. */
+  onLinkClick?: (href: string) => boolean;
 }) {
   const s = STYLES[variant];
   return (
@@ -74,7 +77,13 @@ export function MarkdownViewer({
         components={{
           p: ({ children }) => <p className={s.p}>{children}</p>,
           a: ({ children, href }) => (
-            <a href={href} className={s.a}>
+            <a
+              href={href}
+              className={s.a}
+              onClick={(event) => {
+                if (href && onLinkClick?.(href)) event.preventDefault();
+              }}
+            >
               {children}
             </a>
           ),

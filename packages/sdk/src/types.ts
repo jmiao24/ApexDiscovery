@@ -125,6 +125,14 @@ export interface SkillInfo {
   name: string;
   description: string;
   location?: string;
+  source?: string;
+}
+
+/** Full instructions for one installed skill whose exact path was resolved
+ *  against the runtime's audited skill catalog. */
+export interface SkillDocument extends SkillInfo {
+  location: string;
+  content: string;
 }
 
 export interface AgentInfo {

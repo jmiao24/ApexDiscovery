@@ -9,7 +9,6 @@ import { useUiStore } from "@/lib/store";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { DiffView } from "@/components/code-viewer/DiffView";
 import { cn } from "@/lib/cn";
-import i18n from "@/i18n";
 
 /** The prompt the Reproduce action drafts — prefilled, reviewed, user-sent. */
 export function reproducePrompt(r: ProvenanceRecord): string {
@@ -255,7 +254,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
 
 function formatTs(ts: number): string {
   const d = new Date(ts * 1000);
-  return d.toLocaleString(i18n.language, {
+  return d.toLocaleString("en", {
     month: "short",
     day: "numeric",
     hour: "2-digit",

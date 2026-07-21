@@ -1,6 +1,6 @@
 # Connect your lab tools
 
-APEX Science Desktop is a workbench: it aggregates tools, it doesn't replace them.
+APEX Discovery Desktop is a workbench: it aggregates tools, it doesn't replace them.
 Anything the agent can reach is an **MCP server** (Model Context Protocol) or a
 **skill**. Both are pluggable — you don't touch app code to add one.
 

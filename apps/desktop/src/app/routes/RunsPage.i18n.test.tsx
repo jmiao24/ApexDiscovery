@@ -1,11 +1,6 @@
 import { screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { renderAt } from "@/test/render";
-import { useUiStore } from "@/lib/store";
-
-// COPYCAT RULE: useUiStore is module-global; reset the locale after each test
-// so this suite never bleeds a non-English locale into other test files.
-afterEach(() => useUiStore.getState().setLocale("en"));
 
 describe("RunsPage strings (i18n)", () => {
   it("renders the page heading and description in English", async () => {

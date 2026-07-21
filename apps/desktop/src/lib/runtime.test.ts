@@ -9,6 +9,7 @@ import {
   subagentActivity,
   tidyToolTitle,
   toolPresentation,
+  webResearchResultFromOutput,
   type FoldState,
 } from "./runtime";
 
@@ -60,10 +61,41 @@ describe("foldCarriageReturns", () => {
 });
 
 describe("toolPresentation", () => {
-  it("bash: verb Ran + de-noised command, over the model's description", () => {
+  it("does not infer a human description from a bash command", () => {
     expect(toolPresentation("bash", "install deps", { command: "cd x && pip install numpy" })).toEqual({
       verb: "Ran",
-      title: "pip install numpy",
+      title: "Missing activity description",
+      naturalTitle: true,
+    });
+  });
+  it("prefers the model-supplied human_description from the bridge protocol", () => {
+    expect(toolPresentation("bash", "python script.py", {
+      command: "python script.py",
+      human_description: "Building MC4R opportunity table",
+    })).toEqual({
+      verb: "Ran",
+      title: "Building MC4R opportunity table",
+      naturalTitle: true,
+    });
+  });
+  it("presents ExecuteCode with its required human description", () => {
+    expect(toolPresentation("execute_code", "ExecuteCode", {
+      code: "print(1)",
+      human_description: "Calculating cohort summary statistics",
+    })).toEqual({
+      verb: "Ran",
+      title: "Calculating cohort summary statistics",
+      naturalTitle: true,
+    });
+  });
+  it("presents custom web research with the model-authored action label", () => {
+    expect(toolPresentation("websearch", "WebSearch", {
+      query: "MC4R FDA evidence",
+      human_description: "Checking FDA MC4R evidence",
+    })).toEqual({
+      verb: "Searched",
+      title: "Checking FDA MC4R evidence",
+      naturalTitle: true,
     });
   });
   it("file tools: verb + relative path", () => {
@@ -78,6 +110,30 @@ describe("toolPresentation", () => {
   it("unknown tools keep the old fallback chain, no verb", () => {
     expect(toolPresentation("mcp_thing", "did something", {})).toEqual({ title: "did something" });
     expect(toolPresentation("mcp_thing", "", {})).toEqual({ title: "mcp_thing" });
+  });
+});
+
+describe("webResearchResultFromOutput", () => {
+  it("normalizes the bridge research envelope", () => {
+    expect(webResearchResultFromOutput(JSON.stringify({
+      kind: "search",
+      query: "MC4R evidence",
+      answer: "Supported summary",
+      sources: [{ title: "FDA label", url: "https://fda.gov/label" }],
+      result_count: 3,
+      duration_ms: 1250,
+    }))).toEqual({
+      kind: "search",
+      query: "MC4R evidence",
+      answer: "Supported summary",
+      sources: [{ title: "FDA label", url: "https://fda.gov/label" }],
+      resultCount: 3,
+      durationMs: 1250,
+    });
+  });
+
+  it("rejects unrelated tool output", () => {
+    expect(webResearchResultFromOutput("plain stdout")).toBeUndefined();
   });
 });
 
@@ -157,6 +213,48 @@ describe("foldEvent", () => {
     expect(s.blocks).toHaveLength(0);
   });
 
+  it("drops empty Codex open-page placeholders instead of inventing a web search", () => {
+    const s = foldAll([
+      {
+        type: "tool.updated",
+        sessionId: S,
+        callId: "ws-empty",
+        tool: "websearch",
+        status: "success",
+        title: "web search",
+        input: { pattern: "" },
+      },
+    ]);
+    expect(s.blocks).toHaveLength(0);
+  });
+
+  it("keeps real built-in and rich APEX web searches", () => {
+    const s = foldAll([
+      {
+        type: "tool.updated",
+        sessionId: S,
+        callId: "ws-query",
+        tool: "websearch",
+        status: "success",
+        title: "MC4R clinical evidence",
+        input: { pattern: "MC4R clinical evidence" },
+      },
+      {
+        type: "tool.updated",
+        sessionId: S,
+        callId: "ws-rich",
+        tool: "websearch",
+        status: "success",
+        title: "Checking MC4R clinical evidence",
+        input: {
+          query: "MC4R clinical evidence",
+          human_description: "Checking MC4R clinical evidence",
+        },
+      },
+    ]);
+    expect(s.blocks).toHaveLength(2);
+  });
+
   it("never blanks a tool row when the completed event reports an empty title", () => {
     // Completed MCP tool parts carry title: "" — the tool name must survive.
     const s = foldAll([
@@ -197,18 +295,19 @@ describe("foldEvent", () => {
 
   it("carries a running bash step's live output tail, \\r-folded; completion clears it", () => {
     const s1 = foldAll([
-      { type: "tool.updated", sessionId: S, callId: "c1", tool: "bash", status: "running", input: { command: "python train.py" }, startedAt: 1000, partialOutput: "epoch 1:  10%\repoch 1:  50%\n" },
+      { type: "tool.updated", sessionId: S, callId: "c1", tool: "bash", status: "running", input: { command: "python train.py", human_description: "Training the cohort prediction model" }, startedAt: 1000, partialOutput: "epoch 1:  10%\repoch 1:  50%\n" },
     ]);
     expect(s1.blocks[0]).toMatchObject({
       kind: "tool-call",
-      title: "python train.py",
+      title: "Training the cohort prediction model",
       verb: "Ran",
+      naturalTitle: true,
       status: "running",
       partialOutput: "epoch 1:  50%\n",
       startedAt: 1000,
     });
     const s2 = foldAll(
-      [{ type: "tool.updated", sessionId: S, callId: "c1", tool: "bash", status: "success", input: { command: "python train.py" }, output: "epoch 1: 100%\ndone\n", endedAt: 5000 }],
+      [{ type: "tool.updated", sessionId: S, callId: "c1", tool: "bash", status: "success", input: { command: "python train.py", human_description: "Training the cohort prediction model" }, output: "epoch 1: 100%\ndone\n", endedAt: 5000 }],
       s1,
     );
     expect(s2.blocks[0]).toMatchObject({
@@ -253,17 +352,32 @@ describe("subagent activity", () => {
         status: "running",
         title: "Visual QA for slides",
         childSessionId: "ses_child",
+        input: {
+          task: "Inspect every rendered slide",
+          sandbox: "danger-full-access",
+          tools: ["Bash", "ExecuteCode"],
+          skills: ["slides", "visual-qa"],
+          available_skill_count: 12,
+        },
       },
     ]);
-    expect(s.blocks[0]).toMatchObject({ kind: "tool-call", childSessionId: "ses_child" });
+    expect(s.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      childSessionId: "ses_child",
+      subagentTask: "Inspect every rendered slide",
+      subagentSandbox: "danger-full-access",
+      subagentTools: ["Bash", "ExecuteCode"],
+      subagentSkills: ["slides", "visual-qa"],
+      subagentAvailableSkillCount: 12,
+    });
   });
 
   it("subagentActivity: shows the child's latest tool step", () => {
     const child = foldAll([
-      { type: "tool.updated", sessionId: "ses_child", callId: "k1", tool: "bash", status: "success", title: "pdftoppm -jpeg slides.pdf" },
-      { type: "tool.updated", sessionId: "ses_child", callId: "k2", tool: "bash", status: "running", title: "python3 analyze slide-03.jpg" },
+      { type: "tool.updated", sessionId: "ses_child", callId: "k1", tool: "bash", status: "success", title: "pdftoppm -jpeg slides.pdf", input: { human_description: "Rendering the slide deck pages" } },
+      { type: "tool.updated", sessionId: "ses_child", callId: "k2", tool: "bash", status: "running", title: "python3 analyze slide-03.jpg", input: { human_description: "Inspecting the rendered slide image" } },
     ]);
-    expect(subagentActivity(child.blocks)).toBe("python3 analyze slide-03.jpg");
+    expect(subagentActivity(child.blocks)).toBe("Inspecting the rendered slide image");
   });
 
   it("subagentActivity: 'Writing…' while the child is streaming text", () => {
@@ -347,6 +461,51 @@ describe("historyToThread", () => {
     expect(t.blocks[2]).toMatchObject({ kind: "tool-call", status: "success" });
   });
 
+  it("restores rich web research instead of exposing its JSON envelope", () => {
+    const output = JSON.stringify({
+      kind: "fetch",
+      url: "https://www.fda.gov/label",
+      answer: "FDA label summary",
+      sources: [{ title: "FDA label", url: "https://www.fda.gov/label" }],
+      result_count: 1,
+      duration_ms: 400,
+    });
+    const t = historyToThread([{ role: "assistant", parts: [{
+      type: "tool",
+      tool: "webfetch",
+      state: {
+        status: "completed",
+        title: "Reading FDA label",
+        input: { url: "https://www.fda.gov/label", human_description: "Reading FDA label" },
+        output,
+      },
+    }] }]);
+    expect(t.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      tool: "webfetch",
+      naturalTitle: true,
+      webResult: {
+        kind: "fetch",
+        answer: "FDA label summary",
+        resultCount: 1,
+      },
+    });
+    expect(t.blocks[0]).not.toHaveProperty("output");
+  });
+
+  it("removes persisted empty Codex web-search placeholders", () => {
+    const t = historyToThread([{ role: "assistant", parts: [{
+      type: "tool",
+      tool: "websearch",
+      state: {
+        status: "completed",
+        title: "web search",
+        input: { pattern: "" },
+      },
+    }] }]);
+    expect(t.blocks).toEqual([]);
+  });
+
   it("restores a persisted subagent parent/child link on task history", () => {
     const t = historyToThread([{ role: "assistant", parts: [{
       type: "tool",
@@ -354,6 +513,13 @@ describe("historyToThread", () => {
       state: {
         status: "completed",
         title: "Literature Agent — evidence returned",
+        input: {
+          task: "Review the MC4R clinical literature",
+          sandbox: "workspace-write",
+          tools: ["Live web research", "Bash"],
+          skills: ["paperclip"],
+          available_skill_count: 9,
+        },
         metadata: { sessionId: "ses_literature_1" },
       },
     }] }]);
@@ -361,6 +527,11 @@ describe("historyToThread", () => {
       kind: "tool-call",
       tool: "task",
       childSessionId: "ses_literature_1",
+      subagentTask: "Review the MC4R clinical literature",
+      subagentSandbox: "workspace-write",
+      subagentTools: ["Live web research", "Bash"],
+      subagentSkills: ["paperclip"],
+      subagentAvailableSkillCount: 9,
     });
   });
 
@@ -377,7 +548,7 @@ describe("historyToThread", () => {
           {
             type: "tool",
             tool: "bash",
-            state: { status: "completed", title: "", input: { command: "pwd" }, output: "/ws/here\n" },
+            state: { status: "completed", title: "", input: { command: "pwd", human_description: "Running direct shell command" }, output: "/ws/here\n" },
           },
         ],
       },
@@ -387,8 +558,9 @@ describe("historyToThread", () => {
       { kind: "user", text: "! pwd" },
       {
         kind: "tool-call",
-        title: "pwd",
+        title: "Running direct shell command",
         verb: "Ran",
+        naturalTitle: true,
         tool: "bash",
         command: "pwd",
         status: "success",
@@ -398,7 +570,7 @@ describe("historyToThread", () => {
     ]);
   });
 
-  it("falls back to the bash command as the row title (agent steps too)", () => {
+  it("shows an explicit missing-description state for historical agent steps", () => {
     const msgs: HistoryMessage[] = [
       {
         role: "assistant",
@@ -408,7 +580,11 @@ describe("historyToThread", () => {
       },
     ];
     const t = historyToThread(msgs);
-    expect(t.blocks[0]).toMatchObject({ kind: "tool-call", title: "ls -la" });
+    expect(t.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      title: "Missing activity description",
+      naturalTitle: true,
+    });
     // An agent bash step (no synthetic marker) never shows inline output.
     expect(t.blocks[0]).not.toHaveProperty("outputSummary");
   });

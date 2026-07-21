@@ -1,12 +1,7 @@
 import { screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { renderAt } from "@/test/render";
-import { useUiStore } from "@/lib/store";
 import { useRuntimeStore } from "@/lib/runtime";
-
-// COPYCAT RULE: useUiStore is module-global; reset the locale after each test
-// so this suite never bleeds a non-English locale into other test files.
-afterEach(() => useUiStore.getState().setLocale("en"));
 
 // COPYCAT RULE: useRuntimeStore is also module-global — restore the
 // disconnected default after any test that fakes a "ready" runtime.

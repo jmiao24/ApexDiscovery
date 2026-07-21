@@ -244,9 +244,11 @@ fn resolve_source(
     let source = request.source.trim();
     if source.starts_with("https://") {
         if source.len() > 2048
-            || source
-                .split_once("://")
-                .is_some_and(|(_, rest)| rest.split('/').next().is_some_and(|host| host.contains('@')))
+            || source.split_once("://").is_some_and(|(_, rest)| {
+                rest.split('/')
+                    .next()
+                    .is_some_and(|host| host.contains('@'))
+            })
         {
             return Err("plugin Git URL must not contain credentials".to_string());
         }

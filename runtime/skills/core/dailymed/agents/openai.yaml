@@ -1,0 +1,4 @@
+interface:
+  display_name: "DailyMed"
+  short_description: "Query current U.S. drug and biologic labels"
+  default_prompt: "Use $dailymed to retrieve and summarize the current DailyMed label for a drug or biologic."

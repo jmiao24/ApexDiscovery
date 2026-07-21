@@ -2,7 +2,7 @@ import "@testing-library/jest-dom/vitest";
 
 // Node 25 exposes an experimental global localStorage without a backing file.
 // jsdom can inherit that incomplete object instead of its normal Storage
-// implementation, so repair it before i18n reads the saved locale.
+// implementation, so repair it before UI stores read persisted preferences.
 if (typeof window !== "undefined" && typeof window.localStorage?.getItem !== "function") {
   const values = new Map<string, string>();
   Object.defineProperty(window, "localStorage", {

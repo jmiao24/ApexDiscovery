@@ -130,7 +130,7 @@ vi.mock("@ai4s/sdk", () => {
         tool: "bash",
         status: "success",
         title: "",
-        input: { command },
+        input: { command, human_description: "Running direct shell command" },
         output: "/ws/mock\n",
       });
       mocks.fireEvent({ type: "session.idle", sessionId: sid });
@@ -410,14 +410,19 @@ describe("per-session workspace folders", () => {
     expect(s.sending).toBe(false);
   });
 
-  it("runShell: the bash row carries the command as title and the output inline", async () => {
+  it("runShell: the bash row carries a natural title and the output inline", async () => {
     await useRuntimeStore.getState().runShell("pwd");
     const bash = useRuntimeStore
       .getState()
       .threads["ses_new"].blocks.find((b) => b.kind === "tool-call");
-    // The shell endpoint reports an empty title — the command line stands in,
-    // and the output shows inline (it IS the result the user asked for).
-    expect(bash).toMatchObject({ title: "pwd", status: "success", outputSummary: "/ws/mock" });
+    // The raw command stays in the detail; the row is readable at a glance.
+    expect(bash).toMatchObject({
+      title: "Running direct shell command",
+      command: "pwd",
+      naturalTitle: true,
+      status: "success",
+      outputSummary: "/ws/mock",
+    });
   });
 
   it("an agent bash step (no shell turn) stays a quiet line without inline output", async () => {
@@ -429,15 +434,18 @@ describe("per-session workspace folders", () => {
       tool: "bash",
       status: "success",
       title: "install deps",
-      input: { command: "pip install numpy" },
+      input: { command: "pip install numpy", human_description: "Installing numerical analysis dependencies" },
       output: "lots of pip noise",
     });
     const bash = useRuntimeStore
       .getState()
       .threads["ses_new"].blocks.find((b) => b.kind === "tool-call");
-    // A bash step is titled by its (de-noised) command — the honest record —
-    // not the model's free-text description.
-    expect(bash).toMatchObject({ title: "pip install numpy", verb: "Ran", status: "success" });
+    expect(bash).toMatchObject({
+      title: "Installing numerical analysis dependencies",
+      verb: "Ran",
+      naturalTitle: true,
+      status: "success",
+    });
     expect((bash as { outputSummary?: string }).outputSummary).toBeUndefined();
   });
 
@@ -704,6 +712,27 @@ describe("stale running locks and interrupt", () => {
     expect(s.runningSessions["ses_new"]).toBeUndefined();
     expect(s.sending).toBe(false);
     expect(s.threads["ses_new"].blocks.slice(-1)[0]).toEqual({
+      kind: "status-line",
+      text: "Interrupted",
+      tone: "error",
+    });
+  });
+
+  it("interruptSession cancels a child task without changing the active parent", async () => {
+    useRuntimeStore.setState({
+      currentId: "ses_parent",
+      threads: {
+        ses_parent: { loaded: true, index: {}, blocks: [] },
+        ses_child: { loaded: true, index: {}, blocks: [] },
+      },
+      runningSessions: { ses_parent: true },
+    });
+    await useRuntimeStore.getState().interruptSession("ses_child");
+    expect(mocks.abortSession).toHaveBeenCalledWith("ses_child");
+    const s = useRuntimeStore.getState();
+    expect(s.currentId).toBe("ses_parent");
+    expect(s.runningSessions.ses_parent).toBe(true);
+    expect(s.threads.ses_child.blocks.slice(-1)[0]).toEqual({
       kind: "status-line",
       text: "Interrupted",
       tone: "error",

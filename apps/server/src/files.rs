@@ -62,7 +62,13 @@ pub async fn serve_file(
             let mut f = std::fs::File::open(&full).map_err(|e| e.to_string())?;
             f.seek(SeekFrom::Start(start)).map_err(|e| e.to_string())?;
             f.read_exact(&mut body).map_err(|e| e.to_string())?;
-            return Ok(FilePayload::Partial { mime, body, start, end, total });
+            return Ok(FilePayload::Partial {
+                mime,
+                body,
+                start,
+                end,
+                total,
+            });
         }
         let body = std::fs::read(&full).map_err(|e| e.to_string())?;
         Ok(FilePayload::Full { mime, body })
@@ -72,14 +78,29 @@ pub async fn serve_file(
     match result {
         Ok(Ok(payload)) => payload.into_response(),
         Ok(Err(_)) => (StatusCode::NOT_FOUND, "not found").into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("task failed: {e}")).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("task failed: {e}"),
+        )
+            .into_response(),
     }
 }
 
 enum FilePayload {
-    Full { mime: &'static str, body: Vec<u8> },
-    Partial { mime: &'static str, body: Vec<u8>, start: u64, end: u64, total: u64 },
-    Unsatisfiable { total: u64 },
+    Full {
+        mime: &'static str,
+        body: Vec<u8>,
+    },
+    Partial {
+        mime: &'static str,
+        body: Vec<u8>,
+        start: u64,
+        end: u64,
+        total: u64,
+    },
+    Unsatisfiable {
+        total: u64,
+    },
 }
 
 impl IntoResponse for FilePayload {
@@ -95,11 +116,20 @@ impl IntoResponse for FilePayload {
                 body,
             )
                 .into_response(),
-            FilePayload::Partial { mime, body, start, end, total } => (
+            FilePayload::Partial {
+                mime,
+                body,
+                start,
+                end,
+                total,
+            } => (
                 StatusCode::PARTIAL_CONTENT,
                 [
                     (header::CONTENT_TYPE, mime.to_string()),
-                    (header::CONTENT_RANGE, format!("bytes {start}-{end}/{total}")),
+                    (
+                        header::CONTENT_RANGE,
+                        format!("bytes {start}-{end}/{total}"),
+                    ),
                     (header::ACCEPT_RANGES, "bytes".to_string()),
                     (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
                 ],
@@ -136,7 +166,10 @@ pub async fn upload(State(state): State<Arc<AppState>>, mut multipart: Multipart
                 };
                 let bytes = match field.bytes().await {
                     Ok(b) => b,
-                    Err(e) => return (StatusCode::BAD_REQUEST, format!("upload failed: {e}")).into_response(),
+                    Err(e) => {
+                        return (StatusCode::BAD_REQUEST, format!("upload failed: {e}"))
+                            .into_response()
+                    }
                 };
                 let ws = ws.clone();
                 let written = tokio::task::spawn_blocking(move || {
@@ -147,18 +180,23 @@ pub async fn upload(State(state): State<Arc<AppState>>, mut multipart: Multipart
                         .to_string_lossy()
                         .to_string();
                     let name = unique_name(&ws, &base);
-                    std::fs::write(ws.join(&name), &bytes).map_err(|e| format!("write failed: {e}"))?;
+                    std::fs::write(ws.join(&name), &bytes)
+                        .map_err(|e| format!("write failed: {e}"))?;
                     Ok::<String, String>(name)
                 })
                 .await;
                 match written {
                     Ok(Ok(name)) => added.push(name),
                     Ok(Err(e)) => return (StatusCode::BAD_REQUEST, e).into_response(),
-                    Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+                    Err(e) => {
+                        return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+                    }
                 }
             }
             Ok(None) => break,
-            Err(e) => return (StatusCode::BAD_REQUEST, format!("upload failed: {e}")).into_response(),
+            Err(e) => {
+                return (StatusCode::BAD_REQUEST, format!("upload failed: {e}")).into_response()
+            }
         }
     }
 

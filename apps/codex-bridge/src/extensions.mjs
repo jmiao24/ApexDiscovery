@@ -87,17 +87,28 @@ export function readExtensionIndex(extensionsDir) {
 export function discoverSkills({
   directory,
   home,
+  codexHome,
   extensionsDir,
   bundledSkillRoot,
+  coreSkillRoot,
+  systemSkillRoot,
+  additionalSkillRoots = [],
   adminSkillRoot = process.platform === "win32" ? null : "/etc/codex/skills",
+  allowedSkillNames,
 }) {
   const skills = [];
   for (const root of projectSkillRoots(directory)) {
     skills.push(...scanSkillRoot(root, "project"));
   }
   skills.push(...scanSkillRoot(home ? join(home, ".agents", "skills") : null, "user"));
+  skills.push(...scanSkillRoot(codexHome ? join(codexHome, "skills") : null, "user"));
   skills.push(...scanSkillRoot(adminSkillRoot, "admin"));
   skills.push(...scanSkillRoot(bundledSkillRoot, "builtin"));
+  skills.push(...scanSkillRoot(coreSkillRoot, "builtin"));
+  skills.push(...scanSkillRoot(systemSkillRoot, "builtin"));
+  for (const root of additionalSkillRoots) {
+    skills.push(...scanSkillRoot(root, "builtin"));
+  }
 
   for (const plugin of readExtensionIndex(extensionsDir)) {
     if (!plugin?.enabled || typeof plugin.path !== "string") continue;
@@ -110,7 +121,9 @@ export function discoverSkills({
 
   // Preserve scopes with duplicate names while avoiding the same file twice.
   const seen = new Set();
+  const allowed = Array.isArray(allowedSkillNames) ? new Set(allowedSkillNames) : null;
   return skills.filter((skill) => {
+    if (allowed && !allowed.has(skill.name)) return false;
     const key = resolve(skill.location);
     if (seen.has(key)) return false;
     seen.add(key);
@@ -241,19 +254,26 @@ export function toCodexMcpServers(servers, env = process.env) {
   return result;
 }
 
-export function pluginSkillContext(skills) {
-  const pluginSkills = skills.filter(
-    (skill) => skill.source === "plugin" || skill.source === "builtin",
-  );
-  if (!pluginSkills.length) return "";
-  const lines = pluginSkills.map(
-    (skill) => `- $${skill.name}: ${skill.description || "No description"} (${skill.location})`,
+export function skillCatalogContext(skills) {
+  const scopes = ["project", "user", "admin", "plugin", "builtin"];
+  const names = [...new Set(skills.map((skill) => skill.name))].sort();
+  const catalog = names.flatMap((name) => {
+    const matches = skills.filter((skill) => skill.name === name);
+    for (const source of scopes) {
+      const scoped = matches.filter((skill) => skill.source === source);
+      if (scoped.length) return [scoped.at(-1)];
+    }
+    return [];
+  });
+  if (!catalog.length) return "";
+  const lines = catalog.map(
+    (skill) => `- $${skill.name}: ${skill.description || "No description"} [${skill.source}] (${skill.location})`,
   );
   return [
-    "<apex_plugin_skills>",
-    "APEX installed these user-approved plugin skills. When the user explicitly names one, or the request clearly matches its description, read its SKILL.md completely before acting and follow it. Resolve relative files from the skill directory.",
+    "<apex_skill_catalog>",
+    "APEX discovered these installed and workspace skills. This catalog contains metadata only. When the user explicitly names one, or the request clearly matches its description, read its SKILL.md completely before acting and follow it. Resolve relative files from the skill directory.",
     ...lines,
-    "</apex_plugin_skills>",
+    "</apex_skill_catalog>",
   ].join("\n");
 }
 

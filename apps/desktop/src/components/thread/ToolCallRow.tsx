@@ -1,19 +1,17 @@
-import { AlertTriangle, Check, Clock, Loader2, ShieldQuestion, X } from "lucide-react";
+import { AlertTriangle, Ban, Check, Clock, Loader2, ShieldQuestion } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ToolCallBlock, ToolCallStatus } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 
-// Icon + tone per status. The aria-label text is looked up from
-// `session:tool.status.*` at render time (`t(\`tool.status.${status}\`)`) so it
-// reacts to locale changes — never cache the translated label in this
-// module-scope map.
+// Icon + tone per status. Keep display copy out of this module-scope map so the
+// row can obtain its typed English label from the shared UI catalog at render.
 export const STATUS: Record<ToolCallStatus, { icon: React.ReactNode; className: string }> = {
   pending: { icon: <Clock size={13} />, className: "text-muted" },
   running: { icon: <Loader2 size={13} className="animate-spin" />, className: "text-accent" },
   "waiting-approval": { icon: <ShieldQuestion size={14} />, className: "text-warn" },
   success: { icon: <Check size={13} />, className: "text-ok" },
   warning: { icon: <AlertTriangle size={14} />, className: "text-warn" },
-  failed: { icon: <X size={14} />, className: "text-error" },
+  failed: { icon: <Ban size={14} strokeWidth={1.75} />, className: "text-muted" },
 };
 
 // Mechanical steps that succeeded (or are pending/running) are recorded quietly,
@@ -41,7 +39,9 @@ export function ToolCallRow({ block, activity }: { block: ToolCallBlock; activit
         <span className={cn("shrink-0", s.className)} aria-label={t(`tool.status.${block.status}`)} role="img">
           {s.icon}
         </span>
-        {block.verb && <span className="shrink-0 text-muted">{t(`tool.verb.${block.verb}`)}</span>}
+        {block.verb && !block.naturalTitle && (
+          <span className="shrink-0 text-muted">{t(`tool.verb.${block.verb}`)}</span>
+        )}
         <span
           className={cn(
             "flex-1 truncate",

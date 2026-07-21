@@ -206,13 +206,16 @@ export function deriveArtifact(event: ToolUpdatedEvent): ArtifactBlock | null {
   const tool = (event.tool ?? "").toLowerCase();
   const input = event.input ?? {};
 
-  // Jupyter MCP tools name the notebook they operate on — surface it live.
+  // Explicit Jupyter tools create user-facing notebooks. ExecuteCode's ipynb
+  // is an internal reproducibility trace and stays behind the inline REPL UI.
   if (tool.includes("jupyter")) {
     const nb = firstString(input, ["notebook_path", "path", "document_id"]);
     if (!nb || !nb.endsWith(".ipynb")) return null;
     const filename = nb.split(/[\\/]/).pop() || nb;
     return { kind: "artifact", path: nb, filename, artifact: "notebook", tool: event.tool };
   }
+
+  if (tool === "execute_code") return null;
 
   if (!WRITE_TOOLS.has(tool)) return null;
 

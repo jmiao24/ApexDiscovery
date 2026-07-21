@@ -1,14 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   ArtifactInspector as ArtifactInspectorT,
   NotebookInspector as NotebookInspectorT,
   FilePreviewInspector as FilePreviewInspectorT,
   PdfInspector as PdfInspectorT,
 } from "@ai4s/shared";
-import { useUiStore } from "@/lib/store";
 import { ArtifactInspector } from "./ArtifactInspector";
 import { NotebookInspector } from "./NotebookInspector";
 import { FilePreviewInspector } from "./FilePreviewInspector";
@@ -25,10 +24,6 @@ vi.mock("@/lib/provenance", () => ({
   listProvenance: (path: string) => listProvenance(path),
   readEnvLockfile: vi.fn(),
 }));
-
-// COPYCAT RULE: useUiStore is module-global; reset the locale after each test
-// so this suite never bleeds a non-English locale into other test files.
-afterEach(() => useUiStore.getState().setLocale("en"));
 
 describe("ArtifactInspector strings (i18n)", () => {
   const data: ArtifactInspectorT = {

@@ -1,0 +1,4 @@
+interface:
+  display_name: "DepMap"
+  short_description: "Evaluate cancer dependencies and predictive biomarkers"
+  default_prompt: "Use $depmap to assess whether a cancer target is a selective, reproducible dependency and identify the most informative models and biomarkers."

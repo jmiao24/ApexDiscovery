@@ -37,11 +37,43 @@ use tower_http::services::{ServeDir, ServeFile};
 use shell_core::ShellCtx;
 use state::AppState;
 
+const DEFAULT_DATA_DIR_NAME: &str = ".apex-science";
+const LEGACY_DATA_DIR_NAME: &str = ".openscience-server";
+
 fn env_path(key: &str) -> Option<PathBuf> {
     std::env::var(key)
         .ok()
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
+}
+
+fn default_data_dir(home: &str) -> PathBuf {
+    let home = PathBuf::from(home);
+    let current = home.join(DEFAULT_DATA_DIR_NAME);
+    let legacy = home.join(LEGACY_DATA_DIR_NAME);
+
+    if current.exists() || !legacy.exists() {
+        return current;
+    }
+
+    match std::fs::rename(&legacy, &current) {
+        Ok(()) => {
+            eprintln!(
+                "migrated APEX Discovery data from {} to {}",
+                legacy.display(),
+                current.display()
+            );
+            current
+        }
+        Err(error) => {
+            eprintln!(
+                "warning: could not migrate {} to {}: {error}; using the legacy directory for this run",
+                legacy.display(),
+                current.display()
+            );
+            legacy
+        }
+    }
 }
 
 /// One `--flag value` from argv, or None.
@@ -89,7 +121,7 @@ async fn main() {
              --host <ip>            bind address            APEX_HOST      (default 127.0.0.1)\n\
              --port <port>          bind port               APEX_PORT      (default: automatic on localhost)\n\
              --token <token>        login token             APEX_TOKEN     (default: generated, printed)\n\
-             --data-dir <dir>       app-private data dir    APEX_DATA_DIR  (default ~/.openscience-server)\n\
+             --data-dir <dir>       app-private data dir    APEX_DATA_DIR  (default ~/.apex-science)\n\
              --frontend-dir <dir>   built frontend to serve APEX_FRONTEND_DIR (default ./dist)\n\
              --resource-dir <dir>   bundled skills/harness  APEX_RESOURCE_DIR (optional)\n\
              --opencode-bin <path>  agent sidecar           APEX_OPENCODE_BIN (default: next to server, then PATH)\n\
@@ -113,7 +145,7 @@ async fn main() {
     let data_dir = arg_value(&args, "--data-dir")
         .map(PathBuf::from)
         .or_else(|| env_path("APEX_DATA_DIR"))
-        .unwrap_or_else(|| PathBuf::from(&home).join(".openscience-server"));
+        .unwrap_or_else(|| default_data_dir(&home));
     let frontend_dir = arg_value(&args, "--frontend-dir")
         .map(PathBuf::from)
         .or_else(|| env_path("APEX_FRONTEND_DIR"))
@@ -202,7 +234,7 @@ async fn main() {
         .unwrap_or_else(|e| panic!("could not bind {addr}: {e}"));
 
     let bound_addr = listener.local_addr().expect("bound address");
-    eprintln!("ApexScience server listening on http://{bound_addr}");
+    eprintln!("APEX Discovery server listening on http://{bound_addr}");
     if generated {
         eprintln!("login token (set APEX_TOKEN to pin one): {token}");
     }
@@ -233,4 +265,70 @@ async fn main() {
         })
         .await
         .expect("server error");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{default_data_dir, DEFAULT_DATA_DIR_NAME, LEGACY_DATA_DIR_NAME};
+    use std::fs;
+
+    fn temporary_home(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "apex-data-dir-{name}-{}-{}",
+            std::process::id(),
+            shell_core::util::random_hex(6)
+        ))
+    }
+
+    #[test]
+    fn uses_the_apex_science_directory_for_new_installs() {
+        let home = temporary_home("new");
+        fs::create_dir_all(&home).unwrap();
+
+        assert_eq!(
+            default_data_dir(home.to_str().unwrap()),
+            home.join(DEFAULT_DATA_DIR_NAME)
+        );
+
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn migrates_the_legacy_directory_when_the_new_directory_is_absent() {
+        let home = temporary_home("migrate");
+        let legacy = home.join(LEGACY_DATA_DIR_NAME);
+        fs::create_dir_all(legacy.join("runtime")).unwrap();
+        fs::write(legacy.join("runtime/session.txt"), "session-state").unwrap();
+
+        let current = default_data_dir(home.to_str().unwrap());
+
+        assert_eq!(current, home.join(DEFAULT_DATA_DIR_NAME));
+        assert!(!legacy.exists());
+        assert_eq!(
+            fs::read_to_string(current.join("runtime/session.txt")).unwrap(),
+            "session-state"
+        );
+
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn preserves_both_directories_when_the_new_directory_already_exists() {
+        let home = temporary_home("existing");
+        let current = home.join(DEFAULT_DATA_DIR_NAME);
+        let legacy = home.join(LEGACY_DATA_DIR_NAME);
+        fs::create_dir_all(&current).unwrap();
+        fs::create_dir_all(&legacy).unwrap();
+        fs::write(current.join("owner"), "current").unwrap();
+        fs::write(legacy.join("owner"), "legacy").unwrap();
+
+        assert_eq!(default_data_dir(home.to_str().unwrap()), current);
+        assert_eq!(
+            fs::read_to_string(current.join("owner")).unwrap(),
+            "current"
+        );
+        assert_eq!(fs::read_to_string(legacy.join("owner")).unwrap(), "legacy");
+
+        fs::remove_dir_all(home).unwrap();
+    }
 }

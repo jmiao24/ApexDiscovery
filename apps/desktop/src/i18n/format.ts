@@ -1,12 +1,10 @@
-import i18n from "./index";
-
-/** Format a number in the active UI locale. */
+/** Format a number for the English-only UI. */
 export function formatNumber(n: number, opts?: Intl.NumberFormatOptions): string {
-  return new Intl.NumberFormat(i18n.language, opts).format(n);
+  return new Intl.NumberFormat("en", opts).format(n);
 }
 
-/** Format a date/timestamp in the active UI locale.
+/** Format a date/timestamp for the English-only UI.
  *  Accepts a Date or a millisecond epoch. */
 export function formatDate(value: Date | number, opts?: Intl.DateTimeFormatOptions): string {
-  return new Intl.DateTimeFormat(i18n.language, opts).format(value);
+  return new Intl.DateTimeFormat("en", opts).format(value);
 }

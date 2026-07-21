@@ -13,7 +13,7 @@ fn git_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
-const AUTHOR_NAME: &str = "APEX Science Desktop";
+const AUTHOR_NAME: &str = "APEX Discovery Desktop";
 const AUTHOR_EMAIL: &str = "open-science-desktop@local";
 
 fn git(root: &Path) -> std::process::Command {

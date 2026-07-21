@@ -159,7 +159,12 @@ mod tests {
         )
         .await;
         assert_eq!(first.status(), StatusCode::SEE_OTHER);
-        let cookie = first.headers().get(header::SET_COOKIE).unwrap().to_str().unwrap();
+        let cookie = first
+            .headers()
+            .get(header::SET_COOKIE)
+            .unwrap()
+            .to_str()
+            .unwrap();
         assert!(cookie.contains(&state.session_token));
         assert!(!cookie.contains("one-time"));
         assert!(!cookie.contains("manual-token"));

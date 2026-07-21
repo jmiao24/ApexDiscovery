@@ -19,6 +19,7 @@ import type {
   RuntimeStatus,
   SessionMeta,
   SkillInfo,
+  SkillDocument,
   ToolCallStatus,
 } from "./types";
 import { DEFAULT_OPENCODE_URL } from "./types";
@@ -352,6 +353,20 @@ export class OpenCodeClient {
     if (!res.ok) throw await this.apiError(res, "Failed to list skills");
     const body = (await res.json()) as { data?: SkillInfo[] };
     return body.data ?? [];
+  }
+
+  /** Read one installed skill by its catalog path. The runtime rejects paths
+   *  that are not exact entries in the current workspace's skill catalog. */
+  async readSkill(path: string): Promise<SkillDocument> {
+    const params = new URLSearchParams({ path });
+    if (this.directory) params.set("directory", this.directory);
+    const res = await this.fetchImpl(`${this.baseUrl}/api/skill/content?${params}`, {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw await this.apiError(res, "Failed to read skill");
+    const body = (await res.json()) as { data?: SkillDocument };
+    if (!body.data) throw new Error("Failed to read skill: runtime returned no document");
+    return body.data;
   }
 
   /** The configured default model ("provider/model"), or null when unset. */

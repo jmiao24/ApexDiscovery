@@ -9,7 +9,7 @@ import {
   effectiveMcpServers,
   invokedSkills,
   loadedSkillContext,
-  pluginSkillContext,
+  skillCatalogContext,
   toCodexMcpServers,
 } from "./extensions.mjs";
 
@@ -23,19 +23,62 @@ test("discovers Codex project, user, and enabled plugin skills", () => {
   try {
     const project = join(root, "repo", "nested");
     const home = join(root, "home");
+    const codexHome = join(root, "codex-home");
     const extensions = join(root, "extensions");
     const plugin = join(extensions, "plugins", "papers");
     mkdirSync(join(root, "repo", ".git"), { recursive: true });
     mkdirSync(project, { recursive: true });
     write(join(root, "repo", ".agents", "skills", "repo-skill", "SKILL.md"), "---\nname: repo-skill\ndescription: Repository workflow\n---\n");
     write(join(home, ".agents", "skills", "user-skill", "SKILL.md"), "---\nname: user-skill\ndescription: User workflow\n---\n");
+    write(join(codexHome, "skills", "codex-skill", "SKILL.md"), "---\nname: codex-skill\ndescription: Codex user workflow\n---\n");
     write(join(plugin, ".codex-plugin", "plugin.json"), JSON.stringify({ skills: "./skills" }));
     write(join(plugin, "skills", "paper", "SKILL.md"), "---\nname: paper\ndescription: Search papers\n---\n");
     write(join(extensions, "index.json"), JSON.stringify({ plugins: [{ name: "papers", path: plugin, enabled: true }] }));
 
-    const skills = discoverSkills({ directory: project, home, extensionsDir: extensions, adminSkillRoot: null });
-    assert.deepEqual(skills.map((skill) => skill.name).sort(), ["paper", "repo-skill", "user-skill"]);
-    assert.match(pluginSkillContext(skills), /\$paper: Search papers/);
+    const skills = discoverSkills({ directory: project, home, codexHome, extensionsDir: extensions, adminSkillRoot: null });
+    assert.deepEqual(skills.map((skill) => skill.name).sort(), ["codex-skill", "paper", "repo-skill", "user-skill"]);
+    const catalog = skillCatalogContext(skills);
+    assert.match(catalog, /<apex_skill_catalog>/);
+    assert.match(catalog, /\$paper: Search papers \[plugin\]/);
+    assert.match(catalog, /\$repo-skill: Repository workflow \[project\]/);
+    assert.match(catalog, /\$user-skill: User workflow \[user\]/);
+    assert.match(catalog, /\$codex-skill: Codex user workflow \[user\]/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("discovers Codex system skills and applies an explicit allowlist", () => {
+  const root = mkdtempSync(join(tmpdir(), "apex-skills-"));
+  try {
+    const home = join(root, "home");
+    const codexHome = join(root, "codex-home");
+    const coreSkillRoot = join(root, "runtime", "skills", "core");
+    const systemSkillRoot = join(codexHome, "skills", ".system");
+    const additionalSkillRoot = join(root, "external", "skills");
+    write(join(home, ".agents", "skills", "paperclip", "SKILL.md"), "---\nname: paperclip\ndescription: Search papers\n---\n");
+    write(join(home, ".agents", "skills", "unrelated", "SKILL.md"), "---\nname: unrelated\ndescription: Hide this skill\n---\n");
+    write(join(coreSkillRoot, "depmap", "SKILL.md"), "---\nname: depmap\ndescription: Analyze cancer dependencies\n---\n");
+    write(join(systemSkillRoot, "imagegen", "SKILL.md"), "---\nname: imagegen\ndescription: Generate images\n---\n");
+    write(join(additionalSkillRoot, "rare-variant-burden", "SKILL.md"), "---\nname: rare-variant-burden\ndescription: Analyze rare variants\n---\n");
+
+    const skills = discoverSkills({
+      home,
+      codexHome,
+      coreSkillRoot,
+      systemSkillRoot,
+      additionalSkillRoots: [additionalSkillRoot],
+      adminSkillRoot: null,
+      allowedSkillNames: ["paperclip", "depmap", "imagegen", "rare-variant-burden"],
+    });
+
+    assert.deepEqual(
+      skills.map((skill) => skill.name),
+      ["paperclip", "depmap", "imagegen", "rare-variant-burden"],
+    );
+    assert.equal(skills.find((skill) => skill.name === "depmap")?.source, "builtin");
+    assert.equal(skills.find((skill) => skill.name === "imagegen")?.source, "builtin");
+    assert.equal(skills.find((skill) => skill.name === "rare-variant-burden")?.source, "builtin");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

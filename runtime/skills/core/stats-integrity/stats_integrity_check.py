@@ -3,8 +3,8 @@
 
 Three deterministic checks that guard the decisive social-science risks:
 sycophantic over-interpretation, silent p-hacking / HARKing, and irreproducible
-randomness. Like the domain-correctness gate, this analyses what was actually
-written (report prose + analysis code + a preregistration plan) — never model
+randomness. It analyses what was actually written (report prose + analysis
+code + a preregistration plan) — never model
 recall — and emits the app's structured `review` contract. It flags specific
 risk patterns; it never certifies an analysis as sound.
 

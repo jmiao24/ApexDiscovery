@@ -15,7 +15,7 @@ import { resolveArtifactPath } from "@/lib/artifactFile";
 
 export function UserMessage({ block }: { block: UserMessageBlock }) {
   return (
-    <div className="rounded-card bg-surface-2 px-4 py-3 text-[15px] leading-relaxed text-text">
+    <div className="ml-auto max-w-[88%] rounded-[26px] bg-[var(--user-bubble)] px-6 py-4 text-[17px] leading-7 text-text">
       {block.text}
     </div>
   );
@@ -24,9 +24,11 @@ export function UserMessage({ block }: { block: UserMessageBlock }) {
 export function AgentMessage({
   markdown,
   onOpenArtifact,
+  onOpenSkillPath,
 }: {
   markdown: string;
   onOpenArtifact?: (a: ArtifactBlock) => void;
+  onOpenSkillPath?: (path: string) => void;
 }) {
   const { t } = useTranslation(["session", "common"]);
   // Files the agent mentions (e.g. a PDF produced by running code) become clickable.
@@ -52,9 +54,21 @@ export function AgentMessage({
       cancelled = true;
     };
   }, [mentionedKey]);
+  const openInstalledSkill = (href: string): boolean => {
+    let path: string;
+    try {
+      path = decodeURIComponent(href);
+    } catch {
+      return false;
+    }
+    const absolute = path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path);
+    if (!absolute || !/[\\/]SKILL\.md$/i.test(path) || !onOpenSkillPath) return false;
+    onOpenSkillPath(path);
+    return true;
+  };
   return (
     <div>
-      <MarkdownViewer>{markdown}</MarkdownViewer>
+      <MarkdownViewer onLinkClick={openInstalledSkill}>{markdown}</MarkdownViewer>
       {refs.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
           {refs.map((path) => (

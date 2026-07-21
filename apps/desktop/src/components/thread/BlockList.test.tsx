@@ -33,6 +33,7 @@ describe("BlockList", () => {
 
   it("keeps every child action under the task and opens the full child session", () => {
     const onSubagentOpen = vi.fn();
+    const onSubagentCancel = vi.fn();
     render(
       <BlockList
         blocks={[
@@ -42,6 +43,12 @@ describe("BlockList", () => {
             title: "Literature Agent — researching evidence",
             status: "running",
             childSessionId: "ses_literature",
+            subagentName: "Claude Agent",
+            subagentTask: "Find primary evidence for MC4R obesity programs",
+            subagentSandbox: "danger-full-access",
+            subagentTools: ["Live web research", "Bash", "ExecuteCode"],
+            subagentSkills: ["paperclip", "open-targets"],
+            subagentAvailableSkillCount: 14,
           },
         ]}
         handlers={{
@@ -63,13 +70,23 @@ describe("BlockList", () => {
             },
           ],
           onSubagentOpen,
+          onSubagentCancel,
         }}
       />,
     );
 
+    expect(screen.getByText("Claude Agent")).toBeInTheDocument();
+    expect(screen.getByText("Find primary evidence for MC4R obesity programs")).toBeInTheDocument();
+    expect(screen.getByText("Full access")).toBeInTheDocument();
+    expect(screen.getByText("Cannot launch subagents")).toBeInTheDocument();
+    expect(screen.getByText("Live web research")).toBeInTheDocument();
+    expect(screen.getByText("$paperclip")).toBeInTheDocument();
+    expect(screen.getByText("14 available")).toBeInTheDocument();
     expect(screen.getByText("MC4R obesity clinical trials")).toBeInTheDocument();
-    expect(screen.getByText("Querying ClinicalTrials.gov")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open full subagent session" }));
+    expect(screen.getAllByText("Querying ClinicalTrials.gov")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel subagent" }));
+    expect(onSubagentCancel).toHaveBeenCalledWith("ses_literature");
+    fireEvent.click(screen.getByRole("button", { name: "Open full task" }));
     expect(onSubagentOpen).toHaveBeenCalledWith("ses_literature");
   });
 
@@ -94,6 +111,7 @@ describe("BlockList", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /Literature Agent/ }));
     const summary = screen.getByRole("button", { name: /Ran 2 searches/ });
     fireEvent.click(summary);
     expect(screen.getByText("PubMed")).toBeInTheDocument();

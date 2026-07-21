@@ -21,7 +21,6 @@ import type {
 } from "@ai4s/sdk";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/lib/store";
-import { shippedLocales } from "@/i18n/config";
 import { getClient, useRuntimeStore } from "@/lib/runtime";
 import { useUpdateStore } from "@/lib/update";
 import {
@@ -58,8 +57,6 @@ import { cn } from "@/lib/cn";
 export function SettingsPage() {
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
-  const locale = useUiStore((s) => s.locale);
-  const setLocale = useUiStore((s) => s.setLocale);
   const { t } = useTranslation(["settings", "common"]);
   // Select each field individually. A bare `useRuntimeStore()` subscribed to the
   // WHOLE store, so every unrelated mutation (session events, streaming, idle
@@ -1217,34 +1214,6 @@ export function SettingsPage() {
               </button>
             ))}
           </div>
-          <div className="mt-4">
-            <div className="mb-2 text-xs font-medium text-muted">{t("language.label")}</div>
-            <div
-              role="group"
-              aria-label={t("language.label")}
-              className="grid grid-cols-2 gap-1.5 sm:grid-cols-4"
-            >
-              {shippedLocales().map((l) => {
-                const active = locale === l.code;
-                return (
-                  <button
-                    key={l.code}
-                    onClick={() => setLocale(l.code)}
-                    className={cn(
-                      "rounded-input border px-2.5 py-2 text-left text-[13px] transition-colors",
-                      active
-                        ? "border-accent bg-accent/10 text-text shadow-sm"
-                        : "border-border bg-surface text-muted hover:bg-surface-2 hover:text-text",
-                    )}
-                    aria-pressed={active}
-                  >
-                    <span className="block truncate font-medium">{l.nativeName}</span>
-                    <span className="block truncate text-[10.5px] text-muted">{l.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </Card>
 
         {/* ---- App updates ---- */}
@@ -1281,13 +1250,13 @@ export function SettingsPage() {
           {latestUpdate?.publishedAt && (
             <div className="mt-2 text-xs text-muted">
               {t("updates.publishedAt", {
-                date: new Date(latestUpdate.publishedAt).toLocaleString(locale),
+                date: new Date(latestUpdate.publishedAt).toLocaleString("en"),
               })}
             </div>
           )}
           {lastCheckedAt && (
             <div className="mt-1 text-xs text-muted">
-              {t("updates.lastChecked", { date: new Date(lastCheckedAt).toLocaleString(locale) })}
+              {t("updates.lastChecked", { date: new Date(lastCheckedAt).toLocaleString("en") })}
             </div>
           )}
           {updateStatus === "error" && updateError && (

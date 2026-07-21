@@ -87,26 +87,21 @@
   },
   "starters": {
     "newSession": "New session",
-    "heading": "What should we look into?",
-    "subheading": "Describe your analysis below — or start from one of these.",
-    "demo": {
-      "title": "Run a demo analysis, end to end",
-      "description": "Simulate a dataset, fit a model, and produce a figure and a traceable report."
+    "poweredBy": "Powered by",
+    "atlasName": "Molecules Opportunity Atlas",
+    "heading": "Where is the next molecule opportunity?",
+    "subheading": "Connect assets, targets, mechanisms, modalities, indications, and evidence in a traceable, source-linked map for scientific decisions.",
+    "rank-expansion": {
+      "title": "Rank label-expansion opportunities"
     },
-    "analyze": {
-      "title": "Analyze my data",
-      "description": "Point the agent at a file you added; get figures and a report back."
+    "evaluate-candidate": {
+      "title": "Evaluate one new indication"
     },
-    "audit": {
-      "title": "Audit a report for traceability",
-      "description": "Check citations, unsourced numbers, and figure-versus-code consistency."
+    "compare-candidates": {
+      "title": "Compare two expansion candidates"
     },
-    "example-climate": {
-      "title": "Explore an example: climate trends",
-      "description": "Real NASA GISTEMP data — trend, decadal comparison, figure, and report."
-    },
-    "error": {
-      "setup": "Could not set up the example: {{message}}"
+    "evidence-gaps": {
+      "title": "Find the decisive evidence gaps"
     }
   },
   "live": {
@@ -118,7 +113,28 @@
     "connect": "Connect",
     "subagentFallback": "a subagent",
     "subagent": {
-      "openSession": "Open full subagent session"
+      "openSession": "Open full task",
+      "literatureAgent": "Literature Agent",
+      "assignedTask": "Assigned task",
+      "tools": "Tools",
+      "skills": "Loaded skills",
+      "availableSkills_one": "{{count}} available",
+      "availableSkills_other": "{{count}} available",
+      "noLoadedSkills": "No skills loaded explicitly",
+      "activity": "Activity",
+      "waitingForActivity": "Waiting for the first action…",
+      "fullAccess": "Full access",
+      "approveMode": "Approve mode",
+      "noNestedAgents": "Cannot launch subagents",
+      "cancel": "Cancel subagent",
+      "status": {
+        "pending": "Starting",
+        "running": "Running",
+        "waiting-approval": "Waiting for approval",
+        "success": "Completed",
+        "warning": "Needs attention",
+        "failed": "Stopped"
+      }
     },
     "header": {
       "expandSidebarAria": "Expand sidebar",
@@ -172,6 +188,16 @@
       "Listed": "Listed",
       "Fetched": "Fetched"
     },
+    "detail": {
+      "webSearch": "WEB SEARCH",
+      "webFetch": "WEB FETCH",
+      "query": "QUERY",
+      "url": "URL",
+      "summary": "SUMMARY",
+      "sources": "SOURCES",
+      "sourceCount_one": "{{count}} source",
+      "sourceCount_other": "{{count}} sources"
+    },
     "group": {
       "phrase": {
         "ran_one": "ran a command",
@@ -189,8 +215,7 @@
         "fetched_other": "fetched {{count}} pages",
         "default_one": "ran a step",
         "default_other": "ran {{count}} steps"
-      },
-      "failedCount": "{{count}} failed"
+      }
     }
   },
   "artifact": {

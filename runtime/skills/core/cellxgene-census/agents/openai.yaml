@@ -1,0 +1,4 @@
+interface:
+  display_name: "CELLxGENE Census"
+  short_description: "Query single-cell target expression evidence"
+  default_prompt: "Use $cellxgene-census to assess target expression across relevant tissues, cell types, diseases, donors, and datasets."

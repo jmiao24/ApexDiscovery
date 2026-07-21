@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { FlaskConical, FolderOpen, Loader2, NotebookPen, PanelLeft, PlugZap } from "lucide-react";
 import type { RuntimeStatus, SkillInspector } from "@ai4s/shared";
-import { DRAFT_KEY, rootSessionOf, subagentActivity, useRuntimeStore } from "@/lib/runtime";
+import { DRAFT_KEY, getClient, rootSessionOf, subagentActivity, useRuntimeStore } from "@/lib/runtime";
 import { queryRuns } from "@/lib/runs";
 import { useOverlayTitlebar, useUiStore } from "@/lib/store";
 import { fileInspectorFromBlock } from "@/lib/artifacts";
@@ -61,6 +61,7 @@ export function LiveSessionPage() {
     rejectQuestion,
     replyPermission,
     interrupt,
+    interruptSession,
     reconcileRunning,
     approvalMode,
     setApprovalMode,
@@ -131,6 +132,7 @@ export function LiveSessionPage() {
     subagentActivity: (childId) => subagentActivity(threads[childId]?.blocks),
     subagentTrace: (childId) => threads[childId]?.blocks,
     onSubagentOpen: (childId) => navigate(`/live/${childId}`),
+    onSubagentCancel: (childId) => void interruptSession(childId),
     onSkillOpen: (block) => {
       const inspector = skillInspectorFromBlock(block);
       if (!inspector) return;
@@ -139,6 +141,23 @@ export function LiveSessionPage() {
       setShowFiles(false);
       setShowRuns(false);
       setActiveSkill(inspector);
+    },
+    onSkillPathOpen: (path) => {
+      void getClient()?.readSkill(path).then((skill) => {
+        setSkillPickerOpen(false);
+        closeArtifact();
+        setShowFiles(false);
+        setShowRuns(false);
+        setActiveSkill({
+          variant: "skill",
+          name: skill.name,
+          path: skill.location,
+          source: skill.source ?? "unknown",
+          content: skill.content,
+        });
+      }).catch((cause) => {
+        console.error("Could not open installed skill", cause);
+      });
     },
   };
   const onEvaluate = (expr: string) => void sendPrompt(`Evaluate in the notebook kernel:\n\`\`\`python\n${expr}\n\`\`\``);
@@ -385,7 +404,7 @@ export function LiveSessionPage() {
         </div>
 
         <div ref={chatRef} onScroll={onChatScroll} className="flex-1 overflow-y-auto">
-          <div className="mx-auto flex max-w-[760px] flex-col gap-4 px-8 py-6">
+          <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-10 py-8">
             {/* Deliberate workspace switches don't render anything at all (they're
                 masked as connected); a genuine boot/reconnect shows only the
                 header badge's pulsing dot — anything appearing and disappearing
@@ -446,7 +465,7 @@ export function LiveSessionPage() {
         </div>
 
         <div className="px-8 pb-7 pt-3">
-          <div className="mx-auto max-w-[760px] space-y-3">
+          <div className="mx-auto max-w-[860px] space-y-3">
             {activeRequest && (
               <InteractionPrompt
                 question={activeQuestion}

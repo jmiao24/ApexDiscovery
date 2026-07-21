@@ -3,7 +3,6 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 import "./i18n";
-import { LocaleProvider } from "./app/providers/LocaleProvider";
 import { ThemeProvider } from "./app/providers/ThemeProvider";
 import { WebLogin } from "./app/WebLogin";
 import { initShell } from "./lib/tauri";
@@ -29,11 +28,9 @@ void initShell().then(({ shell, authenticated }) => {
   void import("./app/router").then(({ router }) => {
     root.render(
       <React.StrictMode>
-        <LocaleProvider>
-          <ThemeProvider>
-            <RouterProvider router={router} />
-          </ThemeProvider>
-        </LocaleProvider>
+        <ThemeProvider>
+          <RouterProvider router={router} />
+        </ThemeProvider>
       </React.StrictMode>,
     );
   });

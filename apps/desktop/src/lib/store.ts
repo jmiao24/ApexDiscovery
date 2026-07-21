@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { detectInitialLocale, LOCALE_KEY } from "@/i18n/config";
 import { isMacUA, isTauri, trafficLightsPresent } from "./tauri";
 
 export type Theme = "light" | "dark";
@@ -41,8 +40,6 @@ function initialInspectorWidth(): number {
 
 interface UiState {
   theme: Theme;
-  /** Active UI locale (BCP-47). Persisted; mirrors the `theme` pattern. */
-  locale: string;
   inspectorOpen: boolean;
   /** Right-pane width in px (persisted); the pane can also be maximized to
    *  cover the whole window (session-ephemeral, reset when the pane closes). */
@@ -59,7 +56,6 @@ interface UiState {
   composerDraft: string | null;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
-  setLocale: (locale: string) => void;
   setInspectorOpen: (open: boolean) => void;
   setInspectorWidth: (width: number) => void;
   setInspectorMaximized: (maximized: boolean) => void;
@@ -73,7 +69,6 @@ interface UiState {
 
 export const useUiStore = create<UiState>((set, get) => ({
   theme: initialTheme(),
-  locale: detectInitialLocale(),
   inspectorOpen: true,
   sidebarCollapsed:
     typeof window !== "undefined" && window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1",
@@ -85,10 +80,6 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ theme });
   },
   toggleTheme: () => get().setTheme(get().theme === "light" ? "dark" : "light"),
-  setLocale: (locale) => {
-    if (typeof window !== "undefined") window.localStorage.setItem(LOCALE_KEY, locale);
-    set({ locale });
-  },
   setInspectorOpen: (inspectorOpen) => set({ inspectorOpen }),
   inspectorWidth: initialInspectorWidth(),
   inspectorMaximized: false,

@@ -44,7 +44,12 @@ fn server_python() -> Option<String> {
             std::env::var("APEX_PYTHON")
                 .ok()
                 .filter(|p| !p.is_empty())
-                .or_else(|| ["python3", "python"].iter().find(|b| works(b)).map(|b| b.to_string()))
+                .or_else(|| {
+                    ["python3", "python"]
+                        .iter()
+                        .find(|b| works(b))
+                        .map(|b| b.to_string())
+                })
         })
         .clone()
 }
@@ -214,7 +219,10 @@ pub async fn run_command(
     let result = tokio::task::spawn_blocking(move || dispatch_blocking(&ctx, &name, params)).await;
     match result {
         Ok(resp) => resp,
-        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, format!("task failed: {e}")),
+        Err(e) => err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("task failed: {e}"),
+        ),
     }
 }
 
@@ -231,7 +239,9 @@ fn from_result<T: serde::Serialize>(r: Result<T, String>) -> Response {
 
 fn dispatch_blocking(ctx: &shell_core::ShellCtx, name: &str, params: Value) -> Response {
     match name {
-        "workspace_path" => from_result(workspace_dir(ctx).map(|p| p.to_string_lossy().to_string())),
+        "workspace_path" => {
+            from_result(workspace_dir(ctx).map(|p| p.to_string_lossy().to_string()))
+        }
         "workspace_base" => {
             from_result(base_workspace_dir(ctx).map(|p| p.to_string_lossy().to_string()))
         }
@@ -412,7 +422,11 @@ fn dispatch_blocking(ctx: &shell_core::ShellCtx, name: &str, params: Value) -> R
                 Ok(r) => r,
                 Err(e) => return bad_request(e),
             };
-            from_result(artifact::add_text_to_workspace(&ws, &p.filename, &p.content))
+            from_result(artifact::add_text_to_workspace(
+                &ws,
+                &p.filename,
+                &p.content,
+            ))
         }
         "record_provenance" => {
             let p: RecordProvenance = match parse(&params) {
@@ -427,8 +441,16 @@ fn dispatch_blocking(ctx: &shell_core::ShellCtx, name: &str, params: Value) -> R
             let _guard = prov_lock().lock().unwrap_or_else(|e| e.into_inner());
             let env = provenance::capture_env(server_python().as_deref(), &root, &ctx.app_version);
             let record = provenance::append_record(
-                &root, &p.path, &p.tool, p.session_id, p.model, p.content, p.diff, p.log,
-                Some(env), None,
+                &root,
+                &p.path,
+                &p.tool,
+                p.session_id,
+                p.model,
+                p.content,
+                p.diff,
+                p.log,
+                Some(env),
+                None,
             );
             drop(_guard);
             if let Ok(r) = &record {
@@ -574,7 +596,9 @@ fn dispatch_blocking(ctx: &shell_core::ShellCtx, name: &str, params: Value) -> R
             let Some(script) = probe_script(ctx) else {
                 return bad_request("large-file probe not found");
             };
-            from_result(shell_core::large_file::probe_large_file(&python, &script, &full))
+            from_result(shell_core::large_file::probe_large_file(
+                &python, &script, &full,
+            ))
         }
         other => err(StatusCode::NOT_FOUND, format!("unknown command: {other}")),
     }

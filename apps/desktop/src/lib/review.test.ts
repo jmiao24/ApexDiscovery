@@ -28,7 +28,7 @@ describe("splitReview", () => {
     expect(clean).toContain("I reviewed the figure.");
   });
 
-  it("parses a domain-correctness finding with its tag", () => {
+  it("parses a legacy domain finding from an older saved review", () => {
     const md =
       "```review\n" +
       JSON.stringify({

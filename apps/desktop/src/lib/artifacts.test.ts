@@ -211,6 +211,18 @@ describe("artifactBlockToInspector", () => {
     expect(deriveArtifact(write({ cell_index: 0 }, { tool: "jupyter_execute_cell" }))).toBeNull();
   });
 
+  it("keeps the ExecuteCode reproducibility notebook behind the inline REPL", () => {
+    const artifact = deriveArtifact({
+      type: "tool.updated",
+      sessionId: "ses_1",
+      callId: "call_1",
+      tool: "execute_code",
+      status: "success",
+      input: { notebook_path: ".openscience/execution_trace/worker-0-python.ipynb" },
+    });
+    expect(artifact).toBeNull();
+  });
+
   it("routes .ipynb artifacts to the runnable notebook editor, others to file preview", () => {
     const nb = fileInspectorFromBlock({
       kind: "artifact",

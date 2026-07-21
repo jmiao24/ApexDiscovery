@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, ExternalLink, Loader2, Wrench } from "lucide-react";
+import hljs from "highlight.js/lib/common";
 import { useTranslation } from "react-i18next";
 import type { ThreadBlock, ToolCallBlock } from "@ai4s/shared";
 import i18n from "@/i18n";
@@ -10,8 +11,8 @@ import { STATUS } from "./ToolCallRow";
 // Codex-style tool activity: consecutive quiet tool steps fold into one
 // summary line ("Ran 3 commands, created a file"); expanding shows the list;
 // expanding a step shows its detail (shell output, diff, file content)
-// inline. While a step runs the group stays open and the running command
-// shows a live output tail — a long training run never looks hung.
+// inline. Active groups open so the user can follow the natural-language
+// action list, while each step's code/output stays folded until clicked.
 
 export type BlockListItem =
   | { kind: "group"; start: number; blocks: ToolCallBlock[] }
@@ -33,7 +34,9 @@ export function groupToolBlocks(blocks: ThreadBlock[]): BlockListItem[] {
     // Reviewer orchestration is a first-class phase boundary, not another
     // low-level tool hidden inside "Ran N commands". Keep Review/Fix/Re-review
     // visible in the timeline while their own bash/MCP steps can still fold.
-    const workflowPhase = b.kind === "tool-call" && (b.tool === "reviewer" || b.tool === "fix");
+    const workflowPhase = b.kind === "tool-call" && (
+      b.tool === "task" || b.tool === "reviewer" || b.tool === "fix"
+    );
     if (workflowPhase) {
       flush();
       items.push({ kind: "block", index: i, block: b });
@@ -141,6 +144,88 @@ function Collapse({ open, children }: { open: boolean; children: React.ReactNode
 const PANE =
   "whitespace-pre-wrap break-all px-3 py-2 font-mono text-xs leading-5";
 
+const HIGHLIGHT_LANGUAGE: Record<string, string> = {
+  py: "python",
+  python3: "python",
+  sh: "bash",
+  shell: "bash",
+  zsh: "bash",
+};
+
+function escapeCode(code: string): string {
+  return code
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/** Bash grammars leave a simple `command /path arg` invocation unclassified.
+ *  Give those otherwise-plain commands useful editor color without guessing
+ *  at shell semantics: command token, path tokens, and flags only. */
+function highlightPlainShell(code: string): string {
+  return code
+    .split("\n")
+    .map((line) => {
+      let commandSeen = false;
+      return (line.match(/\s+|\S+/g) ?? []).map((token) => {
+        if (/^\s+$/.test(token)) return token;
+        const escaped = escapeCode(token);
+        if (!commandSeen) {
+          commandSeen = true;
+          return `<span class="hljs-built_in">${escaped}</span>`;
+        }
+        if (/^(?:\.{0,2}\/|~\/)/.test(token)) {
+          return `<span class="hljs-string">${escaped}</span>`;
+        }
+        if (/^--?[A-Za-z0-9]/.test(token)) {
+          return `<span class="hljs-attribute">${escaped}</span>`;
+        }
+        return escaped;
+      }).join("");
+    })
+    .join("\n");
+}
+
+function SyntaxInput({
+  code,
+  language,
+  shell = false,
+}: {
+  code: string;
+  language: string;
+  shell?: boolean;
+}) {
+  const html = useMemo(() => {
+    const requested = HIGHLIGHT_LANGUAGE[language] ?? language;
+    try {
+      const highlighted = hljs.getLanguage(requested)
+        ? hljs.highlight(code, { language: requested }).value
+        : hljs.highlightAuto(code).value;
+      return requested === "bash" && !highlighted.includes('class="hljs-')
+        ? highlightPlainShell(code)
+        : highlighted;
+    } catch {
+      return escapeCode(code);
+    }
+  }, [code, language]);
+
+  return (
+    <pre
+      className={cn(
+        PANE,
+        "max-h-80 overflow-y-auto rounded-[12px] border border-faint bg-bg px-4 py-3 text-text",
+      )}
+      data-execute-code-input={!shell ? true : undefined}
+      data-shell-command={shell ? true : undefined}
+    >
+      <code
+        className="apex-syntax-highlight"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </pre>
+  );
+}
+
 /** Last few lines of a running command's stdout — the "it's alive" signal. */
 function LiveTail({ text }: { text: string }) {
   const tail = text.replace(/\s+$/, "").split("\n").slice(-8).join("\n");
@@ -150,18 +235,155 @@ function LiveTail({ text }: { text: string }) {
   );
 }
 
-/** Shell detail: one panel, `$ command` header + scrollable output. */
+/** Disposable shell detail: the same calm input/output hierarchy as REPL. */
 function BashDetail({ block }: { block: ToolCallBlock }) {
   const out = block.output ?? block.outputSummary;
   return (
-    <div className="ml-7 mb-1 mt-0.5 overflow-hidden rounded-input bg-surface-2">
+    <div
+      className="ml-7 mb-2 mt-1 overflow-hidden rounded-[16px] border border-faint bg-surface-2 shadow-sm"
+      data-bash-detail
+    >
+      <div className="flex items-center justify-between border-b border-faint px-4 py-2 text-[11px] font-medium tracking-[0.12em] text-muted">
+        <span>SHELL</span>
+        <span className="normal-case tracking-normal">{block.tool}</span>
+      </div>
       {block.command && (
-        <pre className={cn(PANE, "text-muted", out && "border-b border-faint")}>
-          {"$ "}
-          {block.command}
-        </pre>
+        <div className={cn("px-3 pb-3 pt-3", out && "border-b border-faint")}>
+          <div className="px-1 pb-2 text-[11px] font-medium tracking-[0.1em] text-muted">COMMAND</div>
+          <SyntaxInput code={block.command} language="bash" shell />
+        </div>
       )}
-      {out && <pre className={cn(PANE, "max-h-64 overflow-y-auto text-text")}>{out}</pre>}
+      {out && (
+        <div className="px-3 pb-3 pt-3">
+          <div className="px-1 pb-2 text-[11px] font-medium tracking-[0.1em] text-muted">STDOUT</div>
+          <pre className={cn(PANE, "max-h-80 overflow-y-auto rounded-[12px] border border-faint bg-bg px-4 py-3 text-text")}>
+            {out}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Reproducible code detail: source and persisted execution result. */
+function ExecuteCodeDetail({ block }: { block: ToolCallBlock }) {
+  const language = (block.language || "python").toLowerCase();
+  const runtimeLabel = language === "python" ? "REPL" : language.toUpperCase();
+  return (
+    <div
+      className="ml-7 mb-2 mt-1 overflow-hidden rounded-[16px] border border-faint bg-surface-2 shadow-sm"
+      data-execute-code-detail
+    >
+      <div className="flex items-center justify-between border-b border-faint px-4 py-2 text-[11px] font-medium tracking-[0.12em] text-muted">
+        <span>{runtimeLabel}</span>
+        <span className="normal-case tracking-normal">{language}</span>
+      </div>
+      {block.command && (
+        <div className={cn("px-3 pb-3 pt-3", block.output && "border-b border-faint")}>
+          <div className="px-1 pb-2 text-[11px] font-medium tracking-[0.1em] text-muted">INPUT</div>
+          <SyntaxInput code={block.command} language={language} />
+        </div>
+      )}
+      {block.output && (
+        <div className="px-3 pb-3 pt-3">
+          <div className="px-1 pb-2 text-[11px] font-medium tracking-[0.1em] text-muted">STDOUT</div>
+          <pre
+            className={cn(PANE, "max-h-80 overflow-y-auto rounded-[12px] border border-faint bg-bg px-4 py-3 text-text")}
+            data-execute-code-output
+          >
+            {block.output}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const researchDuration = (milliseconds: number) =>
+  milliseconds < 1000 ? `${Math.max(0, Math.round(milliseconds))}ms` : `${(milliseconds / 1000).toFixed(1)}s`;
+
+/** Built-in Codex search events retain their exact query. APEX WebSearch and
+ * WebFetch add an evidence summary and complete, clickable source metadata. */
+function WebSearchDetail({ block }: { block: ToolCallBlock }) {
+  const { t } = useTranslation("session");
+  const result = block.webResult;
+  const query = result?.query || result?.url || block.query || block.title;
+  const url = /^https?:\/\/\S+$/i.test(query.trim()) ? query.trim() : null;
+  const isFetch = result?.kind === "fetch" || block.tool === "webfetch";
+  const sourceCount = result?.resultCount ?? result?.sources.length ?? 0;
+  return (
+    <div
+      className="ml-7 mb-2 mt-1 overflow-hidden rounded-[16px] border border-faint bg-surface-2 shadow-sm"
+      data-web-search-detail
+      data-web-research-detail
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-faint px-4 py-2 text-[11px] font-medium tracking-[0.12em] text-muted">
+        <span>{t(isFetch ? "tool.detail.webFetch" : "tool.detail.webSearch")}</span>
+        {result && (
+          <span className="normal-case tracking-normal">
+            {t("tool.detail.sourceCount", { count: sourceCount })} · {researchDuration(result.durationMs)}
+          </span>
+        )}
+      </div>
+      <div className="px-3 pb-3 pt-3">
+        <div className="px-1 pb-2 text-[11px] font-medium tracking-[0.1em] text-muted">
+          {url ? t("tool.detail.url") : t("tool.detail.query")}
+        </div>
+        {url ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 break-all rounded-[12px] border border-faint bg-bg px-4 py-3 font-mono text-xs leading-5 text-link hover:underline"
+          >
+            <span>{url}</span>
+            <ExternalLink size={12} className="shrink-0" />
+          </a>
+        ) : (
+          <pre className={cn(PANE, "rounded-[12px] border border-faint bg-bg px-4 py-3 text-text")}>
+            {query}
+          </pre>
+        )}
+      </div>
+      {result?.answer && (
+        <div className="border-t border-faint px-3 pb-3 pt-3">
+          <div className="px-1 pb-2 text-[11px] font-medium tracking-[0.1em] text-muted">
+            {t("tool.detail.summary")}
+          </div>
+          <div className="whitespace-pre-wrap rounded-[12px] border border-faint bg-bg px-4 py-3 text-sm leading-6 text-text">
+            {result.answer}
+          </div>
+        </div>
+      )}
+      {result && result.sources.length > 0 && (
+        <div className="border-t border-faint px-3 pb-3 pt-3">
+          <div className="px-1 pb-2 text-[11px] font-medium tracking-[0.1em] text-muted">
+            {t("tool.detail.sources")}
+          </div>
+          <div className="space-y-2">
+            {result.sources.map((source) => (
+              <a
+                key={source.url}
+                href={source.url}
+                target="_blank"
+                rel="noreferrer"
+                className="block rounded-[12px] border border-faint bg-bg px-4 py-3 transition-colors hover:border-muted"
+              >
+                <span className="flex items-start justify-between gap-3 text-sm font-medium text-link">
+                  <span>{source.title}</span>
+                  <ExternalLink size={13} className="mt-0.5 shrink-0" />
+                </span>
+                <span className="mt-1 block break-all font-mono text-[11px] leading-4 text-muted">
+                  {source.url}
+                </span>
+                {source.context && (
+                  <span className="mt-2 block text-xs leading-5 text-muted">{source.context}</span>
+                )}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -189,6 +411,12 @@ function detailFor(block: ToolCallBlock): React.ReactNode | null {
     return block.command || block.output || block.outputSummary ? (
       <BashDetail block={block} />
     ) : null;
+  }
+  if (block.tool === "execute_code") {
+    return block.command || block.output ? <ExecuteCodeDetail block={block} /> : null;
+  }
+  if (block.tool === "websearch" || block.tool === "webfetch") {
+    return block.webResult || block.query || block.title ? <WebSearchDetail block={block} /> : null;
   }
   if (block.diff) return <DiffDetail diff={block.diff} />;
   if (block.content) return <TextDetail text={block.content} />;
@@ -220,12 +448,15 @@ function ToolRow({
   // expandable once there is a settled detail to reveal.
   const opensInspector = block.tool === "skill" && !!onOpen;
   const detail = running || opensInspector ? null : detailFor(block);
-  // A user-typed "!" command ran for its output — its detail opens by default.
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
-  const open = (userOpen ?? !!block.outputSummary) && !!detail;
+  const open = userOpen === true && !!detail;
   const interactive = opensInspector || !!detail;
   const done = block.startedAt !== undefined && block.endedAt !== undefined;
   const duration = done ? block.endedAt! - block.startedAt! : 0;
+  const failureLines = (block.outputSummary ?? block.output)?.trim().split("\n").filter(Boolean);
+  const failureSummary = block.status === "failed" && failureLines?.length
+    ? failureLines[failureLines.length - 1]
+    : undefined;
   const traceTools = (trace ?? []).filter(
     (item): item is ToolCallBlock => item.kind === "tool-call",
   );
@@ -256,16 +487,18 @@ function ToolRow({
             : undefined
         }
         className={cn(
-          "group flex items-center gap-2 rounded-input px-2 py-1 text-[12.5px]",
-          interactive && "cursor-pointer hover:bg-surface-2",
+          "group flex min-h-10 items-center gap-3 rounded-[12px] px-3 py-2 text-[14px]",
+          interactive && "cursor-pointer hover:bg-black/[0.035] dark:hover:bg-white/[0.035]",
         )}
       >
         <span className={cn("shrink-0", block.tool === "skill" ? "text-accent" : s.className)} aria-label={t(`tool.status.${block.status}`)} role="img">
-          {block.tool === "skill" && !running ? <Wrench size={13} /> : s.icon}
+          {block.tool === "skill" && !running ? <Wrench size={15} /> : s.icon}
         </span>
-        {block.verb && <span className="shrink-0 text-muted">{t(`tool.verb.${block.verb}`)}</span>}
+        {block.verb && !block.naturalTitle && (
+          <span className="shrink-0 text-muted">{t(`tool.verb.${block.verb}`)}</span>
+        )}
         <span
-          className={cn("min-w-0 truncate font-mono", running ? "text-text" : "text-muted")}
+          className={cn("min-w-0 truncate", running ? "text-text" : "text-muted")}
           title={block.command ?? block.title}
         >
           {block.title}
@@ -287,7 +520,17 @@ function ToolRow({
             {fmtDuration(duration)}
           </span>
         )}
-        {block.meta && <span className="shrink-0 text-xs text-muted">{block.meta}</span>}
+        {(block.meta || failureSummary) && (
+          <span
+            className={cn(
+              "max-w-[46%] shrink truncate text-right text-sm text-muted",
+              failureSummary && "text-error/80",
+            )}
+            title={failureSummary ?? block.meta}
+          >
+            {failureSummary ?? block.meta}
+          </span>
+        )}
       </div>
       {/* A spawned child keeps its full tool trace beneath the parent task.
           The trace remains after completion; long traces use the same nested
@@ -321,7 +564,7 @@ function ToolRow({
           )}
         </div>
       )}
-      {/* While running, the output tail is always visible — no click needed. */}
+      {/* A running tail is visible only after its containing group is opened. */}
       {running && block.partialOutput && <LiveTail text={block.partialOutput} />}
       {detail && <Collapse open={open}>{detail}</Collapse>}
     </div>
@@ -342,17 +585,15 @@ export function ToolGroup({
   onToolOpen?: (block: ToolCallBlock) => void;
 }) {
   const { t } = useTranslation(["session", "common"]);
-  // Once a step in the group runs, the group opens and STAYS open — it never
-  // auto-folds. Folding between steps (the old grace-timer design) made the
-  // whole block shut and reopen whenever the model thought for a few seconds
-  // between commands, which read as flicker. History sessions still render
-  // folded (nothing was active in this view); a click always overrides.
+  // Once activity starts, keep the outer action list visible without opening
+  // any individual step's code/output detail. A click still overrides the
+  // group state; settled history starts folded unless the group had a failure.
   const active = blocks.some((b) => b.status === "running" || b.status === "pending");
   const failed = blocks.filter((b) => b.status === "failed" || b.status === "warning").length;
-  const [autoOpen, setAutoOpen] = useState(active);
+  const [autoOpen, setAutoOpen] = useState(active || failed > 0);
   useEffect(() => {
-    if (active) setAutoOpen(true);
-  }, [active]);
+    if (active || failed > 0) setAutoOpen(true);
+  }, [active, failed]);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const open = userOpen ?? autoOpen;
   const rows = blocks.map((b, i) => (
@@ -369,27 +610,28 @@ export function ToolGroup({
   ));
   if (blocks.length === 1) return <div>{rows}</div>;
   return (
-    <div>
+    <div className="overflow-hidden rounded-[18px] bg-[var(--activity-surface)]">
       <button
         type="button"
         onClick={() => setUserOpen(!open)}
-        className="group flex w-full items-center gap-2 rounded-input px-2 py-1 text-left text-[12.5px] text-muted hover:bg-surface-2 hover:text-text"
+        aria-expanded={open}
+        className="group flex w-full items-center gap-3 px-5 py-4 text-left text-[15px] text-muted transition-colors hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-link"
       >
         {active ? (
-          <Loader2 size={13} className="shrink-0 animate-spin text-accent" />
+          <Loader2 size={18} className="shrink-0 animate-spin text-accent" />
         ) : (
           <ChevronRight
-            size={13}
+            size={18}
             className={cn("shrink-0 transition-transform duration-200", open && "rotate-90")}
           />
         )}
-        <span className="min-w-0 truncate">{summarizeGroup(blocks)}</span>
-        {failed > 0 && (
-          <span className="shrink-0 text-error">· {t("tool.group.failedCount", { count: failed })}</span>
-        )}
+        <span className="min-w-0 flex-1 truncate font-medium">{summarizeGroup(blocks)}</span>
+        <span className="shrink-0 text-sm tabular-nums text-muted">
+          {t("stepSummary.steps", { count: blocks.length })}
+        </span>
       </button>
       <Collapse open={open}>
-        <div className="pl-4">{rows}</div>
+        <div className="border-t border-faint px-3 py-2">{rows}</div>
       </Collapse>
     </div>
   );

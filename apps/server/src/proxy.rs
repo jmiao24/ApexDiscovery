@@ -15,7 +15,10 @@ use crate::state::AppState;
 /// The sidecar's Basic-auth header value (username "opencode", per-run password).
 fn sidecar_auth() -> String {
     let creds = format!("opencode:{}", shell_core::util::server_password());
-    format!("Basic {}", shell_core::artifact::base64_encode(creds.as_bytes()))
+    format!(
+        "Basic {}",
+        shell_core::artifact::base64_encode(creds.as_bytes())
+    )
 }
 
 /// Hop-by-hop headers a proxy must not forward (RFC 9110 §7.6.1).
@@ -74,14 +77,18 @@ pub async fn proxy_runtime(
 
     let upstream = match req.send().await {
         Ok(r) => r,
-        Err(e) => return (StatusCode::BAD_GATEWAY, format!("runtime unreachable: {e}")).into_response(),
+        Err(e) => {
+            return (StatusCode::BAD_GATEWAY, format!("runtime unreachable: {e}")).into_response()
+        }
     };
 
     let status = StatusCode::from_u16(upstream.status().as_u16())
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let mut response_headers = HeaderMap::new();
     for (name, value) in upstream.headers().iter() {
-        let Ok(n) = header::HeaderName::from_bytes(name.as_str().as_bytes()) else { continue };
+        let Ok(n) = header::HeaderName::from_bytes(name.as_str().as_bytes()) else {
+            continue;
+        };
         if is_hop_by_hop(&n) {
             continue;
         }

@@ -1,7 +1,7 @@
-# APEX Science Desktop — Prioritized Requirements (Community-Informed)
+# APEX Discovery Desktop — Prioritized Requirements (Community-Informed)
 
 > **Purpose.** This document turns real community evidence into concrete,
-> prioritized requirements for **APEX Science Desktop**, our open-source, local-first,
+> prioritized requirements for **APEX Discovery Desktop**, our open-source, local-first,
 > reproducible AI research workbench. It complements `PRD.md`: the PRD says
 > *what the product is*; this file says *what to build first and why*, tied to
 > evidence.
@@ -41,11 +41,11 @@ The moat of an AI research workbench is **not the model**. It is:
 4. **domain-correctness gates** — because across *every* field the top complaint
    is code that **runs but is scientifically wrong** (see P0-5).
 
-APEX Science Desktop must win on those four axes — plus two things competitors are
+APEX Discovery Desktop must win on those four axes — plus two things competitors are
 criticized for lacking: **multi-discipline breadth** and **Windows support**.
 
 Do **not** market as "open-source Claude Science" or "zero hallucination."
-Market as: *"APEX Science Desktop — local-first, model-agnostic AI research
+Market as: *"APEX Discovery Desktop — local-first, model-agnostic AI research
 workbench for macOS, Windows & Linux."* Sell **traceable / verifiable**, not **perfect**.
 
 ---
@@ -149,7 +149,7 @@ competitors.
   tool use. **Note:** this reviewer checks *traceability*, not *domain
   correctness* — that gap is P0-5.
 
-### P0-5 · Domain-correctness gates ("runs" ≠ "right") — 🟡 Partial · NEW
+### P0-5 · Domain-correctness gates ("runs" ≠ "right") — ⬜ Removed from product
 
 - **Evidence.** *The single most consistent finding of the multi-discipline
   research, and the largest gap in this document.* Every field's top pain is code
@@ -179,36 +179,11 @@ competitors.
 - **Acceptance.** At least **3** discipline gates ship and each catches one real
   case: a unit/dimension mismatch (physics), an unaligned CRS / lat-as-bare-float
   (earth), and a 0/1-based coordinate or strand error (biology).
-- **Status.** 🟡 The deterministic, pluggable gate shipped as the bundled
-  `domain-check` skill (`runtime/skills/core/domain-check/domain_check.py`,
-  stdlib-only, one `check_<field>` rule set per discipline). It analyses the
-  code the agent actually wrote — AST for Python/notebooks, regex for R — never
-  model recall, and emits the same structured `review` contract as P0-4
-  (findings carry a per-discipline `tag`, so new fields need no UI change). All
-  three acceptance gates ship and each catches its real case (19 validator
-  tests): **physics · units** (dimensional mismatch `t_seconds + d_meters`;
-  trig on a degree-valued angle), **earth · crs** (Euclidean distance on
-  lat/lon; geopandas geometric op with no CRS set), **biology · coords/strand**
-  (BED off-by-one — 0-based half-open, so length is `end - start`, no `+1`;
-  strand-unaware sequence extraction), a fourth discipline **chem · valence**
-  (a SMILES literal — assigned to a `smiles`/`smi` variable or passed to
-  `MolFromSmiles` — that cannot be a real molecule. **Library round-trip now
-  shipped**: when RDKit is installed it is the authoritative judge
-  (`Chem.MolFromSmiles` sanitizes the parse), catching far more than the
-  five-bond carbon — bad ring closures, impossible aromaticity, over-valent
-  N/O/S — and clearing molecules a heuristic would wrongly flag; without RDKit
-  it degrades to the stdlib bond-counter (carbon >4 / over-bonded halogen,
-  bails on bracket atoms). **Verified end-to-end with real RDKit**: it flags
-  5-bond nitrogen and an unclosed ring the static path misses, and clears
-  caffeine/aspirin), and a fifth **social science** — **social ·
-  multiple-comparisons** (a significance test in a loop or ≥3 times with no
-  FDR/Bonferroni correction — the named silent p-hacking risk) and **social ·
-  categorical** (a numeric reduction `.mean()`/`.std()` on a nominal code like
-  `gender`/`region`, treating a label as interval; a `groupby` key is correctly
-  not flagged). Rules favour precision (unrecognized units / no discipline
-  signal / bracket-atom SMILES / a single test / a groupby key stay silent); 37
-  validator tests. Gap: POSCAR→pymatgen validity round-trip; broader per-field
-  rule depth.
+- **Status.** ⬜ The bundled `domain-check` skill and its automatic Reviewer
+  selection were removed because the broad trigger added noisy validation to
+  ordinary retrieval and schema-inspection tasks. Reintroducing domain gates
+  would require narrow, explicitly selected validators rather than a universal
+  before/after-analysis hook.
 
 ### P0-6 · Large files: reference, don't load — ✅ Done · was inside P0-2/P2-1
 
@@ -683,7 +658,7 @@ competitors.
 | P0-2 | Local data + local compute | P0 | ✅ Done — local Python **and** R + data-flow card |
 | P0-3 | Artifact provenance / reproducibility | P0 | ✅ Done — versioned records + env/package lockfile + Reproduce |
 | P0-4 | Reviewer: traceable claims (3 checks) | P0 | 🟡 Partial — click-to-run independent read-only review → one Main fix → re-review orchestration, 3 checks, and PDF extraction shipped; weak-model robustness pending |
-| **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | 🟡 **Partial — 5 gates ship (physics/earth/biology/chemistry/social science), deterministic + pluggable; chemistry now uses real RDKit round-trip when installed; only POSCAR→pymatgen round-trip pending** |
+| **P0-5** | **Domain-correctness gates ("runs" ≠ "right")** | **P0** | ⬜ Removed — future validators must be narrow and explicitly selected |
 | P0-6 | Large files: reference, don't load | P0 | ✅ Done — memory-pointer probe (table/parquet/hdf5/fits/netcdf/log + genomics FASTQ/FASTA/VCF/BAM, GRIB, ROOT) + one-click "Inspect without loading" in the too-large-preview card |
 | **P0-7** | **Safety-defaults compliance + audit debt** | **P0** | 🟡 **Partial — ALL critical items addressed (approval modes, sidecar/preview auth, kernel deadlock, Windows injection, owner-only key files); keychain-at-rest deferred to signed releases (P2-3); moderate/cleanup backlog remains** |
 | P1-1 | Multi-discipline from day one | P1 | 🟡 Partial — pluggable + climate example; non-bio depth pending |
@@ -701,16 +676,14 @@ competitors.
 runtime, local compute, provenance, notebooks, privacy. The next frontier is the
 discipline-specific 20% and the one cross-cutting gap this revision adds:
 
-1. **P0-5 domain-correctness gates** — the deterministic, pluggable layer now
-   ships with five gates (physics/earth/biology/chemistry/social science); next
-   is the remaining library round-trip (POSCAR→pymatgen validity — SMILES→RDKit
-   now ships).
+1. **P0-5 domain-correctness gates** — removed from the shipped skill set;
+   reconsider only as narrow, explicitly selected validators.
 2. **P1-2 / P1-3 non-bio connectors + viewers** — connectors now span all five
    targeted disciplines (materials, economics, physics space-weather, earth
    Open-Meteo/USGS); next is astronomy catalogs (no PyPI MCP yet) and richer
    viewers.
-3. **Deepen the shipped gates** — P0-5 (library round-trip + social science),
-   P1-6 (in-app prereg artifact + Stata/SPSS UI). **P0-6 is now ✅ Done** — the
+3. **Deepen analysis integrity** — P1-6 (in-app prereg artifact + Stata/SPSS
+   UI). **P0-6 is now ✅ Done** — the
    probe covers genomics/GRIB/ROOT and the UI exposes it as one-click "Inspect
    without loading".
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "ClinVar"
+  short_description: "Interpret ClinVar variant assertions and provenance"
+  default_prompt: "Use $clinvar to summarize a variant’s ClinVar significance, review status, conflicts, conditions, submitters, and supporting citations."

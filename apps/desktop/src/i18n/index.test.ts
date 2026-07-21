@@ -11,11 +11,4 @@ describe("i18n instance", () => {
   it("resolves a seeded key", () => {
     expect(i18n.t("common:actions.save")).toBe("Save");
   });
-
-  it("falls back to English for a not-yet-shipped language", async () => {
-    await i18n.changeLanguage("pt-BR");
-    // pt-BR is registered but not shipped → no bundled resources → falls back to en.
-    expect(i18n.t("common:actions.save")).toBe("Save");
-    await i18n.changeLanguage("en");
-  });
 });

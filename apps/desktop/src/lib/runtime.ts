@@ -13,7 +13,13 @@ import {
   type SkillInfo,
   type ToolCallStatus,
 } from "@ai4s/sdk";
-import type { ArtifactBlock, RuntimeStatus, ThreadBlock, ToolVerb } from "@ai4s/shared";
+import type {
+  ArtifactBlock,
+  RuntimeStatus,
+  ThreadBlock,
+  ToolVerb,
+  WebResearchResult,
+} from "@ai4s/shared";
 import {
   detectTools as probeTools,
   commitWorkspaceSnapshot,
@@ -158,6 +164,8 @@ interface RuntimeState {
   runCommand: (name: string, args?: string) => Promise<string | null>;
   /** Interrupt the current session's running turn (Stop button / Esc). */
   interrupt: () => Promise<void>;
+  /** Interrupt a specific child session from its inline subagent card. */
+  interruptSession: (id: string) => Promise<void>;
   /** Check every session holding a running lock against the server: if its
    *  turn is actually over (idle was missed — SSE reconnect windows, the
    *  directory-scoped event stream), reload the missed history and unlock. */
@@ -1118,9 +1126,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     );
   },
 
-  interrupt: async () => {
-    const sid = get().currentId;
-    if (!sid || !client || !get().runningSessions[sid]) return;
+  interruptSession: async (sid) => {
+    if (!sid || !client) return;
     // Arm the guard BEFORE the abort POST: the server answers an abort with its
     // own SSE burst (an "aborted" error and one or more session.idle events)
     // that streams back WHILE this POST is still awaited. If we armed it after
@@ -1152,6 +1159,12 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         },
       };
     });
+  },
+
+  interrupt: async () => {
+    const sid = get().currentId;
+    if (!sid || !get().runningSessions[sid]) return;
+    await get().interruptSession(sid);
   },
 
   reconcileRunning: async () => {
@@ -1310,7 +1323,40 @@ const capTail = (t: string, max: number) => (t.length > max ? "…" + t.slice(-m
 const capHead = (t: string, max: number) => (t.length > max ? t.slice(0, max) + "\n…" : t);
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
+const stringList = (v: unknown) =>
+  Array.isArray(v) ? v.filter((item): item is string => typeof item === "string" && !!item.trim()) : [];
 const EDIT_TOOLS = new Set(["edit", "str_replace_editor", "apply_patch"]);
+
+export function webResearchResultFromOutput(value: unknown): WebResearchResult | undefined {
+  if (typeof value !== "string" || !value.trim().startsWith("{")) return undefined;
+  try {
+    const raw = JSON.parse(value) as Record<string, unknown>;
+    if ((raw.kind !== "search" && raw.kind !== "fetch") || typeof raw.answer !== "string") return undefined;
+    if (!Array.isArray(raw.sources)) return undefined;
+    const sources = raw.sources.flatMap((candidate) => {
+      if (!candidate || typeof candidate !== "object") return [];
+      const source = candidate as Record<string, unknown>;
+      if (typeof source.url !== "string" || typeof source.title !== "string") return [];
+      if (!/^https?:\/\//i.test(source.url)) return [];
+      return [{
+        title: source.title,
+        url: source.url,
+        ...(typeof source.context === "string" && source.context ? { context: source.context } : {}),
+      }];
+    });
+    return {
+      kind: raw.kind,
+      ...(typeof raw.query === "string" ? { query: raw.query } : {}),
+      ...(typeof raw.url === "string" ? { url: raw.url } : {}),
+      answer: raw.answer,
+      sources,
+      resultCount: typeof raw.result_count === "number" ? raw.result_count : sources.length,
+      durationMs: typeof raw.duration_ms === "number" ? raw.duration_ms : 0,
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Verb + subject for a tool step ("Ran" + `python train.py …`, "Created" +
@@ -1322,14 +1368,20 @@ export function toolPresentation(
   tool: string,
   title: string | undefined,
   input?: Record<string, unknown>,
-): { verb?: ToolVerb; title: string } {
-  const command = str(input?.command);
+): { verb?: ToolVerb; title: string; naturalTitle?: boolean } {
+  const humanDescription = str(input?.human_description).trim();
   const filePath = str(input?.filePath) || str(input?.path);
-  const fallback = tidyToolTitle(title?.trim() || command || filePath || tool || "tool");
+  const fallback = tidyToolTitle(title?.trim() || filePath || tool || "tool");
   const file = filePath ? tidyToolTitle(filePath) : "";
   switch (tool) {
     case "bash":
-      return { verb: "Ran", title: command ? humanizeCommand(tidyToolTitle(command)) : fallback };
+    case "execute_code": {
+      return {
+        verb: "Ran",
+        title: humanDescription || "Missing activity description",
+        naturalTitle: true,
+      };
+    }
     case "write":
     case "create":
       return { verb: "Created", title: file || fallback };
@@ -1342,13 +1394,40 @@ export function toolPresentation(
     case "grep":
     case "glob":
       return { verb: "Searched", title: str(input?.pattern) || fallback };
+    case "websearch":
+      return humanDescription
+        ? { verb: "Searched", title: humanDescription, naturalTitle: true }
+        : { verb: "Searched", title: str(input?.query) || str(input?.pattern) || fallback };
     case "list":
       return { verb: "Listed", title: file || fallback };
     case "webfetch":
-      return { verb: "Fetched", title: str(input?.url) || fallback };
+      return humanDescription
+        ? { verb: "Fetched", title: humanDescription, naturalTitle: true }
+        : { verb: "Fetched", title: str(input?.url) || fallback };
     default:
       return { title: fallback };
   }
+}
+
+/**
+ * Older Codex SDK builds can emit an open-page web-search item without the
+ * action URL. The bridge historically persisted that as a synthetic
+ * `web search` query. It is not an inspectable action and must not appear as a
+ * second fake search beside the real query. Rich APEX research calls always
+ * carry a query/description/result and are therefore preserved.
+ */
+function isEmptyWebSearchStep(
+  tool: string,
+  title: string | undefined,
+  input: Record<string, unknown> | undefined,
+  output: string | undefined,
+): boolean {
+  if (tool !== "websearch") return false;
+  const query = str(input?.query) || str(input?.pattern);
+  const description = str(input?.human_description);
+  if (query.trim() || description.trim() || webResearchResultFromOutput(output)) return false;
+  const normalizedTitle = str(title).trim().toLowerCase().replace(/[_-]+/g, " ");
+  return !normalizedTitle || normalizedTitle === "web search";
 }
 
 export function foldEvent(
@@ -1384,13 +1463,25 @@ export function foldEvent(
       // tools only report an opaque "N todos" count with no useful content —
       // pure noise in the conversation, so drop them.
       if (/question|permission|^ask$|todo/i.test(event.tool)) return { blocks, index };
+      if (isEmptyWebSearchStep(event.tool, event.title, event.input, event.output)) {
+        return { blocks, index };
+      }
       const key = `tool:${event.callId}`;
-      const command = str(event.input?.command);
+      const command = str(event.input?.command) || (event.tool === "execute_code" ? str(event.input?.code) : "");
+      const language = event.tool === "execute_code" ? str(event.input?.language) || "python" : "";
       const filePath = str(event.input?.filePath) || str(event.input?.path);
       const content = str(event.input?.content);
       const skillName = event.tool === "skill" ? str(event.input?.name) : "";
       const skillPath = event.tool === "skill" ? str(event.input?.path) : "";
       const skillSource = event.tool === "skill" ? str(event.input?.source) : "";
+      const subagentName = event.tool === "task" ? str(event.input?.agent) : "";
+      const subagentTask = event.tool === "task" ? str(event.input?.task) : "";
+      const subagentSandbox = event.tool === "task" ? str(event.input?.sandbox) : "";
+      const subagentTools = event.tool === "task" ? stringList(event.input?.tools) : [];
+      const subagentSkills = event.tool === "task" ? stringList(event.input?.skills) : [];
+      const subagentAvailableSkillCount = event.tool === "task" && typeof event.input?.available_skill_count === "number"
+        ? event.input.available_skill_count
+        : undefined;
       // Some updates omit fields earlier ones carried (a task tool names its
       // subagent session once; time.start only rides the first events) —
       // carry them over from the previous version of the block.
@@ -1399,6 +1490,10 @@ export function foldEvent(
       const childSessionId = event.childSessionId ?? prevTool?.childSessionId;
       const startedAt = event.startedAt ?? prevTool?.startedAt;
       const endedAt = event.endedAt ?? prevTool?.endedAt;
+      const query = event.tool === "websearch" ? str(event.input?.query) || str(event.input?.pattern) : "";
+      const webResult = (event.tool === "websearch" || event.tool === "webfetch")
+        ? webResearchResultFromOutput(event.output) ?? prevTool?.webResult
+        : undefined;
       // Edit tools report a proper unified diff in metadata on completion;
       // until (or without) that, synthesize a minimal old→new view.
       const diff =
@@ -1410,14 +1505,18 @@ export function foldEvent(
               ...str(event.input?.newString).split("\n").map((l) => `+ ${l}`),
             ].join("\n")
           : undefined);
-      const { verb, title } = toolPresentation(event.tool, event.title, event.input);
+      const { verb, title, naturalTitle } = toolPresentation(event.tool, event.title, event.input);
       const block: ThreadBlock = {
         kind: "tool-call",
         title,
         status: event.status,
         tool: event.tool,
         ...(verb ? { verb } : {}),
+        ...(naturalTitle ? { naturalTitle } : {}),
         ...(command ? { command } : {}),
+        ...(language ? { language } : {}),
+        ...(query ? { query } : {}),
+        ...(webResult ? { webResult } : {}),
         ...(filePath ? { filePath: tidyToolTitle(filePath) } : {}),
         ...(content ? { content: capHead(content, DETAIL_MAX) } : {}),
         ...(diff ? { diff: capHead(diff, DETAIL_MAX) } : {}),
@@ -1425,7 +1524,7 @@ export function foldEvent(
         ...(event.status === "running" && event.partialOutput
           ? { partialOutput: capTail(foldCarriageReturns(event.partialOutput), LIVE_TAIL_MAX) }
           : {}),
-        ...(event.output?.trim()
+        ...(event.output?.trim() && !webResult
           ? {
               output: (event.tool === "skill" ? capHead(event.output, SKILL_DETAIL_MAX) : capTail(foldCarriageReturns(event.output), DETAIL_MAX)).replace(/\s+$/, ""),
             }
@@ -1433,6 +1532,12 @@ export function foldEvent(
         ...(startedAt ? { startedAt } : {}),
         ...(endedAt ? { endedAt } : {}),
         ...(childSessionId ? { childSessionId } : {}),
+        ...(subagentName ? { subagentName } : {}),
+        ...(subagentTask ? { subagentTask } : {}),
+        ...(subagentSandbox ? { subagentSandbox } : {}),
+        ...(subagentTools.length ? { subagentTools } : {}),
+        ...(subagentSkills.length ? { subagentSkills } : {}),
+        ...(subagentAvailableSkillCount !== undefined ? { subagentAvailableSkillCount } : {}),
         ...(skillName ? { skillName } : {}),
         ...(skillPath ? { skillPath } : {}),
         ...(skillSource ? { skillSource } : {}),
@@ -1547,15 +1652,29 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
           // Interactive tools are surfaced by InteractionPrompt, not the thread;
           // `todo*` tools are opaque "N todos" noise — skip both.
           if (/question|permission|^ask$|todo/i.test(p.tool ?? "")) continue;
+          if (isEmptyWebSearchStep(p.tool ?? "", p.state?.title, p.state?.input, p.state?.output)) continue;
           const status = mapToolStatus(p.state?.status);
           const frozen = status === "running" || status === "pending";
           if (frozen) interrupted = true;
-          const command = str(p.state?.input?.command);
+          const command = str(p.state?.input?.command) || (p.tool === "execute_code" ? str(p.state?.input?.code) : "");
+          const language = p.tool === "execute_code" ? str(p.state?.input?.language) || "python" : "";
+          const query = p.tool === "websearch" ? str(p.state?.input?.query) || str(p.state?.input?.pattern) : "";
+          const webResult = p.tool === "websearch" || p.tool === "webfetch"
+            ? webResearchResultFromOutput(p.state?.output)
+            : undefined;
           const filePath = str(p.state?.input?.filePath) || str(p.state?.input?.path);
           const content = str(p.state?.input?.content);
           const skillName = p.tool === "skill" ? str(p.state?.input?.name) : "";
           const skillPath = p.tool === "skill" ? str(p.state?.input?.path) : "";
           const skillSource = p.tool === "skill" ? str(p.state?.input?.source) : "";
+          const subagentName = p.tool === "task" ? str(p.state?.input?.agent) : "";
+          const subagentTask = p.tool === "task" ? str(p.state?.input?.task) : "";
+          const subagentSandbox = p.tool === "task" ? str(p.state?.input?.sandbox) : "";
+          const subagentTools = p.tool === "task" ? stringList(p.state?.input?.tools) : [];
+          const subagentSkills = p.tool === "task" ? stringList(p.state?.input?.skills) : [];
+          const subagentAvailableSkillCount = p.tool === "task" && typeof p.state?.input?.available_skill_count === "number"
+            ? p.state.input.available_skill_count
+            : undefined;
           const childSessionId = str(p.state?.metadata?.sessionId);
           const diff =
             str(p.state?.metadata?.diff) ||
@@ -1568,18 +1687,22 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
               : "");
           const userShell = shellTurn && p.tool === "bash";
           if (userShell) blocks.push({ kind: "user", text: `! ${command}` });
-          const { verb, title } = toolPresentation(p.tool ?? "", p.state?.title, p.state?.input);
+          const { verb, title, naturalTitle } = toolPresentation(p.tool ?? "", p.state?.title, p.state?.input);
           blocks.push({
             kind: "tool-call",
             title,
             status: frozen ? "pending" : status,
             tool: p.tool,
             ...(verb ? { verb } : {}),
+            ...(naturalTitle ? { naturalTitle } : {}),
             ...(command ? { command } : {}),
+            ...(language ? { language } : {}),
+            ...(query ? { query } : {}),
+            ...(webResult ? { webResult } : {}),
             ...(filePath ? { filePath: tidyToolTitle(filePath) } : {}),
             ...(content ? { content: capHead(content, DETAIL_MAX) } : {}),
             ...(diff ? { diff: capHead(diff, DETAIL_MAX) } : {}),
-            ...(p.state?.output?.trim()
+            ...(p.state?.output?.trim() && !webResult
               ? {
                   output: (p.tool === "skill" ? capHead(p.state.output, SKILL_DETAIL_MAX) : capTail(foldCarriageReturns(p.state.output), DETAIL_MAX)).replace(/\s+$/, ""),
                 }
@@ -1590,6 +1713,12 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
             ...(skillPath ? { skillPath } : {}),
             ...(skillSource ? { skillSource } : {}),
             ...(childSessionId ? { childSessionId } : {}),
+            ...(subagentName ? { subagentName } : {}),
+            ...(subagentTask ? { subagentTask } : {}),
+            ...(subagentSandbox ? { subagentSandbox } : {}),
+            ...(subagentTools.length ? { subagentTools } : {}),
+            ...(subagentSkills.length ? { subagentSkills } : {}),
+            ...(subagentAvailableSkillCount !== undefined ? { subagentAvailableSkillCount } : {}),
             ...(userShell && p.state?.output?.trim()
               ? { outputSummary: p.state.output.replace(/\s+$/, "") }
               : {}),

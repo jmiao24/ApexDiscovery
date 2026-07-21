@@ -1,16 +1,11 @@
 import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
-import { useUiStore } from "@/lib/store";
+import { describe, expect, it } from "vitest";
 import { MoleculeView } from "./MoleculeView";
 import { TableChart } from "./TableChart";
 import { GenomeView } from "./GenomeView";
 import { DosView } from "./DosView";
 import { QCodeView } from "./QCodeView";
 import type { ParsedTable } from "@/lib/csv";
-
-// COPYCAT RULE: useUiStore is module-global; reset the locale after each test
-// so this suite never bleeds a non-English locale into other test files.
-afterEach(() => useUiStore.getState().setLocale("en"));
 
 const T: ParsedTable = {
   columns: ["month", "sales"],

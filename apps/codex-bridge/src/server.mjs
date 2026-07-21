@@ -15,17 +15,34 @@
 //   supplied through Settings. The SDK vendors its own Codex binary.
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Codex } from "@openai/codex-sdk";
+import {
+  buildClaudeAgentOptions,
+  claudeAgentVisibleTools,
+  runClaudeAgent,
+  toClaudeMcpServers,
+} from "./claude-agent.mjs";
+import { mainCodexConfig } from "./codex-client-config.mjs";
 import {
   discoverSkills,
   effectiveMcpServers,
   invokedSkills,
   loadedSkillContext,
   pluginReadRoots,
-  pluginSkillContext,
+  skillCatalogContext,
   toCodexMcpServers,
 } from "./extensions.mjs";
 import {
@@ -42,7 +59,18 @@ import {
   literatureAgentPrompt,
   literatureSubagentTask,
   literatureSynthesisPrompt,
+  reconcileOrphanedSubagentSteps,
 } from "./subagents.mjs";
+import { executionJobFromResult } from "./execution-result.mjs";
+import {
+  EVIDENCE_SKILL_NAMES,
+  auditInlineCitations,
+  citationRepairPrompt,
+  userRequestedBibliography,
+} from "./inline-citations.mjs";
+import { APEX_MAIN_AGENT_PROMPT } from "./main-agent-prompt.mjs";
+import { researchResultFromResult } from "./research-result.mjs";
+import { researchRoute } from "./research-routing.mjs";
 
 // ---- CLI / env contract (identical to `opencode serve`) ----
 const args = process.argv.slice(2);
@@ -60,8 +88,36 @@ const CONFIG_HOME = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
 const CODEX_HOME = process.env.CODEX_HOME || join(CONFIG_HOME, "codex");
 const EXTENSIONS_DIR = process.env.APEX_EXTENSIONS_DIR || "";
 const BUNDLED_SKILLS_DIR = join(CONFIG_HOME, "opencode", "skills");
+const SOURCE_CORE_SKILLS_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../runtime/skills/core",
+);
+const SOURCE_ADDITIONAL_SKILL_ROOTS = [
+  resolve(dirname(fileURLToPath(import.meta.url)), "../../../../ClaudeAgent/skills"),
+];
+const SYSTEM_SKILLS_DIR = join(CODEX_HOME, "skills", ".system");
+const APEX_DISCOVERY_SKILLS = Object.freeze([
+  "assess-disease-expansion",
+  "evaluate-label-expansion",
+  "paperclip",
+  "query-purple-book",
+  "imagegen",
+  "skill-creator",
+  "skill-installer",
+  "plugin-creator",
+  "depmap",
+  "cellxgene-census",
+  "dailymed",
+  "open-targets",
+  "rare-variant-burden",
+]);
 const STORE_DIR = join(DATA_HOME, "codex-bridge");
 const HISTORY_DIR = join(STORE_DIR, "history");
+const SCIENCE_MCP_PATH = join(dirname(fileURLToPath(import.meta.url)), "science-mcp.mjs");
+const CLAUDE_AGENT_MCP_PATH = join(dirname(fileURLToPath(import.meta.url)), "claude-agent-mcp.mjs");
+const CLAUDE_INTERNAL_TOKEN = randomBytes(32).toString("hex");
+// Dormant custom research MCP entrypoint, retained for a future structured mode:
+// const RESEARCH_MCP_PATH = join(dirname(fileURLToPath(import.meta.url)), "research-mcp.mjs");
 process.env.CODEX_HOME = CODEX_HOME;
 mkdirSync(CODEX_HOME, { recursive: true });
 mkdirSync(HISTORY_DIR, { recursive: true });
@@ -92,7 +148,15 @@ function readJson(path, fallback) {
   }
 }
 function writeJson(path, value) {
-  writeFileSync(path, JSON.stringify(value, null, 2));
+  mkdirSync(dirname(path), { recursive: true });
+  const temporary = `${path}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+  try {
+    writeFileSync(temporary, JSON.stringify(value, null, 2), { encoding: "utf8", mode: 0o600 });
+    renameSync(temporary, path);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw error;
+  }
 }
 
 const configPath = join(STORE_DIR, "config.json");
@@ -111,16 +175,103 @@ const saveConfig = () => writeJson(configPath, bridgeConfig);
 saveConfig();
 
 let runtimeApiKey = process.env.OPENAI_API_KEY || null;
+let runtimeAnthropicApiKey = process.env.ANTHROPIC_API_KEY || null;
 const mcpStatuses = new Map();
+
+const EXECUTION_TOOL_CONTRACT = `## APEX execution tools
+When the apex_execution MCP is available, use its Bash and ExecuteCode tools instead of the built-in shell:
+- Bash is the only tool for CLI and shell commands, including package installation, documentation lookup, file inspection, and database/search CLIs. Its command and stdout remain in conversation history and the execution audit, but are never written to the reproducibility notebook.
+- Useful CLI output is not disposable: cite or summarize it directly when sufficient. When it must become formal research data, use ExecuteCode to parse it into a table/file/artifact so that transformation is captured in the notebook.
+- ExecuteCode accepts only Python or R and is the default for formal data analysis, calculations, transformations, and plotting. Put the complete code for each logical step directly in the code argument so the notebook is self-contained. Split longer work into incremental calls and reuse Python/R state from earlier calls.
+- Never create a .py or .R file as a staging mechanism and then run, import, exec, source, or shell that file from ExecuteCode. Write a script only when the user explicitly requests one, or export it after the notebook-first analysis is already validated.
+- human_description is required on every Bash and ExecuteCode call. Write a distinct 3-8 word action label that identifies the concrete operation and object. Never reuse a generic label such as "Running code" or "Querying Open Targets".
+- Use environment="workspace" unless the platform exposes another environment.`;
 
 function mcpServers() {
   return effectiveMcpServers(bridgeConfig.mcp, EXTENSIONS_DIR);
 }
 
-function codexClient() {
+function claudeAgentMcpServers(session) {
+  const configured = toClaudeMcpServers(mcpServers(), process.env);
+  if (sandboxMode() !== "danger-full-access") return configured;
+  return {
+    ...configured,
+    apex_execution: {
+      type: "stdio",
+      command: process.execPath,
+      args: [SCIENCE_MCP_PATH],
+      env: {
+        APEX_WORKSPACE_ROOT: session.directory || process.cwd(),
+        APEX_SESSION_ID: session.id,
+        APEX_EXECUTION_ALLOWED: "1",
+      },
+      alwaysLoad: true,
+    },
+  };
+}
+
+function codexClient(session, { allowSubagents = true } = {}) {
+  const configured = toCodexMcpServers(mcpServers(), process.env);
+  // Keep the custom APEX research MCP dormant for now. Codex SDK native live
+  // research supports both discovery and opening exact URLs under the active
+  // Codex authentication, without requiring a second research credential.
+  // To restore the richer structured APEX result envelope later, replace this
+  // empty map with the registration block below and opt in via researchRoute:
+  // const research = route.useApexResearch
+  //   ? {
+  //       apex_research: {
+  //         command: process.execPath,
+  //         args: [RESEARCH_MCP_PATH],
+  //         enabled: true,
+  //       },
+  //     }
+  //   : {};
+  const research = {};
+  // The execution MCP is only offered after the user explicitly selects Full
+  // access. It is an adapter over APEX's own audited execution runtime, not a
+  // third-party compute backend.
+  const execution = sandboxMode() === "danger-full-access"
+    ? {
+        apex_execution: {
+          command: process.execPath,
+          args: [SCIENCE_MCP_PATH],
+          env: {
+            APEX_WORKSPACE_ROOT: session.directory || process.cwd(),
+            APEX_SESSION_ID: session.id,
+            APEX_EXECUTION_ALLOWED: "1",
+          },
+          enabled: true,
+          default_tools_approval_mode: "writes",
+        },
+      }
+    : {};
+  const callbackHost = HOSTNAME === "0.0.0.0" || HOSTNAME === "::" ? "127.0.0.1" : HOSTNAME;
+  const subagents = allowSubagents
+    ? {
+        apex_subagents: {
+          command: process.execPath,
+          args: [CLAUDE_AGENT_MCP_PATH],
+          env: {
+            APEX_CLAUDE_CALLBACK_URL: `http://${callbackHost}:${PORT}/internal/claude-agent`,
+            APEX_CLAUDE_INTERNAL_TOKEN: CLAUDE_INTERNAL_TOKEN,
+            APEX_PARENT_SESSION_ID: session.id,
+          },
+          enabled: true,
+          default_tools_approval_mode: "writes",
+        },
+      }
+    : {};
+  const mcpConfig = { ...configured, ...research, ...execution, ...subagents };
   return new Codex({
     ...(runtimeApiKey ? { apiKey: runtimeApiKey } : {}),
-    config: { mcp_servers: toCodexMcpServers(mcpServers(), process.env) },
+    // Do not expose Codex's native shell alongside APEX Bash/ExecuteCode. The
+    // native command_execution item has no human_description field and would
+    // bypass APEX's execution audit and reproducibility contract.
+    config: mainCodexConfig({
+      mcpServers: mcpConfig,
+      hasApexExecution: "apex_execution" in mcpConfig,
+      allowSubagents,
+    }),
   });
 }
 
@@ -139,8 +290,13 @@ function skillsFor(directory) {
   return discoverSkills({
     directory,
     home: homedir(),
+    codexHome: CODEX_HOME,
     extensionsDir: EXTENSIONS_DIR,
     bundledSkillRoot: BUNDLED_SKILLS_DIR,
+    coreSkillRoot: SOURCE_CORE_SKILLS_DIR,
+    systemSkillRoot: SYSTEM_SKILLS_DIR,
+    additionalSkillRoots: SOURCE_ADDITIONAL_SKILL_ROOTS,
+    allowedSkillNames: APEX_DISCOVERY_SKILLS,
   });
 }
 
@@ -172,6 +328,48 @@ const appendHistory = (id, message) => {
   all.push(message);
   writeJson(historyPath(id), all);
 };
+const updateHistoryToolState = (id, callId, state) => {
+  const all = readHistory(id);
+  let updated = false;
+  for (const message of all) {
+    for (const part of message?.parts ?? []) {
+      if (part?.type === "tool" && part.callID === callId) {
+        part.state = state;
+        updated = true;
+      }
+    }
+  }
+  if (updated) writeJson(historyPath(id), all);
+};
+const readReconciledHistory = (id) => {
+  const result = reconcileOrphanedSubagentSteps(
+    readHistory(id),
+    (childSessionId) => runningTurns.has(childSessionId),
+  );
+  if (result.repaired) writeJson(historyPath(id), result.history);
+  return result.history;
+};
+
+function deleteSessionTree(rootId) {
+  const deleted = new Set();
+  const pending = [rootId];
+  while (pending.length) {
+    const id = pending.pop();
+    if (!id || deleted.has(id)) continue;
+    deleted.add(id);
+    for (const [childId, child] of sessions) {
+      if (child.parentId === id) pending.push(childId);
+    }
+  }
+
+  const active = [...deleted].find((id) => runningTurns.has(id));
+  if (active) throw Object.assign(new Error("Cannot delete a session while it is running"), { status: 409 });
+
+  for (const id of deleted) sessions.delete(id);
+  saveSessions();
+  for (const id of deleted) rmSync(historyPath(id), { force: true });
+  return deleted.size;
+}
 
 // ---- SSE hub ----
 const sseClients = new Set();
@@ -231,7 +429,13 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
     saveSessions();
   }
 
-  const turn = { aborted: false, close: () => {} };
+  const turn = {
+    aborted: false,
+    closers: new Set(),
+    close() {
+      for (const close of this.closers) close();
+    },
+  };
   runningTurns.set(session.id, turn);
 
   // Assembled as the turn progresses; flushed to history at the end.
@@ -270,6 +474,9 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
       time: { start: step.part.state.time.start, end: Date.now() },
     };
     step.part.state = state;
+    // A child may finish after Codex's MCP call has timed out and the parent
+    // history has already been serialized. Persist that late terminal state.
+    updateHistoryToolState(session.id, step.callId, state);
     emitToolUpdate(step.callId, step.part.tool, state);
   };
 
@@ -333,9 +540,12 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
   const loadedSkills = reviewOnly
     ? []
     : loadSkills(invokedSkills(promptText, discoveredSkills, selectedSkills), "main");
+  const evidenceSkillSelected = loadedSkills.some(({ skill }) => EVIDENCE_SKILL_NAMES.has(skill.name));
+  const allowBibliography = userRequestedBibliography(promptText);
 
   // "default" (or unset) leaves the model to ~/.codex/config.toml.
   const chosen = (bridgeConfig.model ?? "").split("/").pop();
+  const research = researchRoute(runtimeApiKey);
   const threadOptions = {
     workingDirectory: session.directory || process.cwd(),
     ...(chosen && chosen !== "default" ? { model: chosen } : {}),
@@ -344,6 +554,9 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
     // Keep the process non-interactive and rely on the workspace sandbox plus
     // per-MCP tool approval policies (default: writes).
     approvalPolicy: "never",
+    // Use Codex SDK native live research under both ChatGPT-managed and API-key
+    // authentication. The custom APEX research MCP remains dormant above.
+    webSearchMode: research.webSearchMode,
     skipGitRepoCheck: true,
     additionalDirectories: [
       ...pluginReadRoots(EXTENSIONS_DIR),
@@ -351,12 +564,206 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
     ],
   };
 
-  const skillContext = pluginSkillContext(discoveredSkills);
+  const skillContext = skillCatalogContext(discoveredSkills);
   const loadedContext = loadedSkillContext(loadedSkills);
-  const codexPrompt = [skillContext, loadedContext, promptText].filter(Boolean).join("\n\n");
+  const executionContext = sandboxMode() === "danger-full-access" ? EXECUTION_TOOL_CONTRACT : "";
+  const codexPrompt = [APEX_MAIN_AGENT_PROMPT, research.prompt, executionContext, skillContext, loadedContext, promptText]
+    .filter(Boolean)
+    .join("\n\n");
+
+  turn.launchClaudeAgent = async ({ task, skills = [], human_description: humanDescription }) => {
+    if (turn.aborted) return { failed: "The parent task was cancelled", memo: "" };
+    const childId = freshId("ses_claude");
+    const childSession = {
+      id: childId,
+      title: `Claude Agent · ${task.slice(0, 42).replace(/\s+/g, " ")}`,
+      directory: session.directory,
+      parentId: session.id,
+      claudeSessionId: null,
+      createdAt: Date.now(),
+    };
+    sessions.set(childId, childSession);
+    saveSessions();
+    appendHistory(childId, {
+      info: { id: freshId("msg"), role: "user", time: { completed: Date.now() } },
+      parts: [{ type: "text", text: task }],
+    });
+
+    const inheritedSkillNames = loadedSkills.map(({ skill }) => skill.name);
+    const requestedSkillNames = [...new Set([...inheritedSkillNames, ...skills])];
+    const childSelectedSkills = invokedSkills(
+      `${requestedSkillNames.map((name) => `$${name}`).join(" ")} ${task}`,
+      discoveredSkills,
+      requestedSkillNames,
+    );
+    const childSandbox = sandboxMode();
+    const childMcpServers = claudeAgentMcpServers(childSession);
+    const childTools = claudeAgentVisibleTools(childMcpServers);
+    const taskStep = beginWorkflowStep(
+      "task",
+      `Claude Agent — ${humanDescription}`,
+      {
+        agent: "Claude Agent",
+        task,
+        sandbox: childSandbox,
+        tools: childTools,
+        skills: childSelectedSkills.map((skill) => skill.name),
+        available_skill_count: new Set(discoveredSkills.map((skill) => skill.name)).size,
+        canLaunchSubagents: false,
+      },
+      { sessionId: childId },
+    );
+
+    const childParts = [];
+    const childSkills = loadSkills(childSelectedSkills, "claude-subagent", childId, childParts);
+    const abortController = new AbortController();
+    const childTurn = {
+      aborted: false,
+      close() {
+        this.aborted = true;
+        abortController.abort();
+      },
+    };
+    runningTurns.set(childId, childTurn);
+    const closeChild = () => childTurn.close();
+    turn.closers.add(closeChild);
+
+    const activeTools = new Map();
+    const childTexts = [];
+    const mappedClaudeTool = (name) => {
+      const direct = {
+        Read: "read",
+        Write: "write",
+        Edit: "edit",
+        Glob: "glob",
+        Grep: "grep",
+        WebSearch: "websearch",
+        WebFetch: "webfetch",
+      }[name];
+      if (direct) return direct;
+      if (/^mcp__apex_execution__Bash$/.test(name)) return "bash";
+      if (/^mcp__apex_execution__ExecuteCode$/.test(name)) return "execute_code";
+      return "mcp";
+    };
+    const claudeToolTitle = (name, input) => {
+      if (typeof input?.human_description === "string" && input.human_description.trim()) {
+        return input.human_description.trim();
+      }
+      if (name === "Read") return `Reading ${input?.file_path ?? "workspace file"}`;
+      if (name === "Write") return `Writing ${input?.file_path ?? "workspace file"}`;
+      if (name === "Edit") return `Editing ${input?.file_path ?? "workspace file"}`;
+      if (name === "Glob") return `Finding ${input?.pattern ?? "workspace files"}`;
+      if (name === "Grep") return `Searching for ${input?.pattern ?? "workspace content"}`;
+      if (name === "WebSearch") return `Searching ${input?.query ?? "the web"}`;
+      if (name === "WebFetch") return `Reading ${input?.url ?? "web source"}`;
+      return `Using ${name.replace(/^mcp__/, "").replaceAll("__", ".")}`;
+    };
+
+    let runResult;
+    try {
+      const options = buildClaudeAgentOptions({
+        apiKey: runtimeAnthropicApiKey,
+        cwd: childSession.directory || process.cwd(),
+        fullAccess: childSandbox === "danger-full-access",
+        mcpServers: childMcpServers,
+        abortController,
+        model: process.env.APEX_CLAUDE_MODEL?.trim() || undefined,
+        systemPrompt: [
+          APEX_MAIN_AGENT_PROMPT,
+          executionContext,
+          skillContext,
+          loadedSkillContext(childSkills),
+          "# Claude Agent delegation boundary",
+          "You are an independent child agent delegated by the APEX Main Agent. Complete only the assigned task and return a concise evidence-rich memo to the Main Agent. You have the same APEX workspace, skills catalog, web capabilities, execution tools, and configured MCP servers as the Main Agent. You cannot launch or simulate another subagent. Do not ask the end user questions; report material ambiguity in the memo.",
+        ].filter(Boolean).join("\n\n"),
+      });
+      runResult = await runClaudeAgent({
+        prompt: task,
+        options,
+        onEvent: (event) => {
+          if (event.type === "session") {
+            childSession.claudeSessionId = event.sessionId;
+            saveSessions();
+            return;
+          }
+          if (event.type === "text" && event.text) {
+            childTexts.push(event.text);
+            const part = { type: "text", text: event.text };
+            childParts.push(part);
+            emitText(freshId("prt_claude"), event.text, childId);
+            return;
+          }
+          if (event.type === "tool-start") {
+            const tool = mappedClaudeTool(event.name);
+            const callId = `cll_claude_${event.id}`;
+            const state = {
+              status: "running",
+              title: claudeToolTitle(event.name, event.input),
+              input: { ...event.input, provider_tool: event.name, phase: "claude-subagent" },
+              time: { start: Date.now() },
+            };
+            const part = { type: "tool", tool, callID: callId, state };
+            childParts.push(part);
+            activeTools.set(event.id, { callId, part, tool });
+            emitToolUpdate(callId, tool, state, childId);
+            return;
+          }
+          if (event.type === "tool-result") {
+            const active = activeTools.get(event.id);
+            if (!active) return;
+            const state = {
+              ...active.part.state,
+              status: event.error ? "error" : "completed",
+              output: event.output?.slice(0, 100_000) ?? "",
+              time: { start: active.part.state.time.start, end: Date.now() },
+            };
+            active.part.state = state;
+            emitToolUpdate(active.callId, active.tool, state, childId);
+            activeTools.delete(event.id);
+          }
+        },
+      });
+    } catch (error) {
+      runResult = { result: "", failed: error instanceof Error ? error.message : String(error), sessionId: null };
+    } finally {
+      turn.closers.delete(closeChild);
+      runningTurns.delete(childId);
+      for (const active of activeTools.values()) {
+        const state = {
+          ...active.part.state,
+          status: "error",
+          output: childTurn.aborted || turn.aborted ? "Claude Agent was cancelled" : "Claude Agent ended before this tool returned",
+          time: { start: active.part.state.time.start, end: Date.now() },
+        };
+        active.part.state = state;
+        emitToolUpdate(active.callId, active.tool, state, childId);
+      }
+    }
+
+    if (childParts.length) {
+      appendHistory(childId, {
+        info: { id: freshId("msg"), role: "assistant", time: { completed: Date.now() } },
+        parts: childParts,
+      });
+    }
+    broadcast("session.idle", { sessionID: childId });
+    const memo = (runResult.result || childTexts.join("\n\n")).trim();
+    const failed = runResult.failed || (childTurn.aborted || turn.aborted ? "Claude Agent was cancelled" : null);
+    finishWorkflowStep(taskStep, {
+      title: failed ? "Claude Agent — task failed" : "Claude Agent — result returned",
+      output: failed ?? `${memo.length} characters returned from independent Claude session ${runResult.sessionId ?? childId}`,
+      error: Boolean(failed),
+    });
+    return {
+      childSessionId: childId,
+      claudeSessionId: runResult.sessionId,
+      memo,
+      failed,
+    };
+  };
 
   try {
-    const codex = codexClient();
+    const codex = codexClient(session);
     const mainThread = session.codexThreadId
       ? codex.resumeThread(session.codexThreadId, threadOptions)
       : codex.startThread(threadOptions);
@@ -372,14 +779,26 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
       targetSessionId = session.id,
       targetParts = assistantParts,
     }) => {
-      const result = { texts: [], changedPaths: [], commands: [], failed: null };
+      const result = {
+        texts: [],
+        textParts: [],
+        changedPaths: [],
+        notebookPaths: [],
+        commands: [],
+        externalEvidenceUsed: false,
+        failed: null,
+        outputParts: targetParts,
+        targetSessionId,
+      };
       const itemIndex = new Map();
       const { events } = await thread.runStreamed(prompt);
-      turn.close = () => void events.return?.();
+      const closeEvents = () => void events.return?.();
+      turn.closers.add(closeEvents);
       const prefix = phase.replace(/[^a-zA-Z0-9_-]/g, "_");
 
-      for await (const event of events) {
-        if (turn.aborted) break;
+      try {
+        for await (const event of events) {
+          if (turn.aborted) break;
         if (event.type === "thread.started") {
           onThreadStarted?.(event.thread_id);
           continue;
@@ -398,13 +817,18 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
         const item = event.item;
         if (!item) continue;
 
-        switch (item.type) {
+          switch (item.type) {
           case "agent_message": {
             const partId = `prt_${prefix}_${item.id}`;
-            if (recordText) emitText(partId, item.text ?? "", targetSessionId);
-            if (event.type === "item.completed" && item.text) {
-              result.texts.push(item.text);
-              if (recordText) targetParts.push({ type: "text", text: item.text });
+            const visibleText = item.text ?? "";
+            if (recordText) emitText(partId, visibleText, targetSessionId);
+            if (event.type === "item.completed" && visibleText) {
+              result.texts.push(visibleText);
+              if (recordText) {
+                const part = { type: "text", id: partId, text: visibleText };
+                targetParts.push(part);
+                result.textParts.push({ partId, part });
+              }
             }
             break;
           }
@@ -413,8 +837,12 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
             const running = event.type !== "item.completed";
             const state = {
               status: running ? "running" : item.status === "failed" ? "error" : "completed",
-              title: item.command,
-              input: { command: item.command, phase },
+              title: "Missing activity description",
+              input: {
+                command: item.command,
+                phase,
+                description_missing: true,
+              },
               output: running ? undefined : item.aggregated_output ?? "",
               time: running ? { start: Date.now() } : undefined,
             };
@@ -423,6 +851,9 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
               targetParts.push({ type: "tool", tool: "bash", callID: callId, state: { ...state, time: { start: Date.now() } } });
             } else if (!running) {
               result.commands.push(item.command);
+              if (/\bpaperclip\b|https?:\/\/|\b(?:dailymed|open[-_ ]targets|purple[-_ ]book|depmap|cellxgene|uniprot|chembl|pdb)\b/i.test(item.command)) {
+                result.externalEvidenceUsed = true;
+              }
               const idx = itemIndex.get(item.id);
               const started = idx !== undefined ? targetParts[idx].state.time?.start : undefined;
               const done = { ...state, time: { start: started ?? Date.now(), end: Date.now() } };
@@ -452,32 +883,86 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
             break;
           }
           case "mcp_tool_call": {
+            if (item.server === "apex_subagents") {
+              if (event.type === "item.completed") {
+                mcpStatuses.set(item.server, item.status === "failed" ? "failed" : "connected");
+                result.externalEvidenceUsed = true;
+              }
+              break;
+            }
             const callId = `cll_${prefix}_${item.id}`;
             const running = event.type !== "item.completed";
-            const output = item.error?.message
-              ?? (item.result ? JSON.stringify(item.result.structured_content ?? item.result.content ?? "") : undefined);
-            const baseInput = item.arguments && typeof item.arguments === "object" ? item.arguments : { value: item.arguments };
+            const isExecution = item.server === "apex_execution";
+            const isResearch = item.server === "apex_research";
+            const executionJob = isExecution ? executionJobFromResult(item.result) : null;
+            const researchResult = isResearch ? researchResultFromResult(item.result) : null;
+            const structured = item.result?.structured_content && typeof item.result.structured_content === "object"
+              ? item.result.structured_content
+              : executionJob ?? researchResult;
+            const output = isExecution && typeof executionJob?.output === "string"
+              ? executionJob.output
+              : isResearch && researchResult
+                ? JSON.stringify(researchResult)
+              : item.error?.message
+                ?? (item.result ? JSON.stringify(structured ?? item.result.content ?? "") : undefined);
+            const baseInput = item.arguments && typeof item.arguments === "object"
+              ? { ...item.arguments, ...(executionJob?.notebook_path ? { notebook_path: executionJob.notebook_path } : {}) }
+              : { value: item.arguments };
+            const humanDescription = (isExecution || isResearch) && typeof baseInput.human_description === "string"
+              ? baseInput.human_description.trim()
+              : "";
+            const mappedTool = isExecution && item.tool === "Bash"
+              ? "bash"
+              : isExecution && item.tool === "ExecuteCode"
+                ? "execute_code"
+                : isResearch && item.tool === "WebSearch"
+                  ? "websearch"
+                  : isResearch && item.tool === "WebFetch"
+                    ? "webfetch"
+                : "mcp";
             const state = {
               status: running ? "running" : item.status === "failed" ? "error" : "completed",
-              title: `${item.server}.${item.tool}`,
-              input: { ...baseInput, phase },
+              title: humanDescription || ((isExecution || isResearch) ? "Missing activity description" : `${item.server}.${item.tool}`),
+              input: {
+                ...baseInput,
+                phase,
+                ...(humanDescription ? { human_description: humanDescription } : {}),
+                ...((isExecution || isResearch) && !humanDescription ? { description_missing: true } : {}),
+              },
               ...(running ? {} : { output: output?.slice(0, 100_000) ?? "" }),
               time: running ? { start: Date.now() } : { start: Date.now(), end: Date.now() },
             };
             if (!running) {
               mcpStatuses.set(item.server, item.status === "failed" ? "failed" : "connected");
-              targetParts.push({ type: "tool", tool: "mcp", callID: callId, state });
+              if (isResearch || /(?:paper|literature|trial|protein|uniprot|pdb|chembl|drug|target|regulatory)/i.test(`${item.server} ${item.tool}`)) {
+                result.externalEvidenceUsed = true;
+              }
+              if (isExecution && item.tool === "ExecuteCode" && executionJob?.notebook_path) {
+                result.notebookPaths.push(executionJob.notebook_path);
+              }
+              targetParts.push({ type: "tool", tool: mappedTool, callID: callId, state });
             }
-            emitToolUpdate(callId, "mcp", state, targetSessionId);
+            emitToolUpdate(callId, mappedTool, state, targetSessionId);
             break;
           }
           case "web_search": {
             if (event.type !== "item.completed") break;
+            result.externalEvidenceUsed = true;
+            // The Codex SDK currently flattens search/open/find actions into a
+            // single `query` string. Some open-page events arrive with an empty
+            // query because the SDK does not expose the underlying action URL.
+            // An invented "web search" row is misleading and has no useful
+            // detail to inspect, so omit only those empty events.
+            const query = typeof item.query === "string" ? item.query.trim() : "";
+            if (!query) break;
             const callId = `cll_${prefix}_${item.id}`;
             const state = {
               status: "completed",
-              title: item.query ?? "web search",
-              input: { pattern: item.query, phase },
+              title: query,
+              input: {
+                pattern: query,
+                phase,
+              },
               time: { start: Date.now(), end: Date.now() },
             };
             targetParts.push({ type: "tool", tool: "websearch", callID: callId, state });
@@ -494,11 +979,83 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
             }
             break;
           }
-          default:
-            break;
+            default:
+              break;
+          }
         }
+      } finally {
+        turn.closers.delete(closeEvents);
       }
       return result;
+    };
+
+    const publishPhaseText = (result, text, phase) => {
+      for (const entry of result.textParts ?? []) {
+        entry.part.text = "";
+        emitText(entry.partId, "", result.targetSessionId);
+      }
+      const finalText = String(text ?? "").trim();
+      result.texts = finalText ? [finalText] : [];
+      result.textParts = [];
+      if (!finalText) return;
+      const partId = freshId(`prt_${phase}_verified`);
+      const part = { type: "text", id: partId, text: finalText };
+      result.outputParts.push(part);
+      result.textParts.push({ partId, part });
+      emitText(partId, finalText, result.targetSessionId);
+    };
+
+    const enforceInlineCitations = async ({ result, thread, phase, required, buffered }) => {
+      const answer = result.texts.join("\n\n").trim();
+      if (!required) {
+        if (buffered && answer) publishPhaseText(result, answer, phase);
+        return { ok: true, repaired: false, blocked: false };
+      }
+
+      const audit = auditInlineCitations(answer, { required: true, allowBibliography });
+      if (audit.ok) {
+        if (buffered && answer) publishPhaseText(result, answer, phase);
+        return { ok: true, repaired: false, blocked: false, audit };
+      }
+
+      const step = beginWorkflowStep("citation", "Citation check — improving inline evidence links", {
+        phase,
+        citation_count: audit.citationCount,
+        factual_claim_count: audit.factualClaimCount,
+        uncited_claim_count: audit.uncitedClaims.length,
+        issues: audit.issues,
+      });
+      const repair = await streamPhase({
+        thread,
+        prompt: citationRepairPrompt({ answer, audit, allowBibliography }),
+        phase: `${phase}-citation-repair`,
+        recordText: false,
+        surfaceErrors: false,
+      });
+      const repairedText = repair.texts.join("\n\n").trim();
+      const repairedAudit = auditInlineCitations(repairedText, { required: true, allowBibliography });
+      result.externalEvidenceUsed ||= repair.externalEvidenceUsed;
+
+      if (!repair.failed && repairedAudit.ok) {
+        publishPhaseText(result, repairedText, phase);
+        finishWorkflowStep(step, {
+          title: "Citation check — passed after repair",
+          output: `${repairedAudit.citationCount} inline citation${repairedAudit.citationCount === 1 ? "" : "s"}; ${repairedAudit.factualClaimCount} checked factual claim unit${repairedAudit.factualClaimCount === 1 ? "" : "s"}`,
+        });
+        return { ok: true, repaired: true, blocked: false, audit: repairedAudit };
+      }
+
+      // Citation repair is best-effort. Local matrices, private records, and
+      // workspace artifacts may not have an HTTP record page, so incomplete
+      // links must never replace the research answer with a blocking message.
+      const bestAvailableAnswer = repairedText || answer;
+      publishPhaseText(result, bestAvailableAnswer, phase);
+      finishWorkflowStep(step, {
+        title: "Citation check — best available answer published",
+        output: repair.failed
+          ?? (repairedAudit.issues.join(" ") || "Some local or private evidence could not be linked automatically."),
+      });
+      return { ok: false, repaired: true, blocked: false, audit: repairedAudit };
     };
 
     const delegatedLiteratureTask = reviewOnly ? null : literatureSubagentTask(promptText);
@@ -519,40 +1076,65 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
         parts: [{ type: "text", text: delegatedLiteratureTask }],
       });
 
+      const childSelectedSkills = invokedSkills(
+        `$paperclip ${delegatedLiteratureTask}`,
+        discoveredSkills,
+        loadedSkills.map(({ skill }) => skill.name),
+      );
+      const childSandbox = sandboxMode();
+      const childTools = [
+        "Live web research",
+        ...(childSandbox === "danger-full-access" ? ["Bash", "ExecuteCode"] : ["Codex shell"]),
+        ...Object.keys(mcpServers()).map((name) => `MCP · ${name}`),
+      ];
       const taskStep = beginWorkflowStep(
         "task",
         "Literature Agent — researching evidence",
-        { agent: "literature", task: delegatedLiteratureTask, sandbox: "read-only" },
+        {
+          agent: "literature",
+          task: delegatedLiteratureTask,
+          sandbox: childSandbox,
+          tools: childTools,
+          skills: childSelectedSkills.map((skill) => skill.name),
+          available_skill_count: new Set(discoveredSkills.map((skill) => skill.name)).size,
+          canLaunchSubagents: false,
+        },
         { sessionId: childId },
       );
       const childParts = [];
-      const childSelectedSkills = invokedSkills(`$paperclip ${delegatedLiteratureTask}`, discoveredSkills);
       const childSkills = loadSkills(
         childSelectedSkills,
         "literature-subagent",
         childId,
         childParts,
       );
-      const childThread = reviewerCodexClient().startThread({
-        ...threadOptions,
-        sandboxMode: "read-only",
-        networkAccessEnabled: true,
-        webSearchMode: "live",
-      });
-      const childResult = await streamPhase({
-        thread: childThread,
-        prompt: literatureAgentPrompt({
-          task: delegatedLiteratureTask,
-          skillContext: loadedSkillContext(childSkills),
-        }),
-        phase: "literature-subagent",
-        targetSessionId: childId,
-        targetParts: childParts,
-        onThreadStarted: (threadId) => {
-          childSession.codexThreadId = threadId;
-          saveSessions();
-        },
-      });
+      const childThread = codexClient(childSession, { allowSubagents: false }).startThread(threadOptions);
+      let childResult;
+      runningTurns.set(childId, turn);
+      try {
+        childResult = await streamPhase({
+          thread: childThread,
+          prompt: [
+            APEX_MAIN_AGENT_PROMPT,
+            research.prompt,
+            executionContext,
+            literatureAgentPrompt({
+              task: delegatedLiteratureTask,
+              skillCatalog: skillContext,
+              skillContext: loadedSkillContext(childSkills),
+            }),
+          ].filter(Boolean).join("\n\n"),
+          phase: "literature-subagent",
+          targetSessionId: childId,
+          targetParts: childParts,
+          onThreadStarted: (threadId) => {
+            childSession.codexThreadId = threadId;
+            saveSessions();
+          },
+        });
+      } finally {
+        runningTurns.delete(childId);
+      }
       if (childParts.length) {
         appendHistory(childId, {
           info: { id: freshId("msg"), role: "assistant", time: { completed: Date.now() } },
@@ -560,6 +1142,15 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
         });
       }
       broadcast("session.idle", { sessionID: childId });
+
+      if (turn.aborted) {
+        finishWorkflowStep(taskStep, {
+          title: "Literature Agent — cancelled",
+          output: "The user cancelled the literature subagent.",
+          error: true,
+        });
+        return;
+      }
 
       const fullMemo = childResult.texts.join("\n\n").trim();
       const memo = fullMemo.length > 200_000
@@ -572,22 +1163,32 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
         output: childResult.failed ?? `${memo.length} characters returned from independent thread ${childSession.codexThreadId ?? childId}`,
         error: Boolean(childResult.failed),
       });
-      await streamPhase({
+      const synthesisResult = await streamPhase({
         thread: mainThread,
         prompt: literatureSynthesisPrompt({
           task: delegatedLiteratureTask,
           memo: memo || `The literature subagent failed: ${childResult.failed ?? "no evidence memo returned"}`,
         }),
         phase: "main-synthesis",
+        recordText: false,
         onThreadStarted: (threadId) => {
           session.codexThreadId = threadId;
           saveSessions();
         },
       });
+      if (!turn.aborted && !synthesisResult.failed) {
+        await enforceInlineCitations({
+          result: synthesisResult,
+          thread: mainThread,
+          phase: "main-synthesis",
+          required: true,
+          buffered: true,
+        });
+      }
       return;
     }
 
-    let mainResult = { changedPaths: [], failed: null };
+    let mainResult = { changedPaths: [], notebookPaths: [], failed: null };
     let targets;
     if (reviewOnly) {
       targets = manualReviewTargets(session);
@@ -597,13 +1198,25 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
         thread: mainThread,
         prompt: codexPrompt,
         phase: "main",
+        // Final prose is always buffered so an uncited scientific draft can
+        // never be transiently published before the runtime gate evaluates it.
+        recordText: false,
         onThreadStarted: (threadId) => {
           session.codexThreadId = threadId;
           saveSessions();
         },
       });
+      if (!turn.aborted && !mainResult.failed) {
+        await enforceInlineCitations({
+          result: mainResult,
+          thread: mainThread,
+          phase: "main",
+          required: evidenceSkillSelected || mainResult.externalEvidenceUsed,
+          buffered: true,
+        });
+      }
       targets = reviewTargets(
-        mainResult.changedPaths,
+        [...mainResult.changedPaths, ...mainResult.notebookPaths],
         recentReviewableFiles(session.directory || process.cwd(), mainStartedAt),
       );
       if (targets.length > 0) {
@@ -627,6 +1240,7 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
         ...threadOptions,
         sandboxMode: "read-only",
         networkAccessEnabled: true,
+        webSearchMode: "live",
       });
       let reviewerThreadId = null;
       const result = await streamPhase({
@@ -699,7 +1313,7 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
           error: Boolean(fixResult.failed),
         });
         targets = reviewTargets(
-          [...targets, ...fixResult.changedPaths],
+          [...targets, ...fixResult.changedPaths, ...fixResult.notebookPaths],
           recentReviewableFiles(session.directory || process.cwd(), fixStartedAt),
         );
         session.reviewTargets = targets;
@@ -736,7 +1350,12 @@ function runShell(session, command) {
       sessionID: session.id,
       callID: callId,
       tool: "bash",
-      state: { status: "running", title: command, input: { command }, time: { start: started } },
+      state: {
+        status: "running",
+        title: "Running direct shell command",
+        input: { command, human_description: "Running direct shell command" },
+        time: { start: started },
+      },
     },
   });
   return new Promise((resolve) => {
@@ -747,8 +1366,8 @@ function runShell(session, command) {
       const output = [stdout, stderr].filter(Boolean).join("\n").trim();
       const state = {
         status: err ? "error" : "completed",
-        title: command,
-        input: { command },
+        title: "Running direct shell command",
+        input: { command, human_description: "Running direct shell command" },
         output: output || (err ? String(err.message) : ""),
         time: { start: started, end: Date.now() },
       };
@@ -803,10 +1422,35 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   const path = url.pathname;
   const method = req.method ?? "GET";
+  const internalClaudeRequest = path === "/internal/claude-agent"
+    && req.headers.authorization === `Bearer ${CLAUDE_INTERNAL_TOKEN}`;
 
-  if (!authorized(req, url)) return void json(res, { message: "unauthorized" }, 401);
+  if (!internalClaudeRequest && !authorized(req, url)) return void json(res, { message: "unauthorized" }, 401);
 
   try {
+    if (method === "POST" && path === "/internal/claude-agent") {
+      if (!internalClaudeRequest) return void json(res, { message: "unauthorized" }, 401);
+      const body = await readBody(req);
+      const parentSessionId = typeof body.parentSessionId === "string" ? body.parentSessionId : "";
+      const task = typeof body.task === "string" ? body.task.trim() : "";
+      const humanDescription = typeof body.human_description === "string" ? body.human_description.trim() : "";
+      const words = humanDescription.split(/\s+/).filter(Boolean);
+      if (!parentSessionId || !task) return void apiError(res, 400, "missing parentSessionId or task");
+      if (words.length < 3 || words.length > 8) {
+        return void apiError(res, 400, "human_description must contain 3-8 words");
+      }
+      const turn = runningTurns.get(parentSessionId);
+      if (!turn?.launchClaudeAgent) return void apiError(res, 409, "the parent task is no longer accepting subagents");
+      const skills = Array.isArray(body.skills)
+        ? body.skills.filter((name) => typeof name === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(name)).slice(0, 20)
+        : [];
+      return void json(res, await turn.launchClaudeAgent({
+        task,
+        skills,
+        human_description: humanDescription,
+      }));
+    }
+
     // --- event stream ---
     if (method === "GET" && path === "/event") {
       res.writeHead(200, {
@@ -849,11 +1493,10 @@ const server = createServer(async (req, res) => {
       if (!session) return void apiError(res, 404, "no such session");
 
       if (method === "DELETE" && !sub) {
-        sessions.delete(id);
-        saveSessions();
+        deleteSessionTree(id);
         return void json(res, true);
       }
-      if (method === "GET" && sub === "message") return void json(res, readHistory(id));
+      if (method === "GET" && sub === "message") return void json(res, readReconciledHistory(id));
       if (method === "POST" && sub === "prompt_async") {
         const body = await readBody(req);
         const text = (body.parts ?? [])
@@ -979,14 +1622,32 @@ const server = createServer(async (req, res) => {
     if (method === "GET" && path === "/question") return void json(res, []);
 
     // --- discovery stubs the UI polls ---
+    if (method === "GET" && path === "/api/skill/content") {
+      const requested = url.searchParams.get("path");
+      if (!requested || !isAbsolute(requested)) return void apiError(res, 400, "missing absolute skill path");
+      const skill = skillsFor(url.searchParams.get("directory")).find(
+        (item) => resolve(item.location) === resolve(requested),
+      );
+      if (!skill) return void apiError(res, 404, "skill is not installed in this workspace");
+      const bytes = statSync(skill.location).size;
+      if (bytes > MAX_SKILL_BYTES) return void apiError(res, 413, `SKILL.md is ${bytes} bytes; the preview limit is ${MAX_SKILL_BYTES} bytes`);
+      return void json(res, { data: { ...skill, content: readFileSync(skill.location, "utf8") } });
+    }
     if (method === "GET" && path === "/api/skill") {
       return void json(res, { data: skillsFor(url.searchParams.get("directory")) });
     }
-    if (method === "GET" && path === "/agent") return void json(res, [{
-      name: "literature",
-      description: "Independent read-only literature research subagent with evidence handoff to Main.",
-      mode: "subagent",
-    }]);
+    if (method === "GET" && path === "/agent") return void json(res, [
+      {
+        name: "claude-agent",
+        description: "Claude Agent SDK subagent with Main-equivalent APEX tools and skills, excluding nested subagent launch.",
+        mode: "subagent",
+      },
+      {
+        name: "literature",
+        description: "Independent literature research subagent with Main-equivalent tools and evidence handoff.",
+        mode: "subagent",
+      },
+    ]);
     if (method === "GET" && path === "/command") {
       return void json(res, skillsFor(url.searchParams.get("directory")).map((skill) => ({
         name: skill.name,

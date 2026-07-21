@@ -26,9 +26,14 @@ test("selects reviewable artifacts and the applicable APEX reviewer skills", () 
   );
   assert.deepEqual(reviewerSkillNames(["analysis.py", "report.md"]), [
     "traceability-review",
-    "domain-check",
     "stats-integrity",
   ]);
+});
+
+test("reviews execution notebooks without exposing other runtime state", () => {
+  assert.equal(isReviewablePath(".openscience/execution_trace/worker-0-python.ipynb"), true);
+  assert.equal(isReviewablePath(".openscience/execution_jobs/job.json"), false);
+  assert.equal(isReviewablePath(".openscience/private.ipynb"), false);
 });
 
 test("finds command-generated artifacts without walking runtime and dependency trees", () => {
@@ -61,7 +66,7 @@ test("builds separated read-only review and main-agent fix prompts", () => {
     targets: ["report.md"],
     skillContext: "<skill>Traceability instructions</skill>",
   });
-  assert.match(review, /independent APEX Science Reviewer Agent/);
+  assert.match(review, /independent APEX Discovery Reviewer Agent/);
   assert.match(review, /read-only/);
   assert.match(review, /review pass 2/);
   assert.match(review, /Traceability instructions/);

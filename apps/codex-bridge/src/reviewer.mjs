@@ -21,6 +21,13 @@ function extension(path) {
 
 export function isReviewablePath(path) {
   const parts = String(path).split(/[\\/]/).filter(Boolean);
+  const traceIndex = parts.lastIndexOf("execution_trace");
+  if (
+    traceIndex > 0
+    && parts[traceIndex - 1] === ".openscience"
+    && traceIndex === parts.length - 2
+    && extension(path) === ".ipynb"
+  ) return true;
   if (parts.some((part) => SKIP_PARTS.has(part))) return false;
   return REVIEWABLE_EXTENSIONS.has(extension(path));
 }
@@ -75,7 +82,7 @@ export function reviewerSkillNames(paths) {
     names.push("traceability-review");
   }
   if ([...extensions].some((ext) => CODE_EXTENSIONS.has(ext))) {
-    names.push("domain-check", "stats-integrity");
+    names.push("stats-integrity");
   }
   // Data-only changes still benefit from traceability checks against the run
   // record, while avoiding the much heavier full-paper integrity auditor.
@@ -122,7 +129,7 @@ export function reviewFence(review, { pass, verdict }) {
 
 export function reviewerPrompt({ pass, targets, skillContext }) {
   return [
-    "You are the independent APEX Science Reviewer Agent. You are not the Main Agent.",
+    "You are the independent APEX Discovery Reviewer Agent. You are not the Main Agent.",
     "Review the artifacts below in a fresh context. Your sandbox is read-only: never edit, delete, or create workspace files.",
     "Use deterministic scripts and provenance before model judgment. Verify only what the evidence supports; never claim the work is error-free.",
     "Focus on concrete, fixable findings with exact identifiers, quoted claims, file paths, and code/output evidence.",
@@ -137,7 +144,7 @@ export function reviewerPrompt({ pass, targets, skillContext }) {
 
 export function fixPrompt(findings, targets) {
   return [
-    "The independent APEX Science Reviewer found the issues below in the artifacts produced by this task.",
+    "The independent APEX Discovery Reviewer found the issues below in the artifacts produced by this task.",
     "Fix the underlying artifacts and code; do not merely rewrite or suppress the review. Re-run the smallest relevant checks or analysis after editing.",
     `Targets:\n${targets.map((path) => `- ${path}`).join("\n")}`,
     `Reviewer findings:\n${JSON.stringify(findings, null, 2)}`,

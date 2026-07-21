@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Files, FlaskConical, FolderTree, PanelLeft, Plus, Settings, Trash2 } from "lucide-react";
+import { PanelLeft, Plus, Settings, Trash2 } from "lucide-react";
 import type { Project } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
 import { useRuntimeStore } from "@/lib/runtime";
@@ -9,7 +9,6 @@ import { SIDEBAR_MAX, SIDEBAR_MIN, useOverlayTitlebar, useUiStore } from "@/lib/
 import { useUpdateStore } from "@/lib/update";
 import { StatusPills } from "./StatusPills";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import logo from "@/assets/logo.webp";
 
 interface Row {
   id: string;
@@ -87,7 +86,7 @@ export function Sidebar({ project }: { project: Project }) {
   };
 
   // With the overlay titlebar (macOS), reserve a draggable strip at the top so
-  // the traffic lights don't overlap the logo and the window stays movable.
+  // the traffic lights don't overlap the sidebar controls and the window stays movable.
   const isMac = navigator.userAgent.includes("Mac");
   const overlayTitlebar = useOverlayTitlebar();
 
@@ -117,13 +116,14 @@ export function Sidebar({ project }: { project: Project }) {
         </div>
       )}
       <div className={cn("px-4 pb-3", overlayTitlebar ? "pt-1" : "pt-4")}>
-        <div className="flex items-baseline gap-1.5">
-          <img src={logo} alt="" className="h-[18px] w-auto self-center" />
-          {/* eslint-disable-next-line i18next/no-literal-string -- product brand name, not translated across locales (see AGENTS.md) */}
-          <div className="font-serif text-[17px] font-semibold leading-none tracking-tight text-text">
-            APEX Science
+        <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-baseline gap-1.5">
+            {/* eslint-disable-next-line i18next/no-literal-string -- product brand name, not translated across locales (see AGENTS.md) */}
+            <div className="truncate font-serif text-[17px] font-semibold leading-none tracking-tight text-text">
+              APEX Discovery
+            </div>
+            <span className="text-[10px] uppercase tracking-widest text-muted">{t("sidebar.betaBadge")}</span>
           </div>
-          <span className="text-[10px] uppercase tracking-widest text-muted">{t("sidebar.betaBadge")}</span>
           {!overlayTitlebar && (
             <button
               onClick={toggleSidebar}
@@ -139,9 +139,6 @@ export function Sidebar({ project }: { project: Project }) {
 
       <nav className="flex flex-col px-3">
         <NavRow icon={<Plus size={16} />} label={t("items.new")} onClick={startNew} />
-        <NavRow icon={<FolderTree size={16} />} label={t("items.files")} onClick={() => navigate("/files")} />
-        <NavRow icon={<FlaskConical size={16} />} label={t("items.runs")} onClick={() => navigate("/runs")} />
-        <NavRow icon={<Files size={16} />} label={t("items.skills")} onClick={() => navigate("/skills")} />
       </nav>
 
       <div className="mt-4 flex-1 overflow-y-auto px-3 pb-2">

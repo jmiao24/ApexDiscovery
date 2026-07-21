@@ -47,25 +47,33 @@ describe("groupToolBlocks", () => {
     expect(items.map((i) => i.kind)).toEqual(["group", "block", "group"]);
   });
 
-  it("keeps Reviewer and Main-Agent fix phases visible between folded tool runs", () => {
+  it("keeps subagent, Reviewer, and Main-Agent fix phases visible between folded tool runs", () => {
     const items = groupToolBlocks([
       tool({ title: "python analyze.py" }),
+      tool({ tool: "task", verb: undefined, title: "Literature Agent — researching evidence", childSessionId: "ses_child" }),
+      tool({ title: "python extract.py" }),
       tool({ tool: "reviewer", verb: undefined, title: "Reviewer pass 1 — reviewing artifacts" }),
-      tool({ title: "python domain_check.py" }),
+      tool({ title: "python stats_check.py" }),
       tool({ tool: "fix", verb: undefined, title: "Main Agent — fixing reviewer findings" }),
       tool({ title: "python analyze.py" }),
     ]);
-    expect(items.map((item) => item.kind)).toEqual(["group", "block", "group", "block", "group"]);
+    expect(items.map((item) => item.kind)).toEqual([
+      "group", "block", "group", "block", "group", "block", "group",
+    ]);
   });
 
-  it("shows a failure count on the collapsed summary", () => {
-    render(
+  it("uses a quiet blocked icon and omits the failed-count label", () => {
+    const { container } = render(
       <ToolGroup
         blocks={[tool({}), tool({ status: "failed", output: "404 not found" })]}
       />,
     );
     expect(screen.getByText(/2 commands/)).toBeInTheDocument();
-    expect(screen.getByText(/1 failed/)).toBeInTheDocument();
+    expect(screen.getByText("2 steps")).toBeInTheDocument();
+    expect(screen.queryByText(/failed/)).not.toBeInTheDocument();
+    expect(container.querySelector(".lucide-ban")).toBeInTheDocument();
+    expect(container.querySelector(".lucide-x")).not.toBeInTheDocument();
+    expect(screen.getByText("404 not found")).toBeInTheDocument();
   });
 });
 
@@ -92,7 +100,7 @@ describe("ToolGroup", () => {
     expect(screen.getByText("ls")).toBeInTheDocument();
   });
 
-  it("stays open while a step runs and shows its live output tail", () => {
+  it("opens a running group so its action list and live tail stay visible", () => {
     render(
       <ToolGroup
         blocks={[
@@ -106,9 +114,29 @@ describe("ToolGroup", () => {
         ]}
       />,
     );
-    // No click: the running group is auto-expanded with the tail visible.
     expect(screen.getByText("python train.py")).toBeInTheDocument();
     expect(screen.getByText(/loss=0\.51/)).toBeInTheDocument();
+  });
+
+  it("opens a failed group but keeps its code detail folded", () => {
+    render(
+      <ToolGroup
+        blocks={[
+          tool({ title: "resolve target" }),
+          tool({
+            tool: "execute_code",
+            title: "query schema",
+            status: "failed",
+            command: "query_schema()",
+            output: "unknown field",
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText("query schema")).toBeInTheDocument();
+    expect(document.querySelector("[data-execute-code-detail]")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /query schema/ }));
+    expect(document.querySelector("[data-execute-code-detail]")).toBeInTheDocument();
   });
 
   it("a single quiet step renders as a plain row, no group chrome", () => {
@@ -118,12 +146,12 @@ describe("ToolGroup", () => {
   });
 
   it("expanding a bash row reveals the full command and output", () => {
-    render(
+    const { container } = render(
       <ToolGroup
         blocks={[
           tool({
             title: "python train.py",
-            command: "cd deep/path && python train.py",
+            command: "python3.12 /usr/local/bin/paperclip skill --format markdown",
             output: "done ok",
           }),
         ]}
@@ -131,8 +159,146 @@ describe("ToolGroup", () => {
     );
     const row = screen.getByRole("button");
     fireEvent.click(row);
-    expect(screen.getByText(/cd deep\/path && python train\.py/)).toBeInTheDocument();
+    expect(screen.getByText("SHELL")).toBeInTheDocument();
+    expect(screen.getByText("COMMAND")).toBeInTheDocument();
+    expect(screen.getByText("STDOUT")).toBeInTheDocument();
+    expect(container.querySelector("[data-shell-command]")).toHaveTextContent("paperclip");
+    expect(container.querySelector("[data-shell-command] .hljs-built_in")).toHaveTextContent("python3.12");
+    expect(container.querySelector("[data-shell-command] .hljs-string")).toBeInTheDocument();
+    expect(container.querySelector("[data-shell-command] .hljs-attribute")).toHaveTextContent("--format");
     expect(screen.getByText("done ok")).toBeInTheDocument();
+  });
+
+  it("shows a natural activity label without a redundant Ran prefix", () => {
+    render(
+      <ToolGroup
+        blocks={[
+          tool({
+            title: "Building MC4R biologics opportunity table",
+            naturalTitle: true,
+            command: "python build_table.py",
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText("Building MC4R biologics opportunity table")).toBeInTheDocument();
+    expect(screen.queryByText("Ran")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button"));
+    expect(document.querySelector("[data-shell-command]")).toHaveTextContent("python build_table.py");
+  });
+
+  it("shows ExecuteCode detail only after the user opens the row", () => {
+    const { container } = render(
+      <ToolGroup
+        blocks={[
+          tool({
+            tool: "execute_code",
+            title: "Resolving MC4R Ensembl identifier",
+            naturalTitle: true,
+            command: "import requests\nensembl_id = resolve_target('MC4R')\nprint(ensembl_id)",
+            language: "python",
+            output: "ENSG00000166603",
+          }),
+        ]}
+      />,
+    );
+    expect(screen.queryByText("REPL")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("REPL")).toBeInTheDocument();
+    expect(screen.getByText("INPUT")).toBeInTheDocument();
+    expect(screen.getByText("STDOUT")).toBeInTheDocument();
+    expect(screen.getByText(/resolve_target/)).toBeInTheDocument();
+    expect(screen.getByText("ENSG00000166603")).toBeInTheDocument();
+    expect(container.querySelector(".hljs-keyword")).toHaveTextContent("import");
+    expect(container.querySelector("[data-execute-code-input]")).toHaveClass("bg-bg");
+    expect(container.querySelector("[data-execute-code-output]")).toHaveClass("bg-bg");
+  });
+
+  it("expands a built-in web search into its exact query", () => {
+    render(
+      <ToolGroup
+        blocks={[
+          tool({
+            tool: "websearch",
+            verb: "Searched",
+            title: "site:accessdata.fda.gov setmelanotide label",
+            query: "site:accessdata.fda.gov setmelanotide label",
+          }),
+        ]}
+      />,
+    );
+    expect(screen.queryByText("WEB SEARCH")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("WEB SEARCH")).toBeInTheDocument();
+    expect(screen.getByText("QUERY")).toBeInTheDocument();
+    expect(document.querySelector("[data-web-search-detail]")).toHaveTextContent(
+      "site:accessdata.fda.gov setmelanotide label",
+    );
+  });
+
+  it("expands APEX web research into summary and clickable sources", () => {
+    render(
+      <ToolGroup
+        blocks={[
+          tool({
+            tool: "websearch",
+            verb: "Searched",
+            naturalTitle: true,
+            title: "Checking FDA MC4R evidence",
+            query: "MC4R FDA evidence",
+            webResult: {
+              kind: "search",
+              query: "MC4R FDA evidence",
+              answer: "The FDA label supports the indication.",
+              sources: [{
+                title: "FDA prescribing information",
+                url: "https://www.fda.gov/example-label",
+                context: "The FDA label supports the indication.",
+              }],
+              resultCount: 1,
+              durationMs: 1250,
+            },
+          }),
+        ]}
+      />,
+    );
+    expect(screen.queryByText("SUMMARY")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("SUMMARY")).toBeInTheDocument();
+    expect(screen.getByText("SOURCES")).toBeInTheDocument();
+    expect(screen.getByText("1 source · 1.3s")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /FDA prescribing information/ })).toHaveAttribute(
+      "href",
+      "https://www.fda.gov/example-label",
+    );
+  });
+
+  it("labels exact-page research as WebFetch", () => {
+    render(
+      <ToolGroup
+        blocks={[
+          tool({
+            tool: "webfetch",
+            verb: "Fetched",
+            title: "Reading FDA label",
+            webResult: {
+              kind: "fetch",
+              url: "https://www.fda.gov/example-label",
+              answer: "Label summary",
+              sources: [],
+              resultCount: 0,
+              durationMs: 20,
+            },
+          }),
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("WEB FETCH")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /example-label/ })).toHaveAttribute(
+      "href",
+      "https://www.fda.gov/example-label",
+    );
   });
 
   it("renders an edit step's diff with add/del lines", () => {
