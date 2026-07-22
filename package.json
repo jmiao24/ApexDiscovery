@@ -3,7 +3,7 @@
   "version": "0.1.9",
   "private": true,
   "description": "APEX Discovery Desktop — local-first, model-agnostic AI research workbench for macOS, Windows and Linux.",
-  "license": "MIT",
+  "license": "X11",
   "scripts": {
     "dev": "pnpm --filter @ai4s/desktop dev",
     "build": "pnpm --filter @ai4s/desktop build",

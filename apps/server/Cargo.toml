@@ -4,7 +4,7 @@ version = "0.1.9"
 description = "Self-hosted web server for the APEX Discovery workbench: the same shell-core commands the desktop app runs, exposed over HTTP for a browser frontend."
 authors = ["AI4S Workbench contributors"]
 edition = "2021"
-license = "MIT"
+license = "X11"
 
 [dependencies]
 shell-core = { path = "../../crates/shell-core" }

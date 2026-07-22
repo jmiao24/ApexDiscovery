@@ -342,7 +342,7 @@ If you use APEX Discovery Desktop in your research, please cite it:
   year    = {2026},
   version = {0.1.9},
   url     = {https://github.com/jmiao24/ApexDiscovery},
-  license = {MIT}
+  license = {X11}
 }
 ```
 
@@ -351,7 +351,7 @@ GitHub's **"Cite this repository"** button (top of the repo page, generated from
 
 ## License
 
-[MIT](./LICENSE). Bundled third-party skills and connectors keep their own licenses.
+[X11](./LICENSE). Bundled third-party skills and connectors keep their own licenses.
 
 > APEX Discovery Desktop is beta research tooling. Treat outputs as drafts: verify numbers,
 > citations, code, and conclusions before publication or decision-making.
