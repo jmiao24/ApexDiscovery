@@ -5,6 +5,94 @@ Biologic Universe is an interactive biologics landscape with an embedded
 local server is running, the Agent can collaborate on targets, assets,
 modalities, stages, evidence, and opportunity hypotheses.
 
+## How the system works
+
+Biologic Universe has two operating modes built from the same research
+snapshot:
+
+1. **Offline dashboard** — open the generated HTML directly to explore assets,
+   targets, modalities, stages, and evidence without an agent.
+2. **Agent-enabled local app** — run `server.mjs` to add conversation history
+   and a read-only Codex research partner.
+
+```text
+Browser dashboard
+  |
+  | POST /api/chat + selected dashboard context
+  v
+server.mjs
+  |-- SQLite conversation history
+  |-- Biologic Universe system prompt
+  `-- OpenAI Codex SDK thread (read-only, no shell, no web)
+          |
+          | MCP over stdio
+          v
+biologic-universe-mcp.mjs
+          |
+          v
+biologic-universe-query.mjs
+          |
+          v
+results/prod_batch_001/viz/showcase_data.json
+```
+
+The browser sends the user's question plus any selected assets, targets,
+modality gaps, or dashboard excerpts. `server.mjs` creates or resumes a Codex
+thread and streams structured progress back to the browser as newline-delimited
+JSON. Completed messages and expert-input questions are written to the local
+SQLite history.
+
+Codex receives one dataset tool: `BiologicUniverseQuery`. The MCP server
+exposes bounded operations for summary, asset search, target profiles,
+repurposing, modality gaps, asset comparison, and evidence. Results are capped
+at 20 records so the full multi-megabyte snapshot is never placed in the model
+context.
+
+The agent is deliberately restricted:
+
+- sandbox mode is read-only;
+- shell and multi-agent features are disabled;
+- network access and web search are disabled;
+- dataset claims must come from `BiologicUniverseQuery`;
+- source links may only use URLs already present in the snapshot.
+
+This separation keeps deterministic data retrieval outside the model while
+allowing Codex to compare evidence, explain patterns, and develop opportunity
+hypotheses.
+
+## Code responsibilities
+
+- `viz/showcase_build.py` reads the research snapshot and generates the
+  self-contained dashboard.
+- `results/prod_batch_001/viz/showcase_data.json` is the fixed machine-readable
+  snapshot used by the agent query layer.
+- `results/prod_batch_001/viz/showcase.html` is the generated dashboard and
+  includes the client-side Agent interface.
+- `server.mjs` serves the dashboard, owns the Agent system prompt and Codex
+  threads, exposes the local API, streams responses, and persists history.
+- `biologic-universe-mcp.mjs` exposes the single read-only MCP tool.
+- `biologic-universe-query.mjs` implements deterministic filtering,
+  comparisons, evidence lookup, and result bounds.
+- `test/` verifies history persistence, MCP safety annotations, and query
+  behavior.
+
+## Request lifecycle
+
+```text
+question + dashboard selection
+  -> local /api/chat
+  -> Codex thread with Biologic Universe system prompt
+  -> one or more bounded MCP queries
+  -> evidence-grounded response with available inline links
+  -> streamed browser update
+  -> local SQLite history
+```
+
+The model interprets the returned records, but it does not invent the records,
+modify the snapshot, or silently supplement it with outside knowledge. Any
+opportunity statement beyond observed snapshot facts should remain clearly
+framed as interpretation or hypothesis.
+
 ## Give this folder to a coding agent
 
 You can give the folder to Codex or another coding agent and use this prompt:

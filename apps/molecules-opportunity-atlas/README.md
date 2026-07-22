@@ -1,98 +1,167 @@
-# vinext-starter
+# Molecules Opportunity Atlas
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Molecules Opportunity Atlas is the public-facing data-source map for
+**APEX Discovery**. It explains which regulatory, clinical, biological,
+structural, literature, and market sources can support molecule-opportunity
+research, and provides a direct entry point into the local APEX Discovery app.
 
-## Prerequisites
+This folder contains the deployable React/Vinext site. It is intentionally a
+small, mostly static surface: the website describes and links the research
+universe; the APEX Discovery application performs the agentic research.
+
+## What this application does
+
+- Presents the APEX Discovery value proposition.
+- Organizes supported evidence sources into a linked catalog.
+- Sends each data-source card to the source's official website.
+- Provides **Try APEX Discovery** links to the configured APEX instance.
+- Generates site-specific metadata, social cards, and responsive styling.
+
+It does **not** query the databases itself, store scientific records, or run an
+agent in the browser.
+
+## How it fits with APEX Discovery
+
+```text
+Visitor
+  |
+  v
+Molecules Opportunity Atlas website
+  |-- data-source card --> official external database
+  |
+  `-- Try APEX Discovery --> http://127.0.0.1:49369
+                                 |
+                                 `--> APEX agent, skills, tools, and evidence
+```
+
+The current destination is defined by `APEX_DISCOVERY_URL` in `app/page.tsx`.
+It points to a locally running APEX Discovery server. A hosted Atlas does not
+automatically host APEX Discovery; the person clicking the button must have an
+APEX server available at the configured address.
+
+## Implementation
+
+The site uses React Server Components through
+[Vinext](https://github.com/cloudflare/vinext) and builds to a Cloudflare
+Worker-compatible output.
+
+```text
+app/page.tsx
+  |-- hero and APEX entry point
+  `-- dataSources[] --> linked source cards
+
+app/layout.tsx
+  |-- title and description
+  |-- favicon
+  `-- Open Graph / X metadata
+
+app/globals.css
+  `-- responsive layout and visual system
+
+Vite + Vinext
+  `-- dist/client + dist/server deployment output
+```
+
+The page currently links FDA Purple Book, DailyMed, ClinicalTrials.gov, Open
+Targets, PubMed, PubMed Central, ChEMBL, UniProt, RCSB PDB, bioRxiv, medRxiv,
+arXiv, OpenAlex, WHO ICTRP, and SEC EDGAR.
+
+These cards describe the intended research surface. A card should not be
+interpreted as proof that every record from that source has been ingested into
+every APEX environment. The runtime's installed skills and tools are the source
+of truth for what an agent can query in a particular deployment.
+
+## Project map
+
+- `app/page.tsx` — page content, source catalog, and APEX destination.
+- `app/layout.tsx` — metadata, fonts, favicon, and social preview settings.
+- `app/globals.css` — responsive styles.
+- `public/og.png` — project-specific social preview image.
+- `public/favicon.svg` — browser icon.
+- `.openai/hosting.json` — OpenAI Sites project metadata.
+- `vite.config.ts` — Vinext and local Cloudflare bindings.
+- `worker/index.ts` — Cloudflare Worker entry point.
+- `tests/rendered-html.test.mjs` — server-rendering and starter-removal checks.
+- `db/` and `examples/d1/` — optional starter scaffolding; the current Atlas
+  does not use D1 or persist user data.
+
+The repository also contains standalone snapshots at
+`/molecules-opportunity-atlas.html` and
+`/website/molecules-opportunity-atlas.html`. Those files are separate static
+artifacts and are not automatically regenerated when this React application
+changes.
+
+## Requirements
 
 - Node.js `>=22.13.0`
+- npm
 
-## Quick Start
+## Run locally
+
+From this folder:
 
 ```bash
-npm install
+npm ci
 npm run dev
+```
+
+Open the local URL printed by Vinext. To make the **Try APEX Discovery** button
+work, start APEX Discovery separately on `http://127.0.0.1:49369`, or change
+`APEX_DISCOVERY_URL` in `app/page.tsx`.
+
+## Build and verify
+
+```bash
 npm run build
+npm test
+npm run lint
 ```
 
-This starter does not use `wrangler.jsonc`.
+- `npm run build` creates the worker-compatible production bundle.
+- `npm test` rebuilds and checks the rendered title, core copy, data-source
+  content, APEX CTA, social metadata, and removal of starter UI.
+- `npm run lint` performs the source lint pass.
 
-## Included Shape
+## Deployment
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+`.openai/hosting.json` connects this folder to its OpenAI Sites project. The
+current configuration does not request D1 or R2 resources. Keep the Vinext
+structure, lockfile, and Worker entry point intact when deploying.
 
-## Workspace Auth Headers
+Before deploying publicly, decide where **Try APEX Discovery** should lead. A
+localhost URL is appropriate for an on-device demo but not for a shared hosted
+agent unless each viewer runs APEX locally.
 
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
+## Data, privacy, and security
 
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
+- The current website has no sign-in requirement and no application database.
+- It does not embed OpenAI credentials or scientific-service credentials.
+- Data-source cards open third-party sites in a new tab.
+- APEX authentication and research history belong to the separate APEX
+  Discovery runtime, not this website.
+- Do not add secrets to client-side code, committed environment files, or the
+  standalone HTML snapshots.
 
-Treat the full name as optional and fall back to email when it is absent:
+## Common changes
 
-```tsx
-import { headers } from "next/headers";
+### Add or update a source
 
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
+Edit the `dataSources` array in `app/page.tsx`, using the source's official
+homepage and a concise evidence-type label. Then run `npm test`.
 
-  const displayName = fullName ?? email;
-  // ...
-}
-```
+### Change the APEX destination
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+Update `APEX_DISCOVERY_URL` in `app/page.tsx`. Keep the visible CTA and its
+accessible label consistent.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+### Change page metadata
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+Edit `generateMetadata()` in `app/layout.tsx`. If the visual identity changes,
+replace `public/og.png` and verify the rendered Open Graph metadata.
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## Scope
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Molecules Opportunity Atlas is a navigation and positioning layer, not a
+scientific database, ingestion monitor, or evidence-ranking engine. Scientific
+claims and decisions should be generated and reviewed inside APEX Discovery
+using the relevant source-linked tools.

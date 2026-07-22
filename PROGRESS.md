@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-22 08:11 · docs(companion-apps): replaced the Molecules Opportunity Atlas starter README with implementation, runtime-boundary, deployment, privacy, and maintenance guidance; expanded the Biologic Universe README with its offline/agent modes, Codex-to-MCP request flow, safety constraints, and code responsibilities. Verified the Atlas build, 2 rendered-HTML tests and lint, plus 6 Biologic Universe tests and a zero-vulnerability production audit.
+
 2026-07-21 · cleanup(codex-only): removed the optional alternate-agent backend, its dependency and standalone bridge, the cross-provider child-agent callback path, authentication environment variables, focused tests, and setup documentation. APEX Discovery now uses Codex for the Main Agent and its retained literature subagent. Verified 46 bridge tests, 456 frontend tests, 85 Rust tests, typecheck, lint, production build, browser packaging, and a live Codex-only server smoke test.
 
 2026-07-21 17:15 · refactor(codex-runtime): removed the downloaded APEX Runtime legacy binary, login import, fallback executable, and provider-specific naming; introduced the versioned APEX Runtime API, bundled the OpenAI Codex bridge directly in browser and Tauri builds, migrated runtime config/skills to `apex-runtime/`, and verified the live proxied config/skill endpoints plus 456 frontend, 51 bridge, 85 Rust tests, typecheck, lint, and production build.
