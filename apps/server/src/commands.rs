@@ -99,16 +99,6 @@ struct RecordRun {
     #[serde(default)]
     model: Option<String>,
 }
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ConfigureOpencode {
-    provider: String,
-    api_key: String,
-    model: String,
-    #[serde(default)]
-    base_url: Option<String>,
-}
-
 pub async fn run_command(
     State(state): State<Arc<AppState>>,
     AxumPath(name): AxumPath<String>,
@@ -152,55 +142,6 @@ pub async fn run_command(
                 Ok(_) => Json(json!("/runtime")).into_response(),
                 Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e),
             };
-        }
-        "configure_opencode" => {
-            let p: ConfigureOpencode = match parse(&params) {
-                Ok(p) => p,
-                Err(r) => return r,
-            };
-            if let Err(e) = runtime::configure_opencode(
-                &state.ctx,
-                &p.provider,
-                &p.api_key,
-                &p.model,
-                p.base_url.as_deref(),
-            ) {
-                return bad_request(e);
-            }
-            return match state.restart_sidecar().await {
-                Ok(_) => Json(json!("/runtime")).into_response(),
-                Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e),
-            };
-        }
-        "remove_config_entry" => {
-            #[derive(serde::Deserialize)]
-            struct P {
-                section: String,
-                key: String,
-            }
-            let p: P = match parse(&params) {
-                Ok(p) => p,
-                Err(r) => return r,
-            };
-            if let Err(e) = runtime::remove_config_entry(&state.ctx, &p.section, &p.key) {
-                return bad_request(e);
-            }
-            return match state.restart_sidecar().await {
-                Ok(_) => Json(json!(null)).into_response(),
-                Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e),
-            };
-        }
-        "import_opencode_login" => {
-            let imported = match runtime::import_opencode_login(&state.ctx) {
-                Ok(v) => v,
-                Err(e) => return bad_request(e),
-            };
-            if imported {
-                if let Err(e) = state.restart_sidecar().await {
-                    return err(StatusCode::INTERNAL_SERVER_ERROR, e);
-                }
-            }
-            return Json(json!(imported)).into_response();
         }
         "start_runtime" => {
             // The browser never reaches the sidecar directly — ensure it runs

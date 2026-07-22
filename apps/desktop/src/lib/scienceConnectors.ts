@@ -5,7 +5,7 @@
 import type { McpConfig } from "@ai4s/sdk";
 
 export interface ScienceConnector {
-  /** MCP server name written into OpenCode's config. */
+  /** MCP server name written into APEX Runtime's config. */
   id: string;
   label: string;
   /** Short discipline chip, e.g. "materials", "economics". */

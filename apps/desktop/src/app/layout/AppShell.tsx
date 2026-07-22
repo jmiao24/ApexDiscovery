@@ -28,7 +28,7 @@ export function AppShell() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  // In the packaged desktop app, auto-start the bundled OpenCode and connect,
+  // In the packaged desktop app, auto-start the bundled APEX Runtime and connect,
   // and bring the Jupyter server back up if the user enabled it before.
   useEffect(() => {
     void useRuntimeStore.getState().bootstrap();

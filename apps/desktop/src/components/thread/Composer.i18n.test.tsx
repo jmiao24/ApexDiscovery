@@ -31,10 +31,10 @@ describe("WorkflowStarters strings (i18n)", () => {
 describe("LiveSessionPage strings (i18n)", () => {
   it("renders the disconnected-runtime card in English (no Tauri sidecar in tests)", async () => {
     renderAt("/live");
-    expect(await screen.findByText("OpenCode runtime")).toBeInTheDocument();
+    expect(await screen.findByText("APEX Runtime")).toBeInTheDocument();
     expect(
       screen.getByText((_, node) =>
-        node?.textContent === "The desktop app runs a bundled OpenCode automatically. In the browser, start one with opencode serve and connect.",
+        node?.textContent === "The desktop app runs a bundled APEX Runtime automatically. In the browser, start one with APEX Runtime bridge and connect.",
       ),
     ).toBeInTheDocument();
   });

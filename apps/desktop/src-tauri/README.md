@@ -6,7 +6,7 @@ Responsibilities:
 
 - Native commands exposed to the frontend (filesystem within the workspace, OS keychain
   access for API keys, etc.).
-- Spawning and supervising sidecars (the OpenCode runtime; later the Jupyter Kernel Gateway).
+- Spawning and supervising sidecars (the APEX Runtime; later the Jupyter Kernel Gateway).
 - Packaging configuration — targets: `dmg` / `app` (macOS), `nsis` / `msi` (Windows).
 - Auto-update wiring (Tauri updater, GitHub Releases + signed `latest.json`) — later.
 

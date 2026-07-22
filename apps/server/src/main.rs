@@ -98,7 +98,7 @@ async fn main() {
              --data-dir <dir>       app-private data dir    APEX_DATA_DIR  (default ~/.apex-discovery)\n\
              --frontend-dir <dir>   built frontend to serve APEX_FRONTEND_DIR (default ./dist)\n\
              --resource-dir <dir>   bundled skills/harness  APEX_RESOURCE_DIR (optional)\n\
-             --opencode-bin <path>  agent sidecar           APEX_OPENCODE_BIN (default: next to server, then PATH)\n\
+             --runtime-bin <path>   APEX Runtime bridge     APEX_RUNTIME_BIN (default: bundled Codex bridge)\n\
              --no-open              do not open the default browser"
         );
         return;
@@ -144,23 +144,23 @@ async fn main() {
         None => (shell_core::util::random_hex(16), true),
     };
 
-    let opencode_bin = arg_value(&args, "--opencode-bin")
+    let runtime_bin = arg_value(&args, "--runtime-bin")
         .map(PathBuf::from)
-        .or_else(|| env_path("APEX_OPENCODE_BIN"))
-        .unwrap_or_else(sidecar::default_opencode_bin);
+        .or_else(|| env_path("APEX_RUNTIME_BIN"))
+        .unwrap_or_else(sidecar::default_runtime_bin);
 
     let bootstrap_nonce = loopback.then(|| shell_core::util::random_hex(32));
     let state = Arc::new(AppState::new(
         ctx,
         token.clone(),
         bootstrap_nonce.clone(),
-        opencode_bin,
+        runtime_bin,
     ));
 
     // Start the sidecar up front so the first page load can connect immediately.
     match state.start_sidecar().await {
-        Ok(url) => eprintln!("opencode sidecar running at {url} (proxied at /runtime)"),
-        Err(e) => eprintln!("warning: opencode sidecar failed to start: {e}"),
+        Ok(url) => eprintln!("APEX Runtime running at {url} (proxied at /runtime)"),
+        Err(e) => eprintln!("warning: APEX Runtime failed to start: {e}"),
     }
 
     let spa =
@@ -266,5 +266,4 @@ mod tests {
 
         fs::remove_dir_all(home).unwrap();
     }
-
 }

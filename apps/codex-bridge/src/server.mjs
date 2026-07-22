@@ -1,9 +1,6 @@
 #!/usr/bin/env node
-// codex-bridge: an OpenCode-compatible HTTP+SSE server whose agent is the
-// OpenAI Codex SDK. It speaks the same wire subset as claude-bridge (see
-// packages/sdk's OpenCodeClient for the consumer) and accepts the same CLI/env
-// contract as `opencode serve` — so the desktop shell and apexdiscovery-server
-// can spawn it as a drop-in sidecar and the React app runs unchanged.
+// codex-bridge: the OpenAI Codex SDK behind the stable APEX Runtime API.
+// It speaks the HTTP + SSE subset consumed by packages/sdk's ApexRuntimeClient.
 //
 // Codex-specific notes:
 // - Approvals: Codex has no interactive per-tool approval callback; it uses OS
@@ -72,7 +69,7 @@ import { APEX_MAIN_AGENT_PROMPT } from "./main-agent-prompt.mjs";
 import { researchResultFromResult } from "./research-result.mjs";
 import { researchRoute } from "./research-routing.mjs";
 
-// ---- CLI / env contract (identical to `opencode serve`) ----
+// ---- CLI / environment contract ----
 const args = process.argv.slice(2);
 const argValue = (flag, fallback) => {
   const i = args.indexOf(flag);
@@ -80,14 +77,14 @@ const argValue = (flag, fallback) => {
 };
 const HOSTNAME = argValue("--hostname", "127.0.0.1");
 const PORT = Number(argValue("--port", "4096"));
-const PASSWORD = process.env.OPENCODE_SERVER_PASSWORD || "";
-const AUTH_TOKEN = PASSWORD ? Buffer.from(`opencode:${PASSWORD}`).toString("base64") : null;
+const PASSWORD = process.env.APEX_RUNTIME_PASSWORD || "";
+const AUTH_TOKEN = PASSWORD ? Buffer.from(`apex:${PASSWORD}`).toString("base64") : null;
 
 const DATA_HOME = process.env.XDG_DATA_HOME || join(homedir(), ".local", "share");
 const CONFIG_HOME = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
 const CODEX_HOME = process.env.CODEX_HOME || join(CONFIG_HOME, "codex");
 const EXTENSIONS_DIR = process.env.APEX_EXTENSIONS_DIR || "";
-const BUNDLED_SKILLS_DIR = join(CONFIG_HOME, "opencode", "skills");
+const BUNDLED_SKILLS_DIR = join(CONFIG_HOME, "apex-runtime", "skills");
 const SOURCE_CORE_SKILLS_DIR = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "../../../runtime/skills/core",
@@ -388,11 +385,11 @@ let idCounter = 0;
 const freshId = (prefix) => `${prefix}_${Date.now().toString(36)}${(idCounter++).toString(36)}`;
 const MAX_SKILL_BYTES = 512 * 1024;
 
-// The app's approval switch writes OpenCode's permission config; map it to
+// The app's approval switch writes the APEX Runtime permission config; map it to
 // Codex's sandbox: approve → workspace-write, full → danger-full-access.
 function sandboxMode() {
-  for (const name of ["opencode.jsonc", "opencode.json"]) {
-    const cfg = readJson(join(CONFIG_HOME, "opencode", name), null);
+  for (const name of ["config.jsonc", "config.json"]) {
+    const cfg = readJson(join(CONFIG_HOME, "apex-runtime", name), null);
     if (cfg && typeof cfg === "object" && "permission" in cfg) {
       return cfg.permission && typeof cfg.permission.bash === "object"
         ? "workspace-write"
@@ -768,7 +765,7 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
       ? codex.resumeThread(session.codexThreadId, threadOptions)
       : codex.startThread(threadOptions);
 
-    /** Stream one Main/Reviewer/Fix phase through the existing OpenCode wire. */
+    /** Stream one Main/Reviewer/Fix phase through the APEX Runtime event stream. */
     const streamPhase = async ({
       thread,
       prompt,

@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
-  ChevronRight,
-  Download,
   ExternalLink,
   FolderOpen,
   Loader2,
@@ -24,7 +22,6 @@ import { useUiStore } from "@/lib/store";
 import { getClient, useRuntimeStore } from "@/lib/runtime";
 import { useUpdateStore } from "@/lib/update";
 import {
-  importOpenCodeLogin,
   hasShell,
   isTauri,
   jupyterStatus,
@@ -32,7 +29,6 @@ import {
   openWorkspaceBase,
   pickFolder,
   pythonInterpreter,
-  removeConfigEntry,
   setPythonPath,
   setWorkspaceBase,
   workspaceBase,
@@ -52,7 +48,7 @@ import { cn } from "@/lib/cn";
 
 /**
  * Settings. ONE configuration surface: everything talks to the bundled
- * OpenCode's own config/auth API — no separate "model key" concept.
+ * APEX Runtime's own config/auth API — no separate "model key" concept.
  */
 export function SettingsPage() {
   const theme = useUiStore((s) => s.theme);
@@ -104,7 +100,6 @@ export function SettingsPage() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [authMethods, setAuthMethods] = useState<Record<string, ProviderAuthMethod[]>>({});
   const [catalog, setCatalog] = useState<ProviderCatalogEntry[]>([]);
-  const [customIds, setCustomIds] = useState<string[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [reviewer, setReviewer] = useState<ReviewerConfig>({
     enabled: false,
@@ -126,14 +121,6 @@ export function SettingsPage() {
   const [wsPath, setWsPath] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Custom endpoint form (self-hosted / Ollama / OpenAI- or Anthropic-compatible).
-  const [showCustom, setShowCustom] = useState(false);
-  const [cName, setCName] = useState("");
-  const [cNpm, setCNpm] = useState("@ai-sdk/openai-compatible");
-  const [cUrl, setCUrl] = useState("");
-  const [cKey, setCKey] = useState("");
-  const [cModels, setCModels] = useState("");
-
   // Connect-a-provider flow state.
   const [connectQuery, setConnectQuery] = useState("");
   const [keyInput, setKeyInput] = useState("");
@@ -152,18 +139,16 @@ export function SettingsPage() {
     const client = getClient();
     if (!client) return;
     try {
-      const [p, m, c, custom, mcp, reviewerConfig] = await Promise.all([
+      const [p, m, c, mcp, reviewerConfig] = await Promise.all([
         client.listProviders(),
         client.listAuthMethods(),
         client.listProviderCatalog(),
-        client.listCustomProviderIds(),
         client.listMcpServers().catch(() => []),
         client.getReviewerConfig(),
       ]);
       setProviders(p);
       setAuthMethods(m);
       setCatalog(c.all);
-      setCustomIds(custom);
       setMcpServers(mcp);
       setReviewer(reviewerConfig);
       setJupyter(await jupyterStatus());
@@ -327,7 +312,7 @@ export function SettingsPage() {
     // (2FA, consent) used to surface as "login did not complete" even though
     // the browser then finished successfully. A network-level drop is NOT a
     // failed login: the server keeps the pending attempt and a re-POST resumes
-    // waiting on it (opencode's ProviderAuth.callback re-invokes the stored
+    // waiting on it (the runtime re-invokes the stored
     // pending closure; it is never consumed). Retry those; HTTP errors are the
     // provider's real verdict and stay terminal.
     const deadline = Date.now() + OAUTH_WAIT_MS;
@@ -390,37 +375,8 @@ export function SettingsPage() {
 
   const disconnectProvider = (providerID: string) =>
     run(t("toast.couldNotRemove"), async () => {
-      if (customIds.includes(providerID)) {
-        // Custom endpoints live in the config file; removal restarts the sidecar.
-        await removeConfigEntry("provider", providerID);
-        await useRuntimeStore.getState().connectRetry();
-      } else {
-        await getClient()!.removeProviderAuth(providerID);
-      }
+      await getClient()!.removeProviderAuth(providerID);
       toast.success(t("toast.providerRemoved", { providerID }));
-    });
-
-  const saveCustom = () =>
-    run(t("toast.couldNotAddEndpoint"), async () => {
-      const id = cName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-      const models = cModels.split(",").map((s) => s.trim()).filter(Boolean);
-      if (!id || !cUrl.trim() || models.length === 0) {
-        toast.error(t("toast.endpointFieldsRequired"));
-        return;
-      }
-      await getClient()!.addCustomProvider(id, {
-        name: cName.trim(),
-        npm: cNpm,
-        baseURL: cUrl.trim(),
-        apiKey: cKey.trim() || undefined,
-        models,
-      });
-      toast.success(t("toast.endpointAdded", { name: cName.trim() }));
-      setShowCustom(false);
-      setCName("");
-      setCUrl("");
-      setCKey("");
-      setCModels("");
     });
 
   const addMcp = () =>
@@ -453,12 +409,8 @@ export function SettingsPage() {
 
   const removeMcp = (name: string) =>
     run(t("toast.couldNotRemoveMcp"), async () => {
-      // Codex bridge owns its compatibility config and can remove the server
-      // directly. Older OpenCode runtimes return 404, then the shell edits the
-      // app-private OpenCode config as before.
       const removedByRuntime = await getClient()!.removeMcpServer(name);
-      if (!removedByRuntime) await removeConfigEntry("mcp", name);
-      await useRuntimeStore.getState().connectRetry();
+      if (!removedByRuntime) throw new Error("APEX Runtime could not remove the MCP server");
       toast.success(t("toast.mcpRemoved", { name }));
     });
 
@@ -475,18 +427,6 @@ export function SettingsPage() {
       await getClient()!.setReviewerConfig(next);
       setReviewer(next);
       toast.success(t("reviewer.updated"));
-    });
-
-  const importLogin = () =>
-    run(t("toast.importFailed"), async () => {
-      const found = await importOpenCodeLogin();
-      if (!found) {
-        toast.error(t("toast.noOpenCodeLoginFound"));
-        return;
-      }
-      // The sidecar restarted with the imported credentials — reconnect.
-      await useRuntimeStore.getState().connectRetry();
-      toast.success(t("toast.importedLogin"));
     });
 
   // Resolve the search box to a catalog entry (by id or exact name).
@@ -640,7 +580,7 @@ export function SettingsPage() {
                       {t("providers.modelCount", { count: p.models.length })}
                     </span>
                     <div className="flex-1" />
-                    {p.id === "opencode" ? (
+                    {p.id === "openai" ? (
                       <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted ring-1 ring-border">
                         {t("providers.builtInFree")}
                       </span>
@@ -789,79 +729,8 @@ export function SettingsPage() {
                   )}
                 </div>
 
-                {/* Custom endpoint */}
-                <div className="border-t border-border">
-                  <button
-                    className="flex h-10 w-full items-center gap-2 px-3 text-left text-[13px] text-muted transition-colors hover:text-text"
-                    onClick={() => setShowCustom((s) => !s)}
-                    aria-expanded={showCustom}
-                  >
-                    <ChevronRight
-                      size={13}
-                      className={cn("transition-transform", showCustom && "rotate-90")}
-                    />
-                    {t("providers.customEndpoint")}
-                    <span className="text-xs text-muted/70">
-                      {t("providers.customEndpointHint")}
-                    </span>
-                  </button>
-                  {showCustom && (
-                    <div className="space-y-2 px-3 pb-3">
-                      <div className="flex gap-2">
-                        <input
-                          value={cName}
-                          onChange={(e) => setCName(e.target.value)}
-                          placeholder={t("providers.customNamePlaceholder")}
-                          className={inputCls("flex-1")}
-                        />
-                        <select
-                          value={cNpm}
-                          onChange={(e) => setCNpm(e.target.value)}
-                          className={inputCls("w-[190px]")}
-                        >
-                          <option value="@ai-sdk/openai-compatible">{t("providers.openaiCompatible")}</option>
-                          <option value="@ai-sdk/anthropic">{t("providers.anthropicCompatible")}</option>
-                        </select>
-                      </div>
-                      <input
-                        value={cUrl}
-                        onChange={(e) => setCUrl(e.target.value)}
-                        placeholder={t("providers.customUrlPlaceholder")}
-                        className={inputCls("w-full font-mono")}
-                      />
-                      <div className="flex gap-2">
-                        <input
-                          type="password"
-                          value={cKey}
-                          onChange={(e) => setCKey(e.target.value)}
-                          placeholder={t("providers.customKeyPlaceholder")}
-                          className={inputCls("flex-1 font-mono")}
-                        />
-                        <input
-                          value={cModels}
-                          onChange={(e) => setCModels(e.target.value)}
-                          placeholder={t("providers.customModelsPlaceholder")}
-                          className={inputCls("flex-1 font-mono")}
-                        />
-                      </div>
-                      <button className={btnAccent()} onClick={() => void saveCustom()} disabled={busy}>
-                        {t("providers.addEndpoint")}
-                      </button>
-                    </div>
-                  )}
-                </div>
               </div>
 
-              {hasShell() && (
-                <button
-                  className="mt-3 flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-text"
-                  onClick={() => void importLogin()}
-                  disabled={busy}
-                >
-                  <Download size={12} />
-                  {t("providers.importLogin")}
-                </button>
-              )}
             </>
           )}
         </Card>

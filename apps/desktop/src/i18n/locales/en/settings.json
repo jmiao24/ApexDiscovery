@@ -8,7 +8,7 @@
   },
   "page": {
     "title": "Settings",
-    "subtitle": "Everything here configures the bundled OpenCode runtime — one config, no copies."
+    "subtitle": "Everything here configures the bundled APEX Runtime — one config, no copies."
   },
   "reviewer": {
     "title": "Independent Reviewer Agent",
@@ -21,7 +21,7 @@
   },
   "runtime": {
     "title": "Agent runtime",
-    "hint": "opencode serve, driven over its HTTP + SSE API",
+    "hint": "APEX Runtime bridge, driven over its HTTP + SSE API",
     "connect": "Connect",
     "disconnect": "Disconnect",
     "serverUrlPlaceholder": "http://127.0.0.1:4096",
@@ -65,23 +65,13 @@
   "providers": {
     "modelCount_one": "{{count}} model",
     "modelCount_other": "{{count}} models",
-    "builtInFree": "built-in · free",
+    "builtInFree": "Codex runtime",
     "removeTitle": "Remove this provider's credentials/config",
-    "searchPlaceholder": "Connect a provider — search {{count}} (anthropic, openrouter, deepseek…)",
+    "searchPlaceholder": "Connect OpenAI",
     "apiKeyLabel": "API key",
     "completeLogin": "Complete login",
     "waitingForBrowser": "Waiting for you to finish in the browser…",
-    "pasteCode": "Paste the code from the browser",
-    "customEndpoint": "Custom endpoint",
-    "customEndpointHint": "self-hosted · local Ollama · OpenAI/Anthropic-compatible",
-    "customNamePlaceholder": "Name — e.g. Ollama, My DeepSeek gateway",
-    "openaiCompatible": "OpenAI-compatible",
-    "anthropicCompatible": "Anthropic-compatible",
-    "customUrlPlaceholder": "Base URL — Ollama: http://127.0.0.1:11434/v1",
-    "customKeyPlaceholder": "API key — optional, Ollama needs none",
-    "customModelsPlaceholder": "Model ids, comma-separated",
-    "addEndpoint": "Add endpoint",
-    "importLogin": "Already use the OpenCode CLI? Import its login"
+    "pasteCode": "Paste the code from the browser"
   },
   "mcp": {
     "title": "MCP servers",
@@ -143,9 +133,6 @@
     "loginDidNotComplete": "Login did not complete",
     "couldNotRemove": "Could not remove",
     "providerRemoved": "{{providerID}} removed",
-    "couldNotAddEndpoint": "Could not add the endpoint",
-    "endpointFieldsRequired": "Name, base URL and at least one model id are required.",
-    "endpointAdded": "{{name}} added — its models are now selectable above.",
     "couldNotAddMcp": "Could not add the MCP server",
     "mcpFieldsRequired": "Name and command/URL are required.",
     "mcpAdded": "MCP server {{name}} added",
@@ -153,9 +140,6 @@
     "mcpRemoved": "MCP server {{name}} removed",
     "couldNotUpdateMcp": "Could not update the MCP server",
     "mcpUpdated": "MCP server {{name}} updated",
-    "importFailed": "Import failed",
-    "noOpenCodeLoginFound": "No OpenCode CLI login found on this machine.",
-    "importedLogin": "Imported your OpenCode CLI login.",
     "couldNotSetProxy": "Could not apply the proxy setting",
     "proxyApplied": "Proxy setting applied"
   },

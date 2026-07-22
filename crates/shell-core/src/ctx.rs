@@ -40,20 +40,15 @@ impl ShellCtx {
         self.runtime_root().join("base-workspace.txt")
     }
 
-    /// Path OpenCode reads when XDG_CONFIG_HOME points at our private dir.
-    pub(crate) fn opencode_config_file(&self) -> PathBuf {
-        self.xdg_config_home().join("opencode").join("opencode.json")
-    }
-
     /// The config file to edit in place: the server may have rewritten the config
-    /// as opencode.jsonc — prefer whichever exists, fall back to opencode.json.
+    /// as config.jsonc — prefer whichever exists, fall back to config.json.
     pub(crate) fn effective_config_file(&self) -> PathBuf {
-        let dir = self.xdg_config_home().join("opencode");
-        ["opencode.jsonc", "opencode.json"]
+        let dir = self.xdg_config_home().join("apex-runtime");
+        ["config.jsonc", "config.json"]
             .iter()
             .map(|n| dir.join(n))
             .find(|p| p.exists())
-            .unwrap_or_else(|| dir.join("opencode.json"))
+            .unwrap_or_else(|| dir.join("config.json"))
     }
 
     pub(crate) fn proxy_setting_file(&self) -> PathBuf {
@@ -66,7 +61,7 @@ impl ShellCtx {
     }
 }
 
-/// The active workspace folder OpenCode / previews / provenance all operate in.
+/// The active workspace folder the runtime, previews, and provenance operate in.
 /// Defaults to the base folder until the user opens or creates another one; the
 /// choice persists across restarts.
 pub fn workspace_dir(ctx: &ShellCtx) -> Result<PathBuf, String> {
@@ -104,7 +99,10 @@ pub fn base_workspace_dir(ctx: &ShellCtx) -> Result<PathBuf, String> {
     // One-time migrations, oldest name last. A failed rename (e.g. cross-volume)
     // keeps the existing location rather than splitting the user's files.
     if !dir.exists() {
-        for old in [docs.join("APEX Discovery"), ctx.runtime_root().join("workspace")] {
+        for old in [
+            docs.join("APEX Discovery"),
+            ctx.runtime_root().join("workspace"),
+        ] {
             if old.is_dir() {
                 if std::fs::rename(&old, &dir).is_ok() {
                     break;

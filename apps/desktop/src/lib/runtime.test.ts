@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OpenCodeEvent, HistoryMessage } from "@ai4s/sdk";
+import type { ApexRuntimeEvent, HistoryMessage } from "@ai4s/sdk";
 import {
   datedWorkspaceName,
   foldCarriageReturns,
@@ -15,7 +15,7 @@ import {
 
 const empty: FoldState = { blocks: [], index: {} };
 const S = "ses_1";
-const foldAll = (events: OpenCodeEvent[], from: FoldState = empty): FoldState =>
+const foldAll = (events: ApexRuntimeEvent[], from: FoldState = empty): FoldState =>
   events.reduce((s, e) => foldEvent(s, e), from);
 
 describe("tidyToolTitle", () => {
@@ -24,7 +24,7 @@ describe("tidyToolTitle", () => {
     expect(tidyToolTitle("mkdir -p /Users/asq/Documents/ApexDiscovery/demo_analysis")).toBe(
       "mkdir -p demo_analysis",
     );
-    // OpenCode's write-tool titles drop the leading slash — must still relativize.
+    // APEX Runtime's write-tool titles drop the leading slash — must still relativize.
     expect(tidyToolTitle("Users/asq/Documents/ApexDiscovery/demo_analysis/analyze.py")).toBe(
       "demo_analysis/analyze.py",
     );
@@ -269,7 +269,7 @@ describe("foldEvent", () => {
   });
 
   it("shows the file path for a file tool that has no title yet", () => {
-    // OpenCode only sets a write/edit tool's title on completion — while the
+    // APEX Runtime only sets a write/edit tool's title on completion — while the
     // tool runs, the file path in its input is the only thing worth showing.
     const s = foldAll([
       { type: "tool.updated", sessionId: S, callId: "c1", tool: "write", status: "running", input: { filePath: "/Users/asq/Documents/ApexDiscovery/2026-07-04/index.html", content: "<!doctype html>" } },
@@ -536,7 +536,7 @@ describe("historyToThread", () => {
   });
 
   it("renders a user-run '!' shell turn like the live path: '! cmd' + inline output", () => {
-    // OpenCode records a "!" run as a synthetic user text + a bash tool part.
+    // APEX Runtime records a "!" run as a synthetic user text + a bash tool part.
     const msgs: HistoryMessage[] = [
       {
         role: "user",
@@ -608,7 +608,7 @@ describe("historyToThread", () => {
   });
 
   it("shows a slash command as what the user typed, not its expanded template", () => {
-    // OpenCode stores the EXPANDED command/skill template as the user message,
+    // APEX Runtime stores the EXPANDED command/skill template as the user message,
     // with typed arguments appended — reverse-map via the known templates.
     const template = "\nThis skill guides growth for indie AI products…\n\n## Core Philosophy\n…";
     const msgs: HistoryMessage[] = [

@@ -1,8 +1,8 @@
 // Curated open-source science MCP connectors (P1-2). We do NOT reimplement
 // literature/database access — we one-click provision existing open-source MCP
 // servers (e.g. paper-search-mcp, biomcp) into a shared ISOLATED uv env under
-// app data (the user's Python is untouched), then register them in OpenCode's
-// config. The frontend holds the curated catalog; here we just install a pip
+// app data (the user's Python is untouched), then register them in the APEX
+// Runtime config. The frontend holds the curated catalog; here we just install a pip
 // package and report the managed interpreter path.
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};

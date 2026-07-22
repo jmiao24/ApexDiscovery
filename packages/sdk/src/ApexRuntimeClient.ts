@@ -5,10 +5,10 @@ import type {
   McpConfig,
   McpServer,
   OAuthAuthorization,
-  OpenCodeClientOptions,
-  OpenCodeEvent,
-  OpenCodePart,
-  OpenCodeRawEvent,
+  ApexRuntimeClientOptions,
+  ApexRuntimeEvent,
+  ApexRuntimePart,
+  ApexRuntimeRawEvent,
   PermissionReply,
   ProviderAuthMethod,
   ProviderCatalogEntry,
@@ -22,9 +22,9 @@ import type {
   SkillDocument,
   ToolCallStatus,
 } from "./types";
-import { DEFAULT_OPENCODE_URL } from "./types";
+import { DEFAULT_APEX_RUNTIME_URL } from "./types";
 
-type EventListener = (event: OpenCodeEvent) => void;
+type EventListener = (event: ApexRuntimeEvent) => void;
 type StatusListener = (status: RuntimeStatus) => void;
 
 function mapToolStatus(status: string): ToolCallStatus {
@@ -41,18 +41,18 @@ function mapToolStatus(status: string): ToolCallStatus {
 }
 
 /**
- * The single boundary between the app and the OpenCode agent runtime.
- * Talks to a running `opencode serve` over its HTTP + SSE API. The UI must go
+ * The single boundary between the app and the APEX Runtime.
+ * Talks to a running `APEX Runtime bridge` over its HTTP + SSE API. The UI must go
  * through this class, never the transport directly (see AGENTS.md guardrails).
  */
-export class OpenCodeClient {
+export class ApexRuntimeClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly authHeader: string | null;
   /** Base64 `user:password` for `?auth_token=` — the EventSource cannot set
    *  headers, and the server accepts the same Basic payload as a query param. */
   private readonly authToken: string | null;
-  /** Workspace folder this client is scoped to. OpenCode serves many folders
+  /** Workspace folder this client is scoped to. APEX Runtime serves many folders
    *  from ONE process (per-directory instances): the event stream, session
    *  creation and the directory-scoped lookups all carry `?directory=`, so
    *  switching folders is a reconnect — never a sidecar restart. Session-scoped
@@ -73,18 +73,18 @@ export class OpenCodeClient {
   private readonly statusListeners = new Set<StatusListener>();
   /** messageID → role, learned from message.updated, to skip echoed user parts. */
   private readonly roles = new Map<string, string>();
-  /** partID → accumulated text of a streaming text part. OpenCode publishes the
+  /** partID → accumulated text of a streaming text part. APEX Runtime publishes the
    *  full part only at text-start (empty) and text-end; every token in between
    *  arrives as a message.part.delta that must be summed here — otherwise the
    *  app shows nothing until the whole passage is finished. */
   private readonly textStreams = new Map<string, { sessionId: string; text: string }>();
 
-  constructor(opts: OpenCodeClientOptions = {}) {
-    this.baseUrl = (opts.baseUrl ?? DEFAULT_OPENCODE_URL).replace(/\/$/, "");
+  constructor(opts: ApexRuntimeClientOptions = {}) {
+    this.baseUrl = (opts.baseUrl ?? DEFAULT_APEX_RUNTIME_URL).replace(/\/$/, "");
     this.customFetch = !!opts.fetchImpl;
     // Bind to globalThis — an unbound `fetch` reference throws "Illegal invocation" in browsers.
     this.fetchImpl = (opts.fetchImpl ?? globalThis.fetch).bind(globalThis);
-    this.authToken = opts.password ? btoa(`${opts.username ?? "opencode"}:${opts.password}`) : null;
+    this.authToken = opts.password ? btoa(`${opts.username ?? "apex"}:${opts.password}`) : null;
     this.authHeader = this.authToken ? `Basic ${this.authToken}` : null;
     this.directory = opts.directory ?? null;
     this.connectTimeoutMs = opts.connectTimeoutMs ?? 5000;
@@ -116,7 +116,7 @@ export class OpenCodeClient {
     try {
       return await this.fetchImpl(input, { ...init, signal: controller.signal });
     } catch (err) {
-      if (controller.signal.aborted) throw new Error("Timed out waiting for OpenCode");
+      if (controller.signal.aborted) throw new Error("Timed out waiting for APEX Runtime");
       throw err;
     } finally {
       clearTimeout(timer);
@@ -148,7 +148,7 @@ export class OpenCodeClient {
           this.setStatus("error");
           es.close();
           if (this.es === es) this.es = null;
-          reject(new Error("Timed out opening OpenCode event stream"));
+          reject(new Error("Timed out opening APEX Runtime event stream"));
         }, this.connectTimeoutMs);
         es.onopen = () => {
           if (finished) return;
@@ -160,7 +160,7 @@ export class OpenCodeClient {
         };
         es.onmessage = (ev) => {
           try {
-            this.normalize(JSON.parse(ev.data) as OpenCodeRawEvent);
+            this.normalize(JSON.parse(ev.data) as ApexRuntimeRawEvent);
           } catch {
             /* ignore malformed frame */
           }
@@ -173,7 +173,7 @@ export class OpenCodeClient {
             this.setStatus("error");
             es.close();
             this.es = null;
-            reject(new Error("Could not open OpenCode event stream"));
+            reject(new Error("Could not open APEX Runtime event stream"));
           } else {
             // Take over reconnection ourselves. EventSource's built-in retry
             // never recovers when the server ends the stream terminally —
@@ -197,7 +197,7 @@ export class OpenCodeClient {
       let opened = false;
       const abort = this.abort!;
       const timer = setTimeout(() => {
-        if (!opened) abort.abort(new Error("Timed out opening OpenCode event stream"));
+        if (!opened) abort.abort(new Error("Timed out opening APEX Runtime event stream"));
       }, this.connectTimeoutMs);
       this.fetchImpl(this.eventUrl(), {
         headers: { Accept: "text/event-stream", ...this.headers() },
@@ -207,7 +207,7 @@ export class OpenCodeClient {
           clearTimeout(timer);
           if (!res.ok || !res.body) {
             this.setStatus("error");
-            reject(new Error(`OpenCode /event returned ${res.status}`));
+            reject(new Error(`APEX Runtime /event returned ${res.status}`));
             return;
           }
           this.setStatus("ready");
@@ -278,7 +278,7 @@ export class OpenCodeClient {
    *  workspace folders. The plain `/session` list is scoped to the project the
    *  sidecar's cwd resolves to, so history would appear to change when the user
    *  switches folders; `/experimental/session` lists every project's sessions
-   *  (each item still carries its `directory`). The OpenCode version is pinned,
+   *  (each item still carries its `directory`). The APEX Runtime version is pinned,
    *  so the experimental route is stable for us; fall back to `/session` if a
    *  server ever lacks it. */
   async listSessions(): Promise<SessionMeta[]> {
@@ -342,7 +342,7 @@ export class OpenCodeClient {
     if (!res.ok) throw await this.apiError(res, "Failed to interrupt the session");
   }
 
-  /** Real skills loaded by OpenCode (built-in + bundled + user). */
+  /** Real skills loaded by APEX Runtime (built-in + bundled + user). */
   async listSkills(): Promise<SkillInfo[]> {
     // Scope to the workspace: skill instances are created lazily per directory,
     // and the unscoped endpoint answers from an instance that may have none.
@@ -377,7 +377,7 @@ export class OpenCodeClient {
     return cfg.model ?? null;
   }
 
-  /** Set the default model in OpenCode's global (app-profile) config. */
+  /** Set the default model in APEX Runtime's global (app-profile) config. */
   async setDefaultModel(model: string): Promise<void> {
     const res = await this.fetchImpl(`${this.baseUrl}/global/config`, {
       method: "PATCH",
@@ -423,7 +423,7 @@ export class OpenCodeClient {
     if (!res.ok) throw await this.apiError(res, "Failed to update reviewer settings");
   }
 
-  /** Providers OpenCode can use right now, with their models. */
+  /** Providers APEX Runtime can use right now, with their models. */
   async listProviders(): Promise<ProviderInfo[]> {
     const res = await this.fetchImpl(`${this.baseUrl}/config/providers`, {
       headers: this.headers(),
@@ -441,7 +441,7 @@ export class OpenCodeClient {
 
   /**
    * Register a custom endpoint (self-hosted / OpenAI-compatible / Anthropic-
-   * compatible / local Ollama) in OpenCode's global config. Applies live.
+   * compatible / local Ollama) in APEX Runtime's global config. Applies live.
    */
   async addCustomProvider(
     id: string,
@@ -502,7 +502,7 @@ export class OpenCodeClient {
   }
 
   /** Remove an MCP server through the runtime when it supports the portable
-   * endpoint. Returns false for older OpenCode runtimes so the shell can use
+   * endpoint. Returns false for older APEX Runtime versions so the shell can use
    * its legacy config-file removal path. */
   async removeMcpServer(name: string): Promise<boolean> {
     const res = await this.fetchImpl(`${this.baseUrl}/mcp/${encodeURIComponent(name)}`, {
@@ -528,7 +528,7 @@ export class OpenCodeClient {
     };
   }
 
-  /** Every provider OpenCode knows how to connect, with its auth methods. */
+  /** Every provider APEX Runtime knows how to connect, with its auth methods. */
   async listAuthMethods(): Promise<Record<string, ProviderAuthMethod[]>> {
     const res = await this.fetchImpl(`${this.baseUrl}/provider/auth`, { headers: this.headers() });
     if (!res.ok) throw await this.apiError(res, "Failed to list auth methods");
@@ -609,7 +609,7 @@ export class OpenCodeClient {
   }
 
   /** Build an Error carrying the server's diagnostic message, when it has one
-   *  (OpenCode errors look like `{ name, data: { message } }`). */
+   *  (APEX Runtime errors look like `{ name, data: { message } }`). */
   private async apiError(res: Response, what: string): Promise<Error> {
     let detail = "";
     try {
@@ -621,7 +621,7 @@ export class OpenCodeClient {
     return new Error(`${what} (${res.status}${detail ? `: ${detail}` : ""})`);
   }
 
-  /** Real agents configured in OpenCode. */
+  /** Real agents configured in APEX Runtime. */
   async listAgents(): Promise<AgentInfo[]> {
     const res = await this.fetchImpl(`${this.baseUrl}/agent`, { headers: this.headers() });
     if (!res.ok) throw await this.apiError(res, "Failed to list agents");
@@ -717,7 +717,7 @@ export class OpenCodeClient {
   }
 
   // ---- interactive requests (question / permission) ----
-  // OpenCode exposes these as directory-scoped GLOBAL lists (not session-nested):
+  // APEX Runtime exposes these as directory-scoped GLOBAL lists (not session-nested):
   // GET/POST /question[/…] and /permission[/…], each scoped by ?directory=. The
   // request id is globally unique; the reply/reject endpoints take it directly.
 
@@ -839,7 +839,7 @@ export class OpenCodeClient {
       .filter((l) => l.startsWith("data:"))
       .map((l) => l.slice(5).trim());
     if (dataLines.length === 0) return;
-    let raw: OpenCodeRawEvent;
+    let raw: ApexRuntimeRawEvent;
     try {
       raw = JSON.parse(dataLines.join("\n"));
     } catch {
@@ -848,7 +848,7 @@ export class OpenCodeClient {
     this.normalize(raw);
   }
 
-  private normalize(raw: OpenCodeRawEvent): void {
+  private normalize(raw: ApexRuntimeRawEvent): void {
     const props = raw.properties ?? {};
     switch (raw.type) {
       case "message.updated": {
@@ -859,7 +859,7 @@ export class OpenCodeClient {
       }
       case "message.part.updated": {
         const part = props.part as
-          | (OpenCodePart & { sessionID?: string; messageID?: string })
+          | (ApexRuntimePart & { sessionID?: string; messageID?: string })
           | undefined;
         if (!part) return;
         // The user's own message is echoed here; the app already shows it locally.
@@ -1004,9 +1004,9 @@ export class OpenCodeClient {
         const err = props.error as
           | { name?: string; message?: string; data?: { message?: string } }
           | undefined;
-        // OpenCode nests the human-readable message at error.data.message.
+        // APEX Runtime nests the human-readable message at error.data.message.
         const full = err?.data?.message ?? err?.message ?? err?.name ?? "session error";
-        // Keep the first line — OpenCode appends a stack trace to some errors.
+        // Keep the first line — APEX Runtime appends a stack trace to some errors.
         this.emit({
           type: "error",
           sessionId: String(props.sessionID ?? ""),
@@ -1019,7 +1019,7 @@ export class OpenCodeClient {
     }
   }
 
-  private emit(event: OpenCodeEvent): void {
+  private emit(event: ApexRuntimeEvent): void {
     this.eventListeners.forEach((l) => l(event));
   }
   private setStatus(status: RuntimeStatus): void {

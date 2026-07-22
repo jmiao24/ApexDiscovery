@@ -7,7 +7,7 @@ describe("Settings page strings (i18n)", () => {
     renderAt("/settings");
     expect(await screen.findByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
     expect(
-      screen.getByText("Everything here configures the bundled OpenCode runtime — one config, no copies."),
+      screen.getByText("Everything here configures the bundled APEX Runtime — one config, no copies."),
     ).toBeInTheDocument();
     expect(screen.getByText("Agent runtime")).toBeInTheDocument();
     expect(screen.getByText("MCP servers")).toBeInTheDocument();

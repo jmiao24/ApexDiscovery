@@ -1,11 +1,11 @@
 import { create } from "zustand";
 import {
-  OpenCodeClient,
-  DEFAULT_OPENCODE_URL,
+  ApexRuntimeClient,
+  DEFAULT_APEX_RUNTIME_URL,
   type AgentInfo,
   type CommandInfo,
   type HistoryMessage,
-  type OpenCodeEvent,
+  type ApexRuntimeEvent,
   type PermissionAskedEvent,
   type PermissionReply,
   type QuestionAskedEvent,
@@ -47,12 +47,12 @@ import { splitReview } from "./review";
 import i18n from "@/i18n";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const URL_KEY = "ai4s.opencodeUrl";
+const URL_KEY = "apex-discovery.runtimeUrl";
 const HIDDEN_KEY = "ai4s.hiddenExamples";
 
 function initialUrl(): string {
-  if (typeof window === "undefined") return DEFAULT_OPENCODE_URL;
-  return window.localStorage.getItem(URL_KEY) ?? DEFAULT_OPENCODE_URL;
+  if (typeof window === "undefined") return DEFAULT_APEX_RUNTIME_URL;
+  return window.localStorage.getItem(URL_KEY) ?? DEFAULT_APEX_RUNTIME_URL;
 }
 function initialHidden(): string[] {
   if (typeof window === "undefined") return [];
@@ -93,7 +93,7 @@ interface RuntimeState {
   /** Apply a new default model and transparently reconnect (see impl). */
   setDefaultModel: (model: string) => Promise<void>;
   /** The composer's approval switch: "approve" (dangerous commands prompt)
-   *  or "full" (everything in-workspace runs). Loaded from OpenCode config. */
+   *  or "full" (everything in-workspace runs). Loaded from APEX Runtime config. */
   approvalMode: ApprovalMode;
   /** Persist a new approval mode (restarts the sidecar) and reconnect. */
   setApprovalMode: (mode: ApprovalMode) => Promise<void>;
@@ -175,7 +175,7 @@ interface RuntimeState {
   installSkill: (text: string) => Promise<string | null>;
 }
 
-let client: OpenCodeClient | null = null;
+let client: ApexRuntimeClient | null = null;
 let openSessionSeq = 0;
 /** A direct `/live/:id` route can render before bootstrap has created the
  *  runtime client. Remember that open instead of silently abandoning it; the
@@ -237,7 +237,7 @@ const LIVE_FOLD_MS = 250;
 const liveFoldLast = new Map<string, number>();
 const liveFoldPending = new Map<
   string,
-  { sessionId: string; timer: number; event: Extract<OpenCodeEvent, { type: "tool.updated" }> }
+  { sessionId: string; timer: number; event: Extract<ApexRuntimeEvent, { type: "tool.updated" }> }
 >();
 
 /** Drop a session's queued partial folds — when its turn ends (idle, error,
@@ -290,7 +290,7 @@ async function performTurn(
   shell = false,
 ): Promise<string | null> {
   if (!client) {
-    set({ error: "Not connected to the OpenCode runtime." });
+    set({ error: "Not connected to the APEX Runtime." });
     return null;
   }
   if (get().sending) return null; // one send at a time
@@ -425,8 +425,8 @@ async function performTurn(
   }
 }
 
-/** The live OpenCode client (Settings talks to the runtime's config API directly). */
-export function getClient(): OpenCodeClient | null {
+/** The live APEX Runtime client (Settings talks to the runtime's config API directly). */
+export function getClient(): ApexRuntimeClient | null {
   return client;
 }
 
@@ -544,7 +544,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       ]);
       set({ agents, defaultModel, commands });
       let skills = firstSkills;
-      // The first workspace-scoped /api/skill call triggers OpenCode's lazy
+      // The first workspace-scoped /api/skill call triggers APEX Runtime's lazy
       // instance init and can answer before the scan finishes — poll briefly.
       for (let i = 0; skills.length === 0 && i < 4; i++) {
         await sleep(400);
@@ -589,8 +589,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   setDefaultModel: async (model) => {
-    if (!client) throw new Error("Not connected to the OpenCode runtime.");
-    // Applying the model PATCHes OpenCode's global config, which closes the
+    if (!client) throw new Error("Not connected to the APEX Runtime.");
+    // Applying the model PATCHes APEX Runtime's global config, which closes the
     // event stream server-side. EventSource's own reconnect does not reliably
     // recover from that — it strands the app in "connecting"/disconnected until
     // a manual Connect. So do a deliberate masked reconnect (a fresh stream,
@@ -617,7 +617,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     // The bundled sidecar requires per-run Basic auth; browser dev (no Tauri)
     // gets null and connects to a user-run passwordless server.
     const password = await runtimePassword();
-    const c = new OpenCodeClient({
+    const c = new ApexRuntimeClient({
       baseUrl: get().serverUrl,
       directory: directory ?? undefined,
       password: password ?? undefined,
@@ -909,7 +909,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     }),
 
   // Local /new and /clear: clear the visible chat context, but keep the active
-  // folder. The first next message creates a new OpenCode session in that same
+  // folder. The first next message creates a new APEX Runtime session in that same
   // folder; no session, database row, or file is deleted here.
   startDraftInCurrentWorkspace: () =>
     set((s) => {
@@ -1230,7 +1230,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     set({ hiddenExamples: next });
   },
 
-  // Install a skill by asking the agent (uses OpenCode's customize-opencode skill) (#1).
+  // Install a skill by asking the agent (uses APEX Runtime's skill-creator skill) (#1).
   installSkill: async (text) => {
     if (!client) {
       set({ error: "Connect the runtime first to install skills." });
@@ -1241,9 +1241,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       set((s) => ({ currentId: id, threads: { ...s.threads, [id]: { ...emptyThread(), loaded: true } } }));
       await get().refreshSessions();
       const prompt =
-        "Install the following as an OpenCode skill for this project. Use the " +
-        "customize-opencode skill. If it is a URL, fetch it; if it is Markdown, save it as " +
-        "a skill file under .opencode/skills/<name>/SKILL.md. Then reply with the installed skill's name.\n\n---\n" +
+        "Install the following as an APEX Runtime skill for this project. Use the " +
+        "skill-creator skill. If it is a URL, fetch it; if it is Markdown, save it as " +
+        "a skill file under .agents/skills/<name>/SKILL.md. Then reply with the installed skill's name.\n\n---\n" +
         text;
       set((s) => {
         const cur = s.threads[id];
@@ -1274,14 +1274,14 @@ export interface FoldState {
   index: Record<string, number>;
 }
 
-/** Pure reducer: fold one normalized OpenCode event into a thread's blocks. */
+/** Pure reducer: fold one normalized APEX Runtime event into a thread's blocks. */
 /**
  * Tidy a tool-call title for the conversation: show workspace files by their
  * relative path (`demo/analyze.py`), not the full `/Users/.../ApexDiscovery/...`
  * absolute path, so the thread reads like a researcher's log, not a shell trace.
  * The workspace path never contains spaces (by design), so a space-free run
  * ending in `ApexDiscovery/` matches it whether or not it has a leading slash
- * (OpenCode's write-tool titles drop it).
+ * (APEX Runtime's write-tool titles drop it).
  */
 export function tidyToolTitle(title: string): string {
   return title.replace(/[^\s]*ApexDiscovery\//g, "").trim() || title;
@@ -1432,7 +1432,7 @@ function isEmptyWebSearchStep(
 
 export function foldEvent(
   state: FoldState,
-  event: OpenCodeEvent,
+  event: ApexRuntimeEvent,
   opts?: { shellTurn?: boolean },
 ): FoldState {
   const blocks = [...state.blocks];
@@ -1607,7 +1607,7 @@ function mapToolStatus(status?: string): ToolCallStatus {
 /** Convert loaded message history into thread blocks. */
 export function historyToThread(messages: HistoryMessage[], commands?: CommandInfo[]): FoldState {
   const blocks: ThreadBlock[] = [];
-  // OpenCode stores a slash command's EXPANDED template as the user message,
+  // APEX Runtime stores a slash command's EXPANDED template as the user message,
   // with any typed arguments appended after it (no marker) — show the
   // "/name args" the user actually typed instead. Longest template first, so
   // one template being a prefix of another's expansion can't mis-attribute.

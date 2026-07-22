@@ -2,14 +2,14 @@ import type { RuntimeStatus, ToolCallStatus } from "@ai4s/shared";
 
 export type { RuntimeStatus, ToolCallStatus };
 
-/** Pinned OpenCode release this client targets. */
-export const OPENCODE_VERSION = "1.17.13";
+/** Pinned APEX Runtime release this client targets. */
+export const APEX_RUNTIME_API_VERSION = "1";
 
-/** OpenCode server defaults (`opencode serve`). */
-export const DEFAULT_OPENCODE_URL = "http://127.0.0.1:4096";
+/** APEX Runtime server defaults (`APEX Runtime bridge`). */
+export const DEFAULT_APEX_RUNTIME_URL = "http://127.0.0.1:4096";
 
-// ---- Normalized events (OpenCode SSE → app) ----
-// OpenCode emits idempotent "updated" events (full current value), not deltas, so
+// ---- Normalized events (APEX Runtime SSE → app) ----
+// APEX Runtime emits idempotent "updated" events (full current value), not deltas, so
 // text/tool events carry a stable id and the app upserts by that id.
 
 export interface TextUpdatedEvent {
@@ -47,7 +47,7 @@ export interface SessionIdleEvent {
 }
 
 // ---- Interactive requests (the agent asks; the user must answer) ----
-// OpenCode blocks the run until answered. Two kinds: a `question` (pick from
+// APEX Runtime blocks the run until answered. Two kinds: a `question` (pick from
 // options) and a `permission` (approve a command / file write / etc.).
 
 export interface QuestionOption {
@@ -96,7 +96,7 @@ export interface RuntimeErrorEvent {
   message: string;
 }
 
-export type OpenCodeEvent =
+export type ApexRuntimeEvent =
   | TextUpdatedEvent
   | ToolUpdatedEvent
   | SessionIdleEvent
@@ -151,7 +151,7 @@ export interface CommandInfo {
   source?: string;
   /** Agent the command pins, when it does. */
   agent?: string;
-  /** The prompt text the command expands to. OpenCode stores that EXPANSION
+  /** The prompt text the command expands to. APEX Runtime stores that EXPANSION
    *  as the user message in history — the template lets the app reverse-map
    *  it back to the "/name" the user actually typed. */
   template?: string;
@@ -184,10 +184,10 @@ export interface HistoryPart {
   };
 }
 
-export interface OpenCodeClientOptions {
-  /** Base URL of a running `opencode serve`, e.g. http://127.0.0.1:4096 */
+export interface ApexRuntimeClientOptions {
+  /** Base URL of a running `APEX Runtime bridge`, e.g. http://127.0.0.1:4096 */
   baseUrl?: string;
-  /** Optional OPENCODE_SERVER_PASSWORD (basic auth). */
+  /** Optional APEX_RUNTIME_PASSWORD (basic auth). */
   password?: string;
   username?: string;
   /** Inject fetch (defaults to global fetch; browser + node both have it). */
@@ -197,21 +197,21 @@ export interface OpenCodeClientOptions {
   /** Max time to wait for short HTTP requests such as session creation. */
   requestTimeoutMs?: number;
   /**
-   * Workspace directory the server should scope skill discovery to. OpenCode
+   * Workspace directory the server should scope skill discovery to. APEX Runtime
    * initializes per-directory instances lazily; without this, /api/skill can
    * return an empty list until something else touches the workspace instance.
    */
   directory?: string;
 }
 
-// ---- Provider / model configuration (OpenCode-native, one source of truth) ----
+// ---- Provider / model configuration (APEX Runtime-native, one source of truth) ----
 
 export interface ProviderModelInfo {
   id: string;
   name: string;
 }
 
-/** A provider OpenCode can use right now (auth present or public). */
+/** A provider APEX Runtime can use right now (auth present or public). */
 export interface ProviderInfo {
   id: string;
   name: string;
@@ -232,7 +232,7 @@ export interface ProviderAuthMethod {
   prompts?: AuthPrompt[];
 }
 
-/** Catalog entry: a provider OpenCode knows how to talk to (not necessarily connected). */
+/** Catalog entry: a provider APEX Runtime knows how to talk to (not necessarily connected). */
 export interface ProviderCatalogEntry {
   id: string;
   name: string;
@@ -291,23 +291,23 @@ export interface ReviewerConfig {
   maxPasses: 2;
 }
 
-// ---- Raw OpenCode wire shapes (subset we consume) ----
+// ---- Raw APEX Runtime wire shapes (subset we consume) ----
 
-export interface OpenCodeRawEvent {
+export interface ApexRuntimeRawEvent {
   type: string;
   properties?: Record<string, unknown>;
 }
 
-export interface OpenCodeTextPart {
+export interface ApexRuntimeTextPart {
   id: string;
   type: "text";
   text: string;
 }
-export interface OpenCodeToolPart {
+export interface ApexRuntimeToolPart {
   id: string;
   type: "tool";
   callID: string;
   tool: string;
   state: { status: "pending" | "running" | "completed" | "error"; title?: string };
 }
-export type OpenCodePart = OpenCodeTextPart | OpenCodeToolPart | { type: string };
+export type ApexRuntimePart = ApexRuntimeTextPart | ApexRuntimeToolPart | { type: string };

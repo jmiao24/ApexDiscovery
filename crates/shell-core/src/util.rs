@@ -68,15 +68,17 @@ pub fn enriched_path() -> String {
     roots.push("C:\\ProgramData\\miniconda3".into());
     let mut extras: Vec<String> = Vec::new();
     for root in roots {
-        for dir in [root.clone(), format!("{root}\\Scripts"), format!("{root}\\Library\\bin")] {
+        for dir in [
+            root.clone(),
+            format!("{root}\\Scripts"),
+            format!("{root}\\Library\\bin"),
+        ] {
             extras.push(dir);
         }
     }
     let mut parts: Vec<String> = extras
         .into_iter()
-        .filter(|p| {
-            !base.split(';').any(|b| b.eq_ignore_ascii_case(p)) && Path::new(p).is_dir()
-        })
+        .filter(|p| !base.split(';').any(|b| b.eq_ignore_ascii_case(p)) && Path::new(p).is_dir())
         .collect();
     if !base.is_empty() {
         parts.push(base);
@@ -102,7 +104,7 @@ pub fn quiet_command(bin: impl AsRef<std::ffi::OsStr>) -> std::process::Command 
 
 /// Make a secret-holding path owner-only: 700 for directories, 600 for files
 /// (unix). The runtime root carries provider/connector API keys in
-/// `opencode.jsonc`/`auth.json`, and the sidecar rewrites those files with a
+/// `config.jsonc`/`auth.json`, and the sidecar rewrites those files with a
 /// default umask while running — locking the DIRECTORY is what holds, since a
 /// 700 dir is unreachable for other users whatever the file modes inside. On
 /// Windows, %APPDATA% is per-user ACL'd already; nothing to do.
@@ -127,8 +129,8 @@ pub fn random_hex(bytes: usize) -> String {
     buf.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Per-run password the sidecar requires on every HTTP request (OpenCode's
-/// built-in Basic auth, `OPENCODE_SERVER_PASSWORD`). Generated fresh each app
+/// Per-run password the sidecar requires on every HTTP request (APEX Runtime's
+/// built-in Basic auth, `APEX_RUNTIME_PASSWORD`). Generated fresh each app
 /// launch and held only in memory — never written to disk — so a local
 /// webpage that scans loopback ports can neither drive agent turns nor read
 /// `/global/config` (which carries provider API keys).
@@ -169,20 +171,26 @@ mod tests {
     fn tighten_private_makes_dir_and_secrets_owner_only() {
         use std::os::unix::fs::PermissionsExt;
         let dir = std::env::temp_dir().join(format!("os-private-{}", std::process::id()));
-        let sub = dir.join("opencode");
+        let sub = dir.join("apex-runtime");
         fs::create_dir_all(&sub).unwrap();
-        let cfg = sub.join("opencode.jsonc");
+        let cfg = sub.join("config.jsonc");
         fs::write(&cfg, b"{\"apiKey\":\"secret\"}").unwrap();
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
         fs::set_permissions(&cfg, fs::Permissions::from_mode(0o644)).unwrap();
 
-        // The runtime root holds provider/connector keys (opencode.jsonc,
+        // The runtime root holds provider/connector keys (config.jsonc,
         // auth.json) — it must be unreadable to other users even when the
         // sidecar later rewrites files inside with a default umask.
         super::tighten_private(&dir);
-        assert_eq!(fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o700);
+        assert_eq!(
+            fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
         super::tighten_private(&cfg);
-        assert_eq!(fs::metadata(&cfg).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            fs::metadata(&cfg).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }

@@ -29,7 +29,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": ["binaries/opencode", "binaries/uv"],
+    "externalBin": ["binaries/apex-runtime", "binaries/uv"],
     "macOS": {
       "minimumSystemVersion": "13.0"
     },
@@ -37,6 +37,7 @@
       "../../../runtime/skills/external/ai4s-skills": "skills/",
       "../../../runtime/skills/external/anthropic-skills": "skills-office/",
       "../../../runtime/skills/core": "skills-core/",
+      "../../../.tauri-runtime/codex-bridge": "codex-bridge/",
       "../../../runtime/harness": "harness/",
       "../../../examples/climate-trends": "examples/climate-trends/"
     },

@@ -19,9 +19,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - platform: macos-15
             target: aarch64-apple-darwin
-          - platform: macos-latest
+          - platform: macos-15-intel
             target: x86_64-apple-darwin
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
@@ -61,9 +61,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Fetch bundled OpenCode sidecar
+      - name: Prepare bundled Codex runtime
         shell: bash
-        run: bash scripts/dev/fetch-opencode.sh ${{ matrix.target }}
+        run: node scripts/dev/prepare-codex-runtime.mjs --target ${{ matrix.target }}
 
       - name: Fetch bundled ai4s-skills pack
         shell: bash
@@ -80,8 +80,7 @@ jobs:
         with:
           projectPath: apps/desktop
           # Linux: deb+rpm only. AppImage is off because linuxdeploy runs ldd
-          # on every bundled ELF and ldd exits 1 on the Bun-built opencode
-          # sidecar, aborting the whole bundle (tauri-apps/tauri#8929).
+          # on every bundled executable; keep the supported package formats explicit.
           args: --target ${{ matrix.target }} ${{ startsWith(matrix.platform, 'ubuntu') && '--bundles deb,rpm' || '' }}
           # On a v* tag push, attach installers to a draft GitHub Release.
           # Empty tagName (workflow_dispatch) skips release creation.

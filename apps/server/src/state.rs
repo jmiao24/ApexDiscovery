@@ -15,7 +15,7 @@ pub struct AppState {
     /// Random cookie value, separate from both operator and bootstrap tokens.
     pub session_token: String,
     pub bootstrap_nonce: Mutex<Option<String>>,
-    pub opencode_bin: PathBuf,
+    pub runtime_bin: PathBuf,
     /// Sidecar lifecycle — the mutex doubles as the restart lock so two
     /// config-changing commands can never double-spawn (same invariant as the
     /// desktop's restart_sidecar).
@@ -29,14 +29,14 @@ impl AppState {
         ctx: ShellCtx,
         access_token: String,
         bootstrap_nonce: Option<String>,
-        opencode_bin: PathBuf,
+        runtime_bin: PathBuf,
     ) -> Self {
         Self {
             ctx,
             access_token,
             session_token: shell_core::util::random_hex(32),
             bootstrap_nonce: Mutex::new(bootstrap_nonce),
-            opencode_bin,
+            runtime_bin,
             sidecar: Mutex::new(sidecar::Sidecar::default()),
             client: reqwest::Client::builder()
                 .no_proxy()
@@ -48,13 +48,13 @@ impl AppState {
     /// Start the sidecar if not running; returns its loopback base URL.
     pub async fn start_sidecar(&self) -> Result<String, String> {
         let mut s = self.sidecar.lock().await;
-        s.ensure_started(&self.ctx, &self.opencode_bin)
+        s.ensure_started(&self.ctx, &self.runtime_bin)
     }
 
     /// Kill + respawn on the stable port (config changes only apply at spawn).
     pub async fn restart_sidecar(&self) -> Result<String, String> {
         let mut s = self.sidecar.lock().await;
-        s.restart(&self.ctx, &self.opencode_bin)
+        s.restart(&self.ctx, &self.runtime_bin)
     }
 
     /// The sidecar base URL, or an error when it never started.

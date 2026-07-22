@@ -1,5 +1,4 @@
-// Manages the bundled OpenCode sidecar so it never interferes with any OpenCode
-// the user already has: it runs the *bundled* binary, on a *dedicated free port*,
+// Manages the bundled Codex-backed APEX Runtime on a dedicated free port,
 // with an *app-private* XDG config/data dir, and is killed on app exit.
 //
 // The command bodies live in the shared `shell-core` crate (the web server runs
@@ -14,8 +13,8 @@ use tauri_plugin_shell::ShellExt;
 
 // Shared utilities other desktop modules (kernel, jupyter, compute, …) reach
 // through `crate::runtime::` — same paths as before the shell-core extraction.
-pub(crate) use shell_core::util::{enriched_path, free_port, quiet_command, random_hex};
 use shell_core::util::server_password;
+pub(crate) use shell_core::util::{enriched_path, free_port, quiet_command, random_hex};
 use shell_core::ShellCtx;
 
 #[derive(Default)]
@@ -52,33 +51,34 @@ pub fn runtime_password() -> String {
     server_password().to_string()
 }
 
-/// Copy the user's OpenCode CLI login into the app-private data dir, EXPLICITLY
-/// (from the Settings page) — never silently. Returns false when there is no
-/// CLI login to import. Restarts the sidecar so it picks the credentials up.
-#[tauri::command(async)]
-pub fn import_opencode_login(app: AppHandle, state: State<'_, RuntimeState>) -> Result<bool, String> {
-    if !shell_core::runtime::import_opencode_login(&ctx(&app)?)? {
-        return Ok(false);
-    }
-    // Restart the running sidecar so /config/providers reflects the login.
-    if state.url.lock().unwrap().is_some() {
-        restart_sidecar(&app, &state)?;
-    }
-    Ok(true)
-}
-
 fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
     let spec = shell_core::runtime::build_sidecar_spec(&ctx(app)?, port)?;
+    let bridge = app
+        .path()
+        .resource_dir()
+        .map_err(|e| e.to_string())?
+        .join("codex-bridge")
+        .join("src")
+        .join("server.mjs");
+    if !bridge.is_file() {
+        return Err(format!(
+            "bundled APEX Runtime bridge not found: {}",
+            bridge.display()
+        ));
+    }
     let mut cmd = app
         .shell()
-        .sidecar("opencode")
+        .sidecar("apex-runtime")
         .map_err(|e| format!("sidecar not found: {e}"))?
+        .arg(bridge)
         .args(spec.args)
         .current_dir(spec.cwd);
     for (k, v) in spec.envs {
         cmd = cmd.env(k, v);
     }
-    let (mut rx, child) = cmd.spawn().map_err(|e| format!("failed to spawn opencode: {e}"))?;
+    let (mut rx, child) = cmd
+        .spawn()
+        .map_err(|e| format!("failed to spawn APEX Runtime: {e}"))?;
     // Drain events so the child's stdout/stderr buffer never blocks it.
     tauri::async_runtime::spawn(async move { while rx.recv().await.is_some() {} });
     Ok(child)
@@ -101,7 +101,7 @@ fn restart_sidecar(app: &AppHandle, state: &RuntimeState) -> Result<String, Stri
     Ok(url)
 }
 
-/// Start the bundled OpenCode (idempotent). Returns its base URL. `async`:
+/// Start the bundled APEX Runtime (idempotent). Returns its base URL. `async`:
 /// skill-pack deployment + process spawn at startup must not block the UI
 /// thread while the first window paints.
 #[tauri::command(async)]
@@ -122,7 +122,7 @@ pub fn start_runtime(app: AppHandle, state: State<'_, RuntimeState>) -> Result<S
 }
 
 /// The workspace directory the sidecar runs in — the frontend passes it to the
-/// SDK so skill discovery is scoped to the right OpenCode instance.
+/// SDK so skill discovery is scoped to the right runtime instance.
 #[tauri::command]
 pub fn workspace_path(app: AppHandle) -> Result<String, String> {
     Ok(workspace_dir(&app)?.to_string_lossy().to_string())
@@ -202,7 +202,7 @@ pub async fn pick_folder(app: AppHandle) -> Result<Option<String>, String> {
     Ok(Some(path.to_string_lossy().to_string()))
 }
 
-/// Kill the bundled OpenCode if running.
+/// Kill the bundled APEX Runtime if running.
 #[tauri::command]
 pub fn stop_runtime(state: State<'_, RuntimeState>) {
     if let Some(child) = state.child.lock().unwrap().take() {
@@ -215,23 +215,6 @@ pub fn kill_child(state: &RuntimeState) {
     if let Some(child) = state.child.lock().unwrap().take() {
         let _ = child.kill();
     }
-}
-
-/// Remove an entry from a map section of the app-private global OpenCode
-/// config ("provider" or "mcp") and restart the sidecar (PATCH /global/config
-/// cannot delete keys).
-#[tauri::command(async)]
-pub fn remove_config_entry(
-    app: AppHandle,
-    state: State<'_, RuntimeState>,
-    section: String,
-    key: String,
-) -> Result<(), String> {
-    shell_core::runtime::remove_config_entry(&ctx(&app)?, &section, &key)?;
-    if state.url.lock().unwrap().is_some() {
-        restart_sidecar(&app, &state)?;
-    }
-    Ok(())
 }
 
 /// The current approval mode ("approve" | "full"). Spawn seeding guarantees a
@@ -250,7 +233,7 @@ pub fn set_approval_mode(
     mode: String,
 ) -> Result<String, String> {
     let path = shell_core::runtime::set_approval_mode(&ctx(&app)?, &mode)?;
-    // Same restart flow as configure_opencode: reload rules on a stable port.
+    // Reload rules on the stable port.
     if state.url.lock().unwrap().is_some() {
         restart_sidecar(&app, &state)
     } else {
@@ -275,32 +258,6 @@ pub fn set_proxy_setting(
 ) -> Result<String, String> {
     let path = shell_core::runtime::set_proxy_setting(&ctx(&app)?, &mode, &url)?;
     // Same restart flow as set_approval_mode: the env only applies at spawn.
-    if state.url.lock().unwrap().is_some() {
-        restart_sidecar(&app, &state)
-    } else {
-        Ok(path.to_string_lossy().to_string())
-    }
-}
-
-/// Write the provider key/model into the app-private OpenCode config and restart
-/// the sidecar so it picks them up. Returns the same base URL (stable port).
-#[tauri::command(async)]
-pub fn configure_opencode(
-    app: AppHandle,
-    state: State<'_, RuntimeState>,
-    provider: String,
-    api_key: String,
-    model: String,
-    base_url: Option<String>,
-) -> Result<String, String> {
-    let path = shell_core::runtime::configure_opencode(
-        &ctx(&app)?,
-        &provider,
-        &api_key,
-        &model,
-        base_url.as_deref(),
-    )?;
-    // Restart so the running server reloads the new provider config.
     if state.url.lock().unwrap().is_some() {
         restart_sidecar(&app, &state)
     } else {

@@ -148,18 +148,6 @@ export async function command<T>(name: string, args?: object): Promise<T> {
   throw new Error("no shell available");
 }
 
-export interface OpenCodeCredentials {
-  provider: string;
-  apiKey: string;
-  model: string;
-  baseUrl?: string;
-}
-
-export type ConfigureResult =
-  | { ok: true; path: string }
-  | { ok: false; reason: "not-desktop" }
-  | { ok: false; reason: "error"; message: string };
-
 /** Start the agent runtime. Desktop: spawn the bundled sidecar and return its
  *  loopback URL. Web: the server supervises the sidecar and proxies it at
  *  /runtime — returns that absolute mount. Null in plain browser dev. */
@@ -178,7 +166,7 @@ export async function startRuntime(): Promise<string | null> {
 /**
  * Per-run password the sidecar requires on every request (desktop only — the
  * web server injects it in its reverse proxy so it never reaches the browser;
- * browser dev talks to a user-run, passwordless `opencode serve`). Held in
+ * browser dev talks to a user-run, passwordless `APEX Runtime bridge`). Held in
  * memory on both sides; never persisted.
  */
 export async function runtimePassword(): Promise<string | null> {
@@ -241,23 +229,12 @@ export async function addTextToWorkspace(filename: string, content: string): Pro
   return command<string>("add_text_to_workspace", { filename, content });
 }
 
-/**
- * Explicitly import the user's OpenCode CLI login into the app's private
- * runtime. Returns false when no CLI login exists; the sidecar
- * is restarted on success. (Web: imports the login of the machine the SERVER
- * runs on — for self-hosting on your own machine that is the same login.)
- */
-export async function importOpenCodeLogin(): Promise<boolean> {
-  if (!hasShell()) return false;
-  return command<boolean>("import_opencode_login");
-}
-
 /** How agent actions get approved — the composer's Codex-style switch.
  *  "approve": dangerous shell commands (delete / install / remote / privilege)
  *  and web fetches prompt first. "full": everything in-workspace just runs. */
 export type ApprovalMode = "approve" | "full";
 
-/** The approval mode OpenCode's config currently holds ("approve" until changed). */
+/** The approval mode the APEX Runtime config currently holds ("approve" until changed). */
 export async function getApprovalMode(): Promise<ApprovalMode> {
   if (!hasShell()) return "approve";
   const mode = await command<string>("get_approval_mode");
@@ -290,12 +267,6 @@ export async function getProxySetting(): Promise<ProxySetting | null> {
 export async function setProxySetting(mode: ProxyMode, url: string): Promise<void> {
   if (!hasShell()) return;
   await command("set_proxy_setting", { mode, url });
-}
-
-/** Remove a provider/mcp entry from the global OpenCode config (restarts the sidecar). */
-export async function removeConfigEntry(section: "provider" | "mcp", key: string): Promise<void> {
-  if (!hasShell()) throw new Error("not running in the desktop app");
-  await command("remove_config_entry", { section, key });
 }
 
 export interface JupyterStatus {
@@ -702,22 +673,4 @@ export async function watchFullscreen(cb: (fullscreen: boolean) => void): Promis
   };
   await sync();
   return win.onResized(() => void sync());
-}
-
-/** Write the provider key/model into OpenCode's config via the shell. */
-export async function configureOpenCode(
-  creds: OpenCodeCredentials,
-): Promise<ConfigureResult> {
-  if (!hasShell()) return { ok: false, reason: "not-desktop" };
-  try {
-    const path = await command<string>("configure_opencode", {
-      provider: creds.provider,
-      apiKey: creds.apiKey,
-      model: creds.model,
-      baseUrl: creds.baseUrl ?? null,
-    });
-    return { ok: true, path };
-  } catch (e) {
-    return { ok: false, reason: "error", message: e instanceof Error ? e.message : String(e) };
-  }
 }

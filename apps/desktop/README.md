@@ -1,6 +1,6 @@
 # apps/desktop
 
-The Tauri 2 + React + TypeScript + Vite desktop application — the AI4S Workbench shell.
+The Tauri 2 + React + TypeScript + Vite desktop application — the APEX Discovery shell.
 
 ## Layout
 
@@ -19,9 +19,9 @@ The Tauri 2 + React + TypeScript + Vite desktop application — the AI4S Workben
 - Server / runtime state → TanStack Query.
 - Streaming agent events → a dedicated event bus (`lib/events`).
 
-The frontend talks to the agent runtime only through `packages/sdk` (`OpenCodeClient`).
+The frontend talks to the agent runtime only through `packages/sdk` (`ApexRuntimeClient`).
 
 ## Depends on
 
-`packages/ui`, `packages/shared`, `packages/sdk`; at runtime, the OpenCode sidecar
-started by `runtime/manager`.
+`packages/ui`, `packages/shared`, `packages/sdk`; at runtime, the bundled Codex bridge
+implements the APEX Runtime API and is supervised by the host.

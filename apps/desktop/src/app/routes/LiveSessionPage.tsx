@@ -22,7 +22,7 @@ import { RunsPane } from "./RunsPage";
 import { cn } from "@/lib/cn";
 import { skillInspectorFromBlock } from "@/lib/skills";
 
-/** Live agent session backed by the OpenCode runtime. `/live` (no id) is a blank draft;
+/** Live agent session backed by the APEX Runtime. `/live` (no id) is a blank draft;
  *  the session is created lazily on the first message, then the URL updates to /live/:id. */
 export function LiveSessionPage() {
   const { t } = useTranslation(["session", "common"]);
@@ -416,7 +416,7 @@ export function LiveSessionPage() {
                 <p className="mt-1 text-sm text-muted">
                   {t("live.runtime.bodyPrefix")}{" "}
                   {/* eslint-disable-next-line i18next/no-literal-string -- literal shell command, not prose */}
-                  <span className="font-mono">opencode serve</span>
+                  <span className="font-mono">APEX Runtime bridge</span>
                   {t("live.runtime.bodySuffix")}
                 </p>
                 <div className="mt-3 rounded-input bg-surface-2 px-3 py-2 font-mono text-xs text-text">

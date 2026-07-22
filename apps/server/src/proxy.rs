@@ -1,5 +1,5 @@
-// /runtime/* → the OpenCode sidecar. The browser's OpenCodeClient talks to
-// this mount exactly as it would to a local `opencode serve`; the proxy adds
+// /runtime/* → the APEX Runtime bridge. The browser's ApexRuntimeClient talks to
+// this mount through the same HTTP + SSE contract; the proxy adds
 // the sidecar's per-run Basic-auth password server-side (it never reaches the
 // browser) and streams response bodies through unbuffered, which is what keeps
 // the /event SSE stream live.
@@ -12,9 +12,9 @@ use axum::response::{IntoResponse, Response};
 
 use crate::state::AppState;
 
-/// The sidecar's Basic-auth header value (username "opencode", per-run password).
+/// The runtime's Basic-auth header value (username "apex", per-run password).
 fn sidecar_auth() -> String {
-    let creds = format!("opencode:{}", shell_core::util::server_password());
+    let creds = format!("apex:{}", shell_core::util::server_password());
     format!(
         "Basic {}",
         shell_core::artifact::base64_encode(creds.as_bytes())

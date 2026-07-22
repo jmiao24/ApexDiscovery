@@ -1,13 +1,13 @@
-export { OpenCodeClient } from "./OpenCodeClient";
+export { ApexRuntimeClient } from "./ApexRuntimeClient";
 export {
-  OPENCODE_VERSION,
-  DEFAULT_OPENCODE_URL,
-  type OpenCodeEvent,
+  APEX_RUNTIME_API_VERSION,
+  DEFAULT_APEX_RUNTIME_URL,
+  type ApexRuntimeEvent,
   type TextUpdatedEvent,
   type ToolUpdatedEvent,
   type SessionIdleEvent,
   type RuntimeErrorEvent,
-  type OpenCodeClientOptions,
+  type ApexRuntimeClientOptions,
   type RuntimeStatus,
   type ToolCallStatus,
   type SessionMeta,

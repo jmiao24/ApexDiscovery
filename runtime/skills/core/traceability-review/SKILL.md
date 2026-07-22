@@ -17,7 +17,7 @@ identifiers and quantitative claims deterministically, so you audit real
 identifiers, not ones recalled from memory:
 
 ```bash
-python "$XDG_CONFIG_HOME/opencode/skills/traceability-review/pdf_extract.py" MANUSCRIPT.pdf
+python "$XDG_CONFIG_HOME/apex-runtime/skills/traceability-review/pdf_extract.py" MANUSCRIPT.pdf
 ```
 
 It prints JSON: `{backend, pages, chars, citations:{dois,arxiv,pmids},

@@ -1,10 +1,10 @@
 // AI4S Workbench — Tauri 2 entry. Hosts the React frontend and supervises the
-// bundled OpenCode sidecar (isolated config/data + dedicated port; killed on exit).
+// bundled Codex-backed APEX Runtime (isolated config/data; killed on exit).
 mod artifact_file;
+mod compute;
 mod debug_log;
 mod examples;
 mod git_snapshot;
-mod compute;
 mod jupyter;
 mod kernel;
 mod large_file;
@@ -31,7 +31,7 @@ pub fn run() {
     tauri::Builder::default()
         // Single instance MUST be the first plugin. A second launch (or a reinstall
         // while the app is still running) focuses the existing window instead of
-        // starting a second OpenCode on the same data dir (which deadlocks the DB).
+        // starting a second runtime on the same data dir.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
@@ -59,12 +59,9 @@ pub fn run() {
             runtime::mark_session,
             runtime::new_dated_workspace,
             runtime::pick_folder,
-            runtime::import_opencode_login,
-            runtime::remove_config_entry,
             jupyter::jupyter_status,
             jupyter::setup_jupyter,
             jupyter::start_jupyter,
-            runtime::configure_opencode,
             runtime::get_approval_mode,
             runtime::set_approval_mode,
             runtime::get_proxy_setting,
@@ -115,9 +112,12 @@ pub fn run() {
         .run(|app, event| {
             // Clean up on exit. macOS Cmd+Q / Quit terminates via RunEvent::Exit
             // (ExitRequested is not always delivered), so handle BOTH — otherwise
-            // the OpenCode sidecar / kernel / Jupyter orphan on every quit. The
+            // the APEX Runtime sidecar / kernel / Jupyter orphan on every quit. The
             // cleanup is idempotent, so running on both is safe.
-            if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
+            if matches!(
+                event,
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+            ) {
                 runtime::kill_child(&app.state::<RuntimeState>());
                 kernel::kill_kernel(&app.state::<KernelState>());
                 jupyter::kill_jupyter(&app.state::<JupyterState>());

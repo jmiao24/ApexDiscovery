@@ -1,34 +1,65 @@
-// Pure merge of provider credentials/model into OpenCode config JSON.
-// Used by the runtime command, which writes it into an app-private config dir.
+// Approval-mode configuration for the app-private APEX Runtime profile.
 use serde_json::{json, Value};
 
 /// Approval modes for agent tool use (the composer's Codex-style switch).
-/// OpenCode evaluates permission rules last-match-wins with user config rules
-/// appended after its builtin `"*": "allow"` — so "approve" only needs `ask`
-/// rules and everything unmatched still runs without a prompt.
+/// The bridge uses the presence of these rules to select the safe Codex sandbox.
 pub const MODE_APPROVE: &str = "approve";
 pub const MODE_FULL: &str = "full";
 
 /// Command tokens the "approve" mode gates behind a prompt, per the AGENTS.md
 /// safety defaults: deletion, privilege/system changes, dependency installs,
 /// and remote/outward connections. Each token yields two glob rules:
-/// `"T *"` (command starts with it; also matches bare `T` — OpenCode turns a
+/// `"T *"` (command starts with it; also matches bare `T` — the runtime turns a
 /// trailing " *" into an optional group) and `"* T *"` (embedded in a compound
 /// command like `cd x && rm -rf y`; the leading space avoids matching words
 /// that merely end in the token).
 const DANGEROUS_BASH: &[&str] = &[
     // deletion
-    "rm", "rmdir", "shred", "git clean",
+    "rm",
+    "rmdir",
+    "shred",
+    "git clean",
     // privilege / system state
-    "sudo", "su", "chmod", "chown", "kill", "pkill", "killall", "launchctl",
-    "systemctl", "crontab", "osascript", "diskutil", "dd",
+    "sudo",
+    "su",
+    "chmod",
+    "chown",
+    "kill",
+    "pkill",
+    "killall",
+    "launchctl",
+    "systemctl",
+    "crontab",
+    "osascript",
+    "diskutil",
+    "dd",
     // dependency installs
-    "pip install", "pip3 install", "uv add", "uv pip install", "npm install",
-    "npm i", "pnpm add", "pnpm install", "yarn add", "conda install",
-    "mamba install", "brew install", "cargo install", "gem install",
-    "apt install", "apt-get install",
+    "pip install",
+    "pip3 install",
+    "uv add",
+    "uv pip install",
+    "npm install",
+    "npm i",
+    "pnpm add",
+    "pnpm install",
+    "yarn add",
+    "conda install",
+    "mamba install",
+    "brew install",
+    "cargo install",
+    "gem install",
+    "apt install",
+    "apt-get install",
     // remote / outward
-    "ssh", "scp", "sftp", "rsync", "curl", "wget", "nc", "git push", "modal",
+    "ssh",
+    "scp",
+    "sftp",
+    "rsync",
+    "curl",
+    "wget",
+    "nc",
+    "git push",
+    "modal",
     "sbatch",
 ];
 
@@ -41,7 +72,7 @@ fn approve_permission() -> Value {
     json!({ "bash": Value::Object(bash), "webfetch": "ask" })
 }
 
-/// Set the approval mode in OpenCode config JSON. "approve" installs the ask
+/// Set the approval mode in APEX Runtime config JSON. "approve" installs the ask
 /// rules; "full" writes `"permission": {}` — zero rules (builtin defaults),
 /// with the key's presence marking that the user made a choice (so startup
 /// seeding never overrides it). Other keys are preserved.
@@ -86,89 +117,9 @@ pub fn permission_mode_of(existing: &str) -> Option<&'static str> {
     }
 }
 
-/// Merge provider credentials/model into existing OpenCode config JSON.
-/// Empty fields are left untouched; existing unrelated keys are preserved.
-pub fn merge_config(
-    existing: &str,
-    provider: &str,
-    api_key: &str,
-    model: &str,
-    base_url: Option<&str>,
-) -> Result<String, String> {
-    let mut root: Value = if existing.trim().is_empty() {
-        json!({})
-    } else {
-        serde_json::from_str(existing).map_err(|e| format!("invalid existing config: {e}"))?
-    };
-    if !root.is_object() {
-        root = json!({});
-    }
-    let obj = root.as_object_mut().unwrap();
-
-    if !model.is_empty() {
-        obj.insert("model".to_string(), json!(model));
-    }
-
-    if !provider.is_empty() {
-        let providers = obj.entry("provider").or_insert_with(|| json!({}));
-        if !providers.is_object() {
-            *providers = json!({});
-        }
-        let pobj = providers.as_object_mut().unwrap();
-        let entry = pobj.entry(provider).or_insert_with(|| json!({}));
-        if !entry.is_object() {
-            *entry = json!({});
-        }
-        let options = entry
-            .as_object_mut()
-            .unwrap()
-            .entry("options")
-            .or_insert_with(|| json!({}));
-        if !options.is_object() {
-            *options = json!({});
-        }
-        let oobj = options.as_object_mut().unwrap();
-        if !api_key.is_empty() {
-            oobj.insert("apiKey".to_string(), json!(api_key));
-        }
-        if let Some(b) = base_url {
-            if !b.is_empty() {
-                oobj.insert("baseURL".to_string(), json!(b));
-            }
-        }
-    }
-
-    serde_json::to_string_pretty(&root).map_err(|e| e.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn writes_provider_key_model_into_empty_config() {
-        let out = merge_config("", "anthropic", "sk-test", "anthropic/claude-sonnet-4-5", None).unwrap();
-        let v: Value = serde_json::from_str(&out).unwrap();
-        assert_eq!(v["model"], "anthropic/claude-sonnet-4-5");
-        assert_eq!(v["provider"]["anthropic"]["options"]["apiKey"], "sk-test");
-    }
-
-    #[test]
-    fn preserves_existing_unrelated_config() {
-        let existing = r#"{"theme":"dark","provider":{"openai":{"options":{"apiKey":"old"}}}}"#;
-        let out = merge_config(existing, "anthropic", "sk-new", "", None).unwrap();
-        let v: Value = serde_json::from_str(&out).unwrap();
-        assert_eq!(v["theme"], "dark");
-        assert_eq!(v["provider"]["openai"]["options"]["apiKey"], "old");
-        assert_eq!(v["provider"]["anthropic"]["options"]["apiKey"], "sk-new");
-    }
-
-    #[test]
-    fn sets_base_url_when_provided() {
-        let out = merge_config("", "openai", "k", "openai/gpt-4o", Some("https://x/v1")).unwrap();
-        let v: Value = serde_json::from_str(&out).unwrap();
-        assert_eq!(v["provider"]["openai"]["options"]["baseURL"], "https://x/v1");
-    }
 
     #[test]
     fn approve_mode_writes_ask_rules_for_dangerous_bash() {
@@ -176,7 +127,7 @@ mod tests {
         let v: Value = serde_json::from_str(&out).unwrap();
         let bash = v["permission"]["bash"].as_object().unwrap();
         // Prefix form gates a command that starts with the token (also bare,
-        // via OpenCode's trailing-" *" optionalization)…
+        // via APEX Runtime's trailing-" *" optionalization)…
         assert_eq!(bash["rm *"], "ask");
         assert_eq!(bash["pip install *"], "ask");
         assert_eq!(bash["git push *"], "ask");
@@ -195,14 +146,15 @@ mod tests {
         let approved = set_permission_mode("", MODE_APPROVE).unwrap();
         let out = set_permission_mode(&approved, MODE_FULL).unwrap();
         let v: Value = serde_json::from_str(&out).unwrap();
-        // {} = zero rules = OpenCode builtin defaults; the key's presence
+        // {} = zero rules = runtime builtin defaults; the key's presence
         // marks "user chose this" so startup never re-seeds approve mode.
         assert_eq!(v["permission"], json!({}));
     }
 
     #[test]
     fn set_permission_mode_preserves_unrelated_keys() {
-        let existing = r#"{"model":"anthropic/claude","provider":{"openai":{"options":{"apiKey":"k"}}}}"#;
+        let existing =
+            r#"{"model":"anthropic/claude","provider":{"openai":{"options":{"apiKey":"k"}}}}"#;
         let out = set_permission_mode(existing, MODE_APPROVE).unwrap();
         let v: Value = serde_json::from_str(&out).unwrap();
         assert_eq!(v["model"], "anthropic/claude");

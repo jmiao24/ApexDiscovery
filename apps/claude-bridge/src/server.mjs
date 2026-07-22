@@ -1,12 +1,9 @@
 #!/usr/bin/env node
-// claude-bridge: an OpenCode-compatible HTTP+SSE server whose agent is the
-// Claude Agent SDK. It speaks the exact wire subset packages/sdk's
-// OpenCodeClient consumes, and accepts the same CLI/env contract as
-// `opencode serve` (`serve --hostname H --port P`, OPENCODE_SERVER_PASSWORD,
-// XDG_* dirs, cwd = workspace) — so the desktop shell and apexdiscovery-server
-// can spawn it as a drop-in sidecar and the React app runs unchanged.
+// claude-bridge: the optional Claude Agent SDK backend behind the stable
+// APEX Runtime API. It speaks the HTTP + SSE subset consumed by
+// packages/sdk's ApexRuntimeClient.
 //
-// Protocol surface implemented (see OpenCodeClient.ts for the consumer):
+// Protocol surface implemented (see ApexRuntimeClient.ts for the consumer):
 //   GET  /event?directory=&auth_token=          SSE event stream
 //   POST /session?directory=                    create session
 //   GET  /session | /experimental/session       list sessions
@@ -33,7 +30,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
-// ---- CLI / env contract (identical to `opencode serve`) ----
+// ---- CLI / environment contract ----
 const args = process.argv.slice(2);
 const argValue = (flag, fallback) => {
   const i = args.indexOf(flag);
@@ -41,8 +38,8 @@ const argValue = (flag, fallback) => {
 };
 const HOSTNAME = argValue("--hostname", "127.0.0.1");
 const PORT = Number(argValue("--port", "4096"));
-const PASSWORD = process.env.OPENCODE_SERVER_PASSWORD || "";
-const AUTH_TOKEN = PASSWORD ? Buffer.from(`opencode:${PASSWORD}`).toString("base64") : null;
+const PASSWORD = process.env.APEX_RUNTIME_PASSWORD || "";
+const AUTH_TOKEN = PASSWORD ? Buffer.from(`apex:${PASSWORD}`).toString("base64") : null;
 
 const DATA_HOME = process.env.XDG_DATA_HOME || join(homedir(), ".local", "share");
 const CONFIG_HOME = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
@@ -106,11 +103,11 @@ const alwaysAllowed = new Map();
 let idCounter = 0;
 const freshId = (prefix) => `${prefix}_${Date.now().toString(36)}${(idCounter++).toString(36)}`;
 
-// The app's approval switch writes OpenCode's permission config; honor it.
+// The app's approval switch writes the APEX Runtime permission config; honor it.
 // A `permission.bash` object = "approve" mode; `permission: {}` = full access.
 function permissionMode() {
-  for (const name of ["opencode.jsonc", "opencode.json"]) {
-    const cfg = readJson(join(CONFIG_HOME, "opencode", name), null);
+  for (const name of ["config.jsonc", "config.json"]) {
+    const cfg = readJson(join(CONFIG_HOME, "apex-runtime", name), null);
     if (cfg && typeof cfg === "object" && "permission" in cfg) {
       return cfg.permission && typeof cfg.permission.bash === "object" ? "default" : "bypassPermissions";
     }
@@ -118,7 +115,7 @@ function permissionMode() {
   return "default";
 }
 
-// ---- Claude ↔ OpenCode mapping ----
+// ---- Claude SDK ↔ APEX Runtime mapping ----
 const TOOL_NAMES = {
   Bash: "bash",
   Write: "write",

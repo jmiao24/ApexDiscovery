@@ -27,9 +27,9 @@ How they ship, end to end:
    pinned commit into `external/ai4s-skills/`.
 2. `tauri.conf.json` bundles that directory as an app resource (`resources/skills/`).
 3. On every sidecar start, `runtime.rs::deploy_bundled_skills` syncs the pack into
-   the app-private profile's global skills dir (`<xdg-config>/opencode/skills/`),
-   which OpenCode scans regardless of project detection. Bundled skill directories
-   are replaced on app upgrade; the workspace's own `.opencode/skills/` stays
+   the app-private profile's global skills dir (`<xdg-config>/apex-runtime/skills/`).
+   Bundled skill directories are replaced on app upgrade; the workspace's own
+   `.agents/skills/` stays
    reserved for user-installed skills. Skill listing must be workspace-scoped
    (`GET /api/skill?directory=…`) — the SDK does this via its `directory` option.
 

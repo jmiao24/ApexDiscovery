@@ -58,7 +58,7 @@ const APPROVAL_OPTIONS: { mode: ApprovalMode; icon: typeof Hand }[] = [
 
 /**
  * The "Ask anything" composer. Static mock sessions pass no `onSend`; the live
- * OpenCode session passes one to submit prompts to the runtime. Attached
+ * APEX Runtime session passes one to submit prompts to the runtime. Attached
  * workspace files show as removable chips above the input, not as prompt text.
  *
  * Two prefix modes (only when their handler is provided):

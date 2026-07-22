@@ -1,9 +1,9 @@
 # AI4S Workbench Desktop — Technical Design
 
 > **Implementation status (v0.1, 2026-07-02).** Built and verified: Tauri 2 shell + React
-> UI; **OpenCode** bundled as an isolated sidecar (auto-started, app-private config/data,
-> dedicated port); `OpenCodeClient` over HTTP + SSE; real multi-session chat with history;
-> Skills page backed by OpenCode's real skills/agents; macOS `.dmg`; cross-platform CI.
+> UI; **APEX Runtime** bundled as an isolated sidecar (auto-started, app-private config/data,
+> dedicated port); `ApexRuntimeClient` over HTTP + SSE; real multi-session chat with history;
+> Skills page backed by APEX Runtime's real skills/agents; macOS `.dmg`; cross-platform CI.
 > Planned (not yet built): self-authored scientific skills, MCP connectors, provenance/
 > reviewer engine, literature search, Jupyter runtime, remote compute. This document is the
 > target design; sections mixing built vs planned are noted inline.
@@ -22,12 +22,12 @@ AI4S Workbench Desktop
 ├── Desktop Shell: Tauri 2
 ├── Frontend: React + TypeScript + Vite
 ├── UI System: Tailwind CSS + Radix UI / shadcn-style components
-├── Local Service: Rust commands + bundled OpenCode sidecar
-├── Agent Runtime: OpenCode (bundled single-binary sidecar)
-├── Agent Protocol: OpenCode HTTP + SSE API (opencode serve)
-├── Skills Layer: OpenCode skills/agents + optional third-party scientific skills
+├── Local Service: Rust commands + supervised Codex bridge
+├── Agent Runtime: OpenAI Codex SDK (bundled with Node)
+├── Agent Protocol: versioned APEX Runtime HTTP + SSE API
+├── Skills Layer: Codex skills + optional third-party scientific skills
 ├── MCP Layer: filesystem / paper-search / BioMCP / Zotero / GitHub / custom
-├── Execution Layer: OpenCode agents/tools + optional Jupyter Kernel Gateway
+├── Execution Layer: Codex tools + optional Jupyter Kernel Gateway
 ├── Storage: Local workspace + SQLite + JSONL provenance
 └── Packaging: Tauri DMG / APP / NSIS / MSI
 ```
@@ -79,21 +79,17 @@ capabilities only, not heavy computation.
 
 ## 5. Agent runtime
 
-### 5.1 Choice: OpenCode (bundled)
+### 5.1 Choice: OpenAI Codex SDK
 
-The agent runtime is **OpenCode** (`anomalyco/opencode`, MIT), pinned to a stable
-release (`OPENCODE_VERSION`, currently 1.17.13). It is distributed as a **single
-binary**, which makes it ideal to bundle as a desktop sidecar — no Python/Node runtime
-to package. It supports MCP, skills, and agents, is model-agnostic (BYOK), and serves as
-an open-source coding/agent runtime in the spirit of Claude Code.
+The production agent runtime is the **OpenAI Codex SDK**. A small Node service in
+`apps/codex-bridge` exposes the versioned **APEX Runtime API** consumed by the UI.
+This keeps product code independent of SDK-internal event shapes without adding a
+second third-party agent executable.
 
-OpenCode exposes an HTTP + SSE server (`opencode serve`) that a GUI can drive directly —
-sessions, prompts, streaming assistant/tool output, skills, and agents.
+### 5.2 Desktop ↔ APEX Runtime API communication
 
-### 5.2 Desktop ↔ OpenCode communication
-
-The app talks to OpenCode over its HTTP + SSE API, wrapped by `packages/sdk`
-(`OpenCodeClient`). Key endpoints:
+The app talks to APEX Runtime over its HTTP + SSE API, wrapped by `packages/sdk`
+(`ApexRuntimeClient`). Key endpoints:
 
 | Endpoint | Use |
 | --- | --- |
@@ -106,9 +102,9 @@ The app talks to OpenCode over its HTTP + SSE API, wrapped by `packages/sdk`
 Flow:
 
 ```text
-App launch → Rust starts the bundled `opencode serve` (dedicated free port)
+App launch → Rust starts the bundled Codex bridge (dedicated free port)
 ↓
-OpenCodeClient opens GET /event (SSE) and creates/loads sessions
+ApexRuntimeClient opens GET /event (SSE) and creates/loads sessions
 ↓
 Prompt → POST /session/:id/prompt_async
 ↓
@@ -119,24 +115,20 @@ Frontend renders streaming messages, tool cards, and per-session history
 
 ### 5.3 Bundling & isolation (no interference)
 
-OpenCode is bundled as a Tauri **sidecar** (`externalBin`, one binary per target triple,
-git-ignored and fetched by `scripts/dev/fetch-opencode.sh`). The Rust side
-(`src-tauri/src/runtime.rs`) starts it so it never collides with a user's own OpenCode:
+The Tauri build copies the host Node executable to the target-specific
+`apex-runtime` sidecar name and bundles a production deployment of
+`apps/codex-bridge`. `scripts/dev/prepare-codex-runtime.mjs` performs both steps.
+The Rust host starts the bridge with these invariants:
 
-- runs the **bundled** binary (not the user's `PATH`);
+- runs the **bundled Codex bridge** rather than a user-installed agent runtime;
 - on a **dedicated free port** (not the default 4096);
 - with an **app-private** config/data dir via `XDG_CONFIG_HOME`/`XDG_DATA_HOME` under
   `~/Library/Application Support/com.ai4s.workbench/runtime/` (macOS) — so the user's
   sessions/config are never touched;
-- but it **shares the user's login**: the user's `auth.json` (OpenCode credentials / free
-  access) is copied read-only into the sandbox at startup, so the bundled runtime can
-  reply out of the box without a separate login. We only read the user's auth file; we
-  never modify it or their sessions.
 - killed on app exit.
 
-The user's model provider key (entered in Settings) is written into that app-private
-`opencode.json` by the `configure_opencode` Rust command, and the sidecar is restarted
-to pick it up. Keys never enter the user's global OpenCode config, logs, or git.
+The OpenAI key stays in the server/bridge process. Approval and skill settings live in
+the app-private `apex-runtime/config.json`; project skills live in `.agents/skills/`.
 
 ## 6. Skills & MCP
 
@@ -164,10 +156,10 @@ skills/
 ### 6.3 Third-party skills
 
 `K-Dense-AI/scientific-agent-skills` (large set; compatible with Cursor, Claude Code,
-Codex, OpenCode) can be added later. Do **not** enable all ~148 skills by default: use
+Codex, APEX Runtime) can be added later. Do **not** enable all ~148 skills by default: use
 curated install, enable by domain, and show license, dependencies, and risk. (Curated
 third-party install is a later feature; today the Skills page lists the real skills
-OpenCode has loaded — built-in + project `.opencode/skill/` + user config.)
+APEX Runtime has loaded — built-in + project `.apex-runtime/skill/` + user config.)
 
 ### 6.4 MCP servers
 
@@ -180,13 +172,13 @@ BioMCP and Zotero follow.
 
 ```text
 Execution Layer
-├── OpenCode tools (local, in the bundled runtime)
+├── APEX Runtime tools (local, in the bundled runtime)
 ├── Docker sandbox            (optional, advanced)
 ├── SSH / Modal remote        (optional, advanced — later)
 └── Jupyter Kernel Gateway    (later)
 ```
 
-OpenCode executes its tools locally within the bundled runtime, gated by its permission
+APEX Runtime executes its tools locally within the bundled runtime, gated by its permission
 system. Heavier/remote execution (Docker sandbox, SSH, Modal) is optional and belongs in
 an advanced "Remote Compute" area, never the default path.
 
@@ -214,15 +206,15 @@ lightweight installer + a first-launch Runtime Manager + on-demand scientific en
 
 ### 8.2 Responsibilities
 
-Detect OpenCode; detect Python / uv / Node / Git; create the workspace; create isolated
+Detect APEX Runtime; detect Python / uv / Node / Git; create the workspace; create isolated
 environments; install base Python packages; manage scientific tool dependencies; start
-the OpenCode server; start an optional Jupyter Gateway; monitor runtime health.
+the APEX Runtime server; start an optional Jupyter Gateway; monitor runtime health.
 
 ### 8.3 Runtime directory
 
 ```text
 ~/.ai4s-workbench/
-  config/  runtime/{opencode,python,node}/  profiles/ai4s-workbench/
+  config/  runtime/{apex-runtime,python,node}/  profiles/ai4s-workbench/
   workspaces/  logs/  cache/  secrets/
 ```
 
@@ -317,7 +309,7 @@ it cannot auto-upload files; it cannot silently install dependencies.
 | Connect remote server | Require approval |
 | Access files outside workspace | Require approval |
 
-OpenCode has a per-tool permission system (allow / ask / deny per agent). The desktop
+APEX Runtime has a per-tool permission system (allow / ask / deny per agent). The desktop
 maps high-risk actions to "ask" and must never blanket-allow them.
 
 ### 11.3 API keys
@@ -369,14 +361,14 @@ uploads to a GitHub Release.
 
 ```text
 User opens app → Tauri starts → Frontend loads → Runtime Manager checks dependencies
-→ Start OpenCode sidecar → Connect to Gateway → Load projects → Ready
+→ Start APEX Runtime sidecar → Connect to Gateway → Load projects → Ready
 ```
 
 ### 13.2 Agent task
 
 ```text
-User submits task → Frontend sends prompt to OpenCode → OpenCode plans
-→ Frontend renders plan approval card → User approves → OpenCode executes tools
+User submits task → Frontend sends prompt to APEX Runtime → APEX Runtime plans
+→ Frontend renders plan approval card → User approves → APEX Runtime executes tools
 → Tool events stream back → Runtime writes artifacts → Provenance service records events
 → Reviewer runs checks → Frontend updates artifact/review panels
 ```
@@ -393,7 +385,7 @@ task workers.
 
 ### 14.2 Runtime
 
-Persistent OpenCode server; reused project sessions; incremental file index; artifact
+Persistent APEX Runtime server; reused project sessions; incremental file index; artifact
 hash cache; per-project reused Python env; literature metadata cache; cached PDF parse
 results; figure preview thumbnails.
 
@@ -405,14 +397,14 @@ Runtime ready: < 10s
 First agent response: < 5s after runtime ready
 ```
 
-Strategy: UI first, runtime after; show runtime-loading state on Home; a failed OpenCode
+Strategy: UI first, runtime after; show runtime-loading state on Home; a failed APEX Runtime
 connection must not block the UI; first-time dependency install happens in onboarding.
 
 ## 15. Error handling
 
 ### 15.1 Runtime errors
 
-OpenCode not started; Gateway start failure; port in use; missing API key; model
+APEX Runtime not started; Gateway start failure; port in use; missing API key; model
 connection failure; workspace permission denied; broken Python env; Docker unavailable;
 MCP server start failure. Each must provide: a human-readable explanation, collapsible
 technical details, a one-click fix button, and a copy-logs button.
@@ -431,16 +423,16 @@ Monorepo:
 ai4s-workbench/
   apps/desktop/{src,src-tauri}/
   packages/{ui,shared,sdk}/
-  runtime/{manager,opencode-profile,mcp,skills}/
+  runtime/{manager,apex-runtime-profile,mcp,skills}/
   docs/{PRD.md,TECHNICAL_DESIGN.md}
   examples/bci-trends/
-  scripts/{release,dev}/     # dev/fetch-opencode.sh fetches the pinned sidecar
+  scripts/{release,dev}/     # dev/prepare-codex-runtime.mjs fetches the pinned sidecar
 ```
 
 - `apps/desktop` — Tauri + React desktop app; `src-tauri/src/runtime.rs` supervises the
-  bundled OpenCode sidecar (`OpenCodeClient` lives in `packages/sdk`).
+  bundled APEX Runtime sidecar (`ApexRuntimeClient` lives in `packages/sdk`).
 - `runtime/manager` — local runtime manager (detect deps, workspace, provenance, logs).
-- `runtime/opencode-profile` — the AI4S Workbench OpenCode config/skills bundle.
+- `runtime/apex-runtime-profile` — the AI4S Workbench APEX Runtime config/skills bundle.
 - `runtime/skills` — self-authored scientific skills.
 - `examples` — the complete demo project.
 
@@ -453,8 +445,8 @@ ai4s-workbench/
 3. Build a static onboarding page.
 4. Build a static project workspace page.
 5. Build tool-call card / artifact card / approval dialog.
-6. Bundle + auto-start OpenCode; connect via `OpenCodeClient` (HTTP + SSE).
-7. Ship the OpenCode config/skills bundle.
+6. Bundle + auto-start APEX Runtime; connect via `ApexRuntimeClient` (HTTP + SSE).
+7. Ship the APEX Runtime config/skills bundle.
 8. Write the 3 core skills.
 9. Build static artifacts for the BCI demo.
 10. Draft the GitHub Actions build.
@@ -462,16 +454,16 @@ ai4s-workbench/
 ### 17.2 v0.1 must deliver
 
 macOS app runs; Windows app runs; README has screenshots; a complete demo; API key
-config; open a workspace; a bundled OpenCode the app auto-starts and drives (sessions,
+config; open a workspace; a bundled APEX Runtime the app auto-starts and drives (sessions,
 streaming, history, skills); show plan / tool / artifact / review; export `report.md`.
 
 ## 18. Technical risks
 
-### 18.1 OpenCode desktop integration
+### 18.1 APEX Runtime desktop integration
 
-Risk: OpenCode API changes across versions. Mitigation: wrap `OpenCodeClient`; never call
-OpenCode directly from the UI; **pin the OpenCode version** (`OPENCODE_VERSION`); bundle
-the pinned binary so the app is not affected by the user's own OpenCode.
+Risk: APEX Runtime API changes across versions. Mitigation: wrap `ApexRuntimeClient`; never call
+APEX Runtime directly from the UI; **pin the APEX Runtime version** (`APEX_RUNTIME_API_VERSION`); bundle
+the pinned binary so the app is not affected by the user's own APEX Runtime.
 
 ### 18.2 Windows environment complexity
 
@@ -482,7 +474,7 @@ Python early; provide a portable fallback; code-sign for formal releases.
 ### 18.3 Installer size
 
 Risk: bundling a large runtime and scientific packages makes the installer huge.
-Mitigation: OpenCode is a single ~44 MB-installer sidecar (cheap to bundle); keep the app
+Mitigation: APEX Runtime is a single ~44 MB-installer sidecar (cheap to bundle); keep the app
 body light; install heavy scientific dependencies on demand as optional Science Packs;
 defer Docker / Jupyter.
 
@@ -498,9 +490,9 @@ command dialogs; optional Docker sandbox; full provenance recording.
 Tauri 2
 React + TypeScript + Vite
 Tailwind + Radix UI
-OpenCode as agent runtime (bundled single-binary sidecar, pinned OPENCODE_VERSION)
-OpenCode HTTP + SSE API via OpenCodeClient (packages/sdk)
-OpenCode skills/agents + optional third-party scientific skills
+OpenAI Codex SDK behind a bundled Node bridge
+Versioned APEX Runtime HTTP + SSE API via ApexRuntimeClient (packages/sdk)
+Codex skills + optional third-party scientific skills
 Local workspace + SQLite + JSONL provenance
 DMG / NSIS / MSI installers via GitHub Actions
 GitHub Releases (self-contained; sidecar fetched at build time)
@@ -508,6 +500,6 @@ GitHub Releases (self-contained; sidecar fetched at build time)
 
 One line:
 
-**Use Tauri for a high-performance modern desktop shell, a bundled+isolated OpenCode as
-the Claude Code alternative layer, scientific skills and MCP as the research capability
+**Use Tauri for a high-performance modern desktop shell, a bundled Codex bridge as
+the agent layer, scientific skills and MCP as the research capability
 layer, and provenance/reviewer as the real moat of an open-source Claude Science alternative.**

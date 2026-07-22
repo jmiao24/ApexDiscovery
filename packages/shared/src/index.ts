@@ -141,7 +141,7 @@ export interface ToolCallBlock {
   /** The title already describes the activity ("Checking Python syntax"), so
    *  rows omit the mechanical verb while group summaries can still count it. */
   naturalTitle?: boolean;
-  /** OpenCode tool name ("bash", "write", …) — picks the detail renderer. */
+  /** Runtime tool name ("bash", "write", …) — picks the detail renderer. */
   tool?: string;
   /** Full command line as executed (bash) — shown in the expanded detail. */
   command?: string;

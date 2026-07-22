@@ -3,7 +3,7 @@
   "version": "0.1.9",
   "private": true,
   "type": "module",
-  "description": "OpenCode-compatible HTTP+SSE bridge that runs the agent on the OpenAI Codex SDK. Accepts the same CLI/env contract as `opencode serve`, so the desktop shell and the web server can spawn it as a drop-in sidecar.",
+  "description": "APEX Runtime API bridge powered by the OpenAI Codex SDK.",
   "bin": {
     "codex-bridge": "./src/server.mjs"
   },

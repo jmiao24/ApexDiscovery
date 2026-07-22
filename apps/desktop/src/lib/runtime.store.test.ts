@@ -44,7 +44,7 @@ const mocks = vi.hoisted(() => ({
     mocks.approvalMode = mode;
     return "http://127.0.0.1:1";
   }),
-  /** Constructor options every OpenCodeClient was created with. */
+  /** Constructor options every ApexRuntimeClient was created with. */
   clientOpts: [] as Record<string, unknown>[],
 }));
 
@@ -65,7 +65,7 @@ vi.mock("./tauri", () => ({
 }));
 vi.mock("./kernel", () => ({ kernelReset: mocks.kernelReset }));
 vi.mock("@ai4s/sdk", () => {
-  class OpenCodeClient {
+  class ApexRuntimeClient {
     private statusCb: (s: string) => void = () => {};
     constructor(opts: Record<string, unknown>) {
       mocks.clientOpts.push(opts);
@@ -85,7 +85,7 @@ vi.mock("@ai4s/sdk", () => {
       if (mocks.failConnects > 0) {
         mocks.failConnects--;
         this.statusCb("error");
-        throw new Error("Could not open OpenCode event stream");
+        throw new Error("Could not open APEX Runtime event stream");
       }
       this.statusCb("ready");
     }
@@ -171,7 +171,7 @@ vi.mock("@ai4s/sdk", () => {
       this.statusCb("offline");
     }
   }
-  return { OpenCodeClient, DEFAULT_OPENCODE_URL: "http://127.0.0.1:4096" };
+  return { ApexRuntimeClient, DEFAULT_APEX_RUNTIME_URL: "http://127.0.0.1:4096" };
 });
 
 import type { ArtifactBlock } from "@ai4s/shared";
@@ -207,7 +207,7 @@ beforeEach(async () => {
 
 describe("runtime authentication", () => {
   it("connect() passes the per-run runtime password to the SDK client", async () => {
-    // The sidecar requires Basic auth (OPENCODE_SERVER_PASSWORD); an
+    // The sidecar requires Basic auth (APEX_RUNTIME_PASSWORD); an
     // unauthenticated client would 401 on every call.
     mocks.clientOpts.length = 0;
     await useRuntimeStore.getState().connect();
@@ -471,7 +471,7 @@ describe("per-session workspace folders", () => {
     expect(s.runningSessions["ses_new"]).toBeUndefined();
   });
 
-  it("/clear starts a new draft in the same folder without calling OpenCode command", async () => {
+  it("/clear starts a new draft in the same folder without calling APEX Runtime command", async () => {
     useRuntimeStore.setState({
       currentId: "ses_old",
       workspacePinned: false,
@@ -528,7 +528,7 @@ describe("per-session workspace folders", () => {
     useRuntimeStore.setState({ currentId: null, threads: {} });
 
     // This is the hard-refresh ordering: the route renders first, while
-    // bootstrap has not created an OpenCodeClient yet.
+    // bootstrap has not created an ApexRuntimeClient yet.
     await useRuntimeStore.getState().openSession("ses_direct_url");
     expect(useRuntimeStore.getState().currentId).toBe("ses_direct_url");
     expect(mocks.getMessages).not.toHaveBeenCalled();

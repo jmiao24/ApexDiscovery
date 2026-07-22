@@ -3,7 +3,7 @@
   "version": "0.1.9",
   "private": true,
   "type": "module",
-  "description": "OpenCode-compatible HTTP+SSE bridge that runs the agent on the Claude Agent SDK. Accepts the same CLI/env contract as `opencode serve`, so the desktop shell and the web server can spawn it as a drop-in sidecar.",
+  "description": "Optional APEX Runtime API bridge powered by the Claude Agent SDK.",
   "bin": {
     "claude-bridge": "./src/server.mjs"
   },

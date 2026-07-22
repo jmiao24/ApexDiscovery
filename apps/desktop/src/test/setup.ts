@@ -23,7 +23,7 @@ if (typeof window !== "undefined" && typeof window.localStorage?.getItem !== "fu
 await import("@/i18n");
 
 // DOM stubs — only in a browser-like (jsdom) environment. The node-env tests
-// (e.g. the OpenCode integration test) skip these.
+// (e.g. the APEX Runtime integration test) skip these.
 if (typeof window !== "undefined") {
   if (!("ResizeObserver" in globalThis)) {
     (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {

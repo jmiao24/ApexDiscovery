@@ -45,19 +45,17 @@ write-up, in one continuous, auditable session.
   produced them.
 - **Local-first and yours** — sessions, data, provenance, notebooks, and run records
   live in local folders on your machine. Nothing leaves by default.
-- **Model-agnostic runtime** — the UI talks through `packages/sdk` to a bundled,
-  pinned OpenCode sidecar. Bring your own model; providers, skills, and MCP servers
-  stay pluggable.
+- **Codex-powered runtime** — the UI talks through `packages/sdk` to a bundled,
+  pinned OpenAI Codex bridge. Skills and MCP servers stay pluggable.
 - **Reproducible by construction** — local, SSH/Slurm, Modal, and notebook-batch runs
   are captured as reproducible run records, not loose terminal scrollback.
 - **Extensible** — agent skills, MCP servers and one-click science connectors,
-  `/` commands, `!` shell mode, and a model-agnostic SDK.
+  `/` commands, `!` shell mode, and a stable APEX Runtime API.
 
 ## Current capabilities
 
 **The research loop, as skills.** One meta-skill runs the full pipeline; each stage
-is a self-contained skill that produces a real, gradeable artifact — runnable on any
-model OpenCode supports:
+is a self-contained skill that produces a real, gradeable artifact — runnable by Codex:
 
 | Skill | Role | Primary output |
 | --- | --- | --- |
@@ -86,7 +84,7 @@ office/document skills below.
 | Provenance | `.apex-discovery/provenance.jsonl` tracks file versions and links produced artifacts back to the run or edit that created them. |
 | Review | A task-level **Review** button starts a fresh, read-only Reviewer thread on demand. It loads the applicable traceability/statistics skills, returns actionable findings to the original Main Agent once, then performs one independent re-review. Nothing runs automatically. |
 | Viewers | PDF, image, video, HTML, Markdown, code, CSV/TSV tables with charts, DOCX, XLSX, PPTX, molecules, 3D meshes, genome tracks, FITS, DOS/DOSCAR, EIGENVAL bands, qcode, anomaly maps, and phase files. |
-| Models | OpenAI Codex via a user-provided API key in the browser distribution; legacy runtimes remain available to developers. |
+| Models | OpenAI Codex via a user-provided API key in the browser distribution. |
 | Interface language | English. |
 
 ## Skills and connectors
@@ -181,7 +179,7 @@ Or without Docker: build the frontend (`pnpm --filter @ai4s/desktop build`),
 then set `OPENAI_API_KEY` and run
 `cargo run --release --manifest-path apps/server/Cargo.toml` — the browser opens
 automatically. Run
-`apexdiscovery-server --help` for the flags (data dir, opencode binary, bind
+`apexdiscovery-server --help` for the flags (data dir, runtime bridge, bind
 host/port). The server binds `127.0.0.1` by default; to expose it beyond
 localhost, pass `--host 0.0.0.0` and terminate TLS in a reverse proxy in
 front. The browser only holds an HttpOnly session cookie. Provider keys and the
@@ -189,10 +187,10 @@ agent-runtime password stay in the local server/sidecar process.
 
 ### Claude Agent SDK backend (experimental)
 
-`apps/claude-bridge/` is a drop-in replacement for the OpenCode sidecar that
+`apps/claude-bridge/` is an optional APEX Runtime API implementation that
 runs the agent on the [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk/overview)
 instead: a small Node server speaking the same HTTP+SSE wire subset the
-frontend consumes, and accepting the same CLI/env contract as `opencode serve`
+frontend consumes, and accepting the same runtime CLI/environment contract
 — so neither the frontend nor the Rust server changes. Product deployments use
 `ANTHROPIC_API_KEY` and honor the app's approval mode (the approve switch maps
 to the SDK's permission callback). An existing Claude CLI subscription is only
@@ -200,26 +198,26 @@ supported as an explicitly enabled personal local-testing mode.
 
 ```bash
 pnpm install   # installs @anthropic-ai/claude-agent-sdk for the bridge
-APEX_TOKEN=<token> APEX_OPENCODE_BIN=$PWD/apps/claude-bridge/src/server.mjs \
+APEX_TOKEN=<token> APEX_RUNTIME_BIN=$PWD/apps/claude-bridge/src/server.mjs \
   cargo run --release --manifest-path apps/server/Cargo.toml
 ```
 
 Chat with streaming, tool activity (bash/write/edit rows), tool approvals,
 session history/resume, `!` shell mode, and model selection (Sonnet/Opus/Haiku)
-work; OpenCode-specific surfaces (multi-provider OAuth catalog, MCP management,
+work; unsupported surfaces (multi-provider OAuth catalog, MCP management,
 slash-command discovery) are stubbed. Provenance, runs, files, and git
 snapshots are backend-independent and work unchanged.
 
-### OpenAI Codex backend (experimental)
+### OpenAI Codex runtime
 
 `apps/codex-bridge/` is the same idea on the
-[OpenAI Codex SDK](https://developers.openai.com/codex/sdk): same wire subset,
-same drop-in sidecar contract. For the browser distribution, provide
+[OpenAI Codex SDK](https://developers.openai.com/codex/sdk) behind the APEX
+Runtime API. For the browser distribution, provide
 `OPENAI_API_KEY`; it stays in process memory and is not written to the bridge's
 JSON configuration. The bridge uses an app-private `CODEX_HOME`.
 
 ```bash
-OPENAI_API_KEY=<key> APEX_OPENCODE_BIN=$PWD/apps/codex-bridge/src/server.mjs \
+OPENAI_API_KEY=<key> APEX_RUNTIME_BIN=$PWD/apps/codex-bridge/src/server.mjs \
   cargo run --release --manifest-path apps/server/Cargo.toml
 ```
 
@@ -232,7 +230,7 @@ cd /Users/jiachengmiao/Desktop/APEX_Science/ApexDiscovery
 CODEX_HOME="$HOME/.codex" \
 APEX_CLAUDE_AUTH=subscription \
 APEX_CLAUDE_EXECUTABLE="$HOME/.local/bin/claude" \
-APEX_OPENCODE_BIN="$PWD/apps/codex-bridge/src/server.mjs" \
+APEX_RUNTIME_BIN="$PWD/apps/codex-bridge/src/server.mjs" \
 apps/server/target/release/apexdiscovery-server \
   --port 49369 \
   --token apex-demo \
@@ -300,8 +298,8 @@ git clone https://github.com/jmiao24/ApexDiscovery
 cd ApexDiscovery
 pnpm install
 
-# Fetch pinned sidecars and bundled skills. These are git-ignored.
-bash scripts/dev/fetch-opencode.sh
+# Prepare the bundled Codex runtime and fetch the other bundled resources.
+node scripts/dev/prepare-codex-runtime.mjs --target "$(rustc -vV | sed -n 's/^host: //p')"
 bash scripts/dev/fetch-uv.sh
 bash scripts/dev/fetch-skills.sh
 
@@ -336,9 +334,9 @@ pnpm lint
 | --- | --- |
 | `apps/desktop/` | Shared React frontend plus the legacy Tauri shell. |
 | `apps/server/` | Axum server for the self-hosted web version. |
-| `apps/codex-bridge/` | OpenCode-wire-compatible bridge to the OpenAI Codex SDK. |
+| `apps/codex-bridge/` | APEX Runtime API bridge to the OpenAI Codex SDK. |
 | `crates/shell-core/` | Shared Rust command core (desktop + web server). |
-| `packages/sdk/` | `OpenCodeClient`; keeps the UI from calling OpenCode directly. |
+| `packages/sdk/` | `ApexRuntimeClient`; the typed APEX Runtime API client. |
 | `packages/shared/` | Shared domain types and chart palette. |
 | `packages/ui/` | Shared UI package. |
 | `runtime/skills/core/` | First-party scientific skills. |

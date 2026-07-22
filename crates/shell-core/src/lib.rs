@@ -8,12 +8,12 @@ pub mod ctx;
 pub mod debug_log;
 pub mod git_snapshot;
 pub mod large_file;
-pub mod opencode_config;
 pub mod preview;
 pub mod provenance;
 pub mod runs;
 pub mod runs_index;
 pub mod runtime;
+pub mod runtime_config;
 pub mod util;
 
 pub use ctx::ShellCtx;

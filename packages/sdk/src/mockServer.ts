@@ -1,16 +1,16 @@
-// A minimal OpenCode-protocol server for tests and local dev. Node-only.
+// A minimal APEX Runtime-protocol server for tests and local dev. Node-only.
 // Implements the endpoints the app uses (POST /session, POST /session/:id/prompt_async,
-// GET /event SSE) and streams an OpenCode-shaped agent turn.
+// GET /event SSE) and streams an APEX Runtime-shaped agent turn.
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
-export interface MockOpenCode {
+export interface MockApexRuntime {
   port: number;
   /** Every request seen, as "METHOD /path" — lets tests assert call order. */
   requests: string[];
   close: () => Promise<void>;
 }
 
-export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
+export function startMockApexRuntime(port = 0): Promise<MockApexRuntime> {
   const clients = new Set<ServerResponse>();
   const requests: string[] = [];
 
@@ -23,7 +23,7 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
     const push = (obj: unknown) => clients.forEach((c) => send(c, obj));
     const P = (part: Record<string, unknown>) =>
       push({ type: "message.part.updated", properties: { part: { sessionID, ...part } } });
-    // Real OpenCode streams text as an empty part at text-start, per-token
+    // Real APEX Runtime streams text as an empty part at text-start, per-token
     // message.part.delta events, then the full part again at text-end.
     const D = (partID: string, delta: string) =>
       push({ type: "message.part.delta", properties: { sessionID, messageID: "m1", partID, field: "text", delta } });
@@ -104,7 +104,7 @@ export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
     }
     if (req.method === "GET" && url.startsWith("/api/skill")) {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ data: [{ name: "customize-opencode", description: "Configure OpenCode.", location: "/builtin/customize-opencode.md" }] }));
+      res.end(JSON.stringify({ data: [{ name: "skill-creator", description: "Create and update reusable skills.", location: "/builtin/skill-creator.md" }] }));
       return;
     }
     if (req.method === "GET" && url === "/config") {

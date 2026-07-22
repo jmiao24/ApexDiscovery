@@ -252,22 +252,22 @@ competitors.
   preview-server token shipped 2026-07-06. Severity-ranked backlog:
 
   **Critical — safety defaults (AGENTS.md non-negotiable):**
-  - [x] **Approval mode is not configured anywhere.** ~~The bundled OpenCode
+  - [x] **Approval mode is not configured anywhere.** ~~The bundled APEX Runtime
     1.17.13 binary's embedded default is `{"*":"allow"}`, so bash / file edits /
     dependency installs run unprompted.~~ **Fixed (2026-07-05):** a Codex-style
     two-mode switch in the composer — **Approve for me** (default; deletion /
     installs / remote / privilege commands and webfetch prompt first, via ask
     rules seeded into the app-private config before sidecar start) and **Full
-    access** (`"permission": {}` = OpenCode builtin defaults, an explicit user
+    access** (`"permission": {}` = APEX Runtime builtin defaults, an explicit user
     choice that survives restarts). Verified against the running bundled
     binary: rules land in the build agent's resolved ruleset after the builtin
-    `*: allow` (last-match-wins), and a 22-case simulation using OpenCode's
+    `*: allow` (last-match-wins), and a 22-case simulation using APEX Runtime's
     verbatim wildcard/evaluate algorithm behaves as designed.
   - [x] **Sidecar runs with `--cors "*"` and no server auth.** ~~Any local
     webpage can scan loopback ports, drive agent turns, and `GET /global/config`
     to read stored API keys.~~ **Fixed (2026-07-06):** the sidecar now requires
-    OpenCode's built-in Basic auth via a per-run CSPRNG password
-    (`OPENCODE_SERVER_PASSWORD`, in-memory only, never on disk); the SDK sends
+    APEX Runtime's built-in Basic auth via a per-run CSPRNG password
+    (`APEX_RUNTIME_SERVER_PASSWORD`, in-memory only, never on disk); the SDK sends
     the `Authorization` header on every call and keeps the reliable EventSource
     SSE path via `?auth_token=`. `--cors "*"` removed (verified in the 1.17.13
     source: it was an exact-match literal, never a wildcard — the real exposure
@@ -284,13 +284,13 @@ competitors.
     freely. Covered by the permission fix above (in "Approve for me" mode;
     "Full access" is an explicit user opt-out).
   - [ ] **API keys are plaintext on disk** — provider keys, connector keys
-    (MP/FRED), and the Jupyter token all land in `opencode.json` (not only the
+    (MP/FRED), and the Jupyter token all land in `config.json` (not only the
     mode-600 `auth.json` P2-3 describes). The keychain revert (P2-3) was a
     deliberate call for signed-release reasons; revisit for signed releases.
     **Both interim minimums are now met (2026-07-06):** the `/global/config`
     surface requires auth (see the CORS/auth fix above), and the config is no
     longer world-readable — the app-private runtime root is chmod 700 and
-    `opencode.jsonc` 600 on every start and after every Rust-side write
+    `config.jsonc` 600 on every start and after every Rust-side write
     (verified: the sidecar's own PATCH rewrite preserves the 600 mode).
     (Verified clean: no keys in provenance/logs/localStorage/git.)
 
@@ -324,7 +324,7 @@ competitors.
     one `restart_sidecar()` — the kill→spawn runs while holding the child
     mutex (the lifecycle lock), used by all four config-changing commands.
   - [ ] No liveness supervision: a crashed sidecar/Jupyter stays "running"
-    (`runtime.rs:286`, `jupyter.rs:250` ignore the `Terminated` event); OpenCode
+    (`runtime.rs:286`, `jupyter.rs:250` ignore the `Terminated` event); APEX Runtime
     orphans on force-quit (Jupyter has pid-file cleanup, the sidecar doesn't).
     ~~Killed kernels are never `wait()`ed → zombies~~ — fixed 2026-07-06 with
     the kernel-deadlock rework (every kill reaps).
@@ -619,7 +619,7 @@ competitors.
   their provider; audit confirms keys/data never enter provenance, logs, exports.
 - **Status.** ✅ Workspace sandbox + approval mode + plain-language data-flow card;
   credentials never enter provenance/logs/exports and live in an app-private
-  `auth.json` (mode 600, owned by OpenCode). An OS-keychain-at-rest variant was
+  `auth.json` (mode 600, owned by APEX Runtime). An OS-keychain-at-rest variant was
   built and verified but reverted: on unsigned/self-built copies a signature
   change makes macOS prompt for the login-keychain password every launch — worse
   first-run UX for a marginal at-rest gain. Kept simple per "如无必要,勿增实体".
@@ -636,7 +636,7 @@ competitors.
   destructive/outward-facing actions; reviewer output stays in-app.
 - **Status.** 🟡 Approval mode + sandbox shipped; the agent's interactive requests
   (question pick-an-option + permission prompts) render as answerable cards via
-  OpenCode's directory-scoped API (previously hung the session). Fixed a real
+  APEX Runtime's directory-scoped API (previously hung the session). Fixed a real
   exit-cleanup bug: on macOS Cmd+Q the app exits via `RunEvent::Exit` (not
   `ExitRequested`), so the sidecar/kernel/Jupyter used to orphan on every quit;
   cleanup now runs on both events. **File-open hardening:** the preview size cap

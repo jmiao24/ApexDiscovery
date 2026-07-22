@@ -1,6 +1,6 @@
-# APEX Discovery Desktop
+# APEX Discovery
 
-Brand name: **APEX Discovery Desktop** — "Local-first, model-agnostic AI research
+Brand name: **APEX Discovery** — "Local-first, Codex-powered AI research
 workbench for macOS, Windows & Linux." Bundle identifier stays `com.ai4s.workbench`
 and internal `@ai4s/*` package names are unchanged.
 
@@ -18,12 +18,12 @@ Keep it **simple, explicit, clear, complete**.
 
 ## What this project is
 
-An open-source, local-first, model-agnostic, reproducible AI research desktop
+An open-source, local-first, Codex-powered, reproducible AI research workbench
 for macOS, Windows, and Linux. See `README.md`, `docs/PRD.md`, and
 `docs/TECHNICAL_DESIGN.md`.
 
 Recommended stack: **Tauri 2 + React + TypeScript + Vite**, Tailwind + Radix UI,
-**OpenCode** as the agent runtime (bundled single-binary sidecar; HTTP + SSE API),
+the **OpenAI Codex SDK** behind the bundled APEX Runtime API bridge (HTTP + SSE),
 local workspace + SQLite + JSONL provenance.
 
 ## Repository map
@@ -32,18 +32,18 @@ local workspace + SQLite + JSONL provenance.
 - `apps/server/` — Axum server for the self-hosted web version (same frontend).
 - `crates/shell-core/` — shared Rust command core both shells call; put new
   command logic here, with thin wrappers in `src-tauri/` and `apps/server/`.
-- `packages/` — `ui`, `shared`, `sdk` (the `OpenCodeClient` wrapper).
-- `runtime/` — `manager`, `opencode-profile`, `mcp`, `skills`.
+- `packages/` — `ui`, `shared`, `sdk` (the `ApexRuntimeClient` wrapper).
+- `runtime/` — `manager`, `apex-runtime-profile`, `mcp`, `skills`.
 - `docs/` — product and technical specs.
 - `examples/bci-trends/` — the built-in demo project.
 - `scripts/` — release and dev scripts.
 
 ## Architecture guardrails
 
-- The UI never calls OpenCode directly — it goes through `packages/sdk` (`OpenCodeClient`).
-  Pin the OpenCode version (see `OPENCODE_VERSION`) and bundle it as a sidecar.
+- The UI never calls an agent SDK directly — it goes through `packages/sdk`
+  (`ApexRuntimeClient`) and the versioned APEX Runtime API.
 - Keep the frontend, desktop shell, and agent runtime decoupled.
-- Skills, MCP servers, and model providers must stay pluggable.
+- Skills and MCP servers must stay pluggable; the production agent backend is Codex.
 - Keep the artifact schema and workflow templates stable and versioned.
 
 ## Safety defaults (non-negotiable for the desktop)

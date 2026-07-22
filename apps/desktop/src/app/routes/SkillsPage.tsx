@@ -15,7 +15,7 @@ import {
 
 /**
  * Skills, agents, install-a-skill, and detected scientific environment — all real:
- * skills/agents from the OpenCode runtime, environment from the host system.
+ * skills/agents from the APEX Runtime, environment from the host system.
  */
 export function SkillsPage() {
   const { t } = useTranslation(["pages", "common"]);
@@ -107,7 +107,7 @@ export function SkillsPage() {
         <p className="mt-1 text-sm text-muted">
           {t("skills.description.prefix")}
           {/* eslint-disable-next-line i18next/no-literal-string -- literal filesystem path, not prose */}
-          <span className="font-mono">.opencode/skills/</span>
+          <span className="font-mono">.agents/skills/</span>
           {t("skills.description.suffix")}
         </p>
 
@@ -264,11 +264,11 @@ type SkillSource = "builtin" | "project" | "user";
 function sourceOf(location?: string): SkillSource | undefined {
   if (!location) return undefined;
   if (location.includes("/builtin/")) return "builtin";
-  if (location.includes("/.opencode/")) return "project";
+  if (location.includes("/.agents/")) return "project";
   return "user";
 }
 
-// AgentInfo.mode is typed `string` (external SDK), but OpenCode only ever
+// AgentInfo.mode is typed `string` (external SDK), but APEX Runtime only ever
 // emits "primary" | "subagent" | "all" — see useRuntimeStore's a.mode ===
 // "primary" check. Narrow to the known set so we can translate it; unknown
 // values (future SDK additions) fall back to the raw string at the call site.

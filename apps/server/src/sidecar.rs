@@ -8,21 +8,13 @@ use std::process::Child;
 use shell_core::util::free_port;
 use shell_core::ShellCtx;
 
-/// The bundled opencode next to the server executable, falling back to PATH.
-pub fn default_opencode_bin() -> PathBuf {
+/// Locate the bundled Codex-backed APEX Runtime bridge.
+pub fn default_runtime_bin() -> PathBuf {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let codex = dir.join("codex-bridge").join("src").join("server.mjs");
             if codex.is_file() {
                 return codex;
-            }
-            let bundled = dir.join(if cfg!(windows) {
-                "opencode.exe"
-            } else {
-                "opencode"
-            });
-            if bundled.is_file() {
-                return bundled;
             }
         }
     }
@@ -36,7 +28,7 @@ pub fn default_opencode_bin() -> PathBuf {
             return codex;
         }
     }
-    PathBuf::from("opencode")
+    PathBuf::from("apps/codex-bridge/src/server.mjs")
 }
 
 #[derive(Default)]
@@ -70,9 +62,8 @@ impl Sidecar {
         // Reuse a stable port across restarts so the proxy target never moves.
         let port = *self.port.get_or_insert_with(free_port);
         let spec = shell_core::runtime::build_sidecar_spec(ctx, port)?;
-        // JavaScript sidecars use an explicit Node executable so the same
-        // packaged layout works on Windows, where shebang execution is not
-        // available. Native OpenCode/other bridges still spawn directly.
+        // JavaScript bridges use an explicit Node executable so the same
+        // packaged layout works on Windows, where shebang execution is unavailable.
         let is_node_script = matches!(
             bin.extension().and_then(|extension| extension.to_str()),
             Some("js" | "mjs" | "cjs")
@@ -94,8 +85,7 @@ impl Sidecar {
         for (k, v) in &spec.envs {
             cmd.env(k, v);
         }
-        // The Codex compatibility bridge reads the extension inventory on
-        // every turn. OpenCode ignores this environment variable.
+        // The Codex bridge reads the extension inventory on every turn.
         cmd.env("APEX_EXTENSIONS_DIR", ctx.data_dir.join("extensions"));
         let child = cmd
             .spawn()

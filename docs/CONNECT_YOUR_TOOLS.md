@@ -40,7 +40,7 @@ bridge. In Settings → **MCP servers**, use the add form:
 - **remote** — a URL the app connects to over HTTP. Example:
   `https://mcp.your-lab.internal/sse`.
 
-The entry is written to the bundled OpenCode's config and applies immediately;
+The entry is written to the bundled APEX Runtime's config and applies immediately;
 its live status (connected / failed) shows in the same list.
 
 ### Minimal local MCP server (Python)
@@ -66,7 +66,7 @@ Add it as a **local** server with the command that launches it. Restart-free.
 
 A skill is a folder with a `SKILL.md` (instructions the agent follows) plus any
 scripts/templates it needs. Install one from the **Skills** page (paste a URL or
-Markdown; the agent saves it under the workspace's `.opencode/skills/`). The
+Markdown; the agent saves it under the workspace's `.agents/skills/`). The
 app also bundles first-party skills (e.g. `traceability-review`) and the
 `ai4s-skills` pack.
 

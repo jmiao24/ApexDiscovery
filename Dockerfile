@@ -74,7 +74,7 @@ ENV HOME=/data \
     APEX_DATA_DIR=/data/app \
     APEX_FRONTEND_DIR=/app/dist \
     APEX_RESOURCE_DIR=/app/resources \
-    APEX_OPENCODE_BIN=/app/codex-bridge/src/server.mjs \
+    APEX_RUNTIME_BIN=/app/codex-bridge/src/server.mjs \
     APEX_HOST=0.0.0.0 \
     APEX_PORT=3411
 VOLUME /data

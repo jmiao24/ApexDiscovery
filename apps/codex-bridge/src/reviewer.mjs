@@ -11,7 +11,7 @@ const REVIEWABLE_EXTENSIONS = new Set([
 const CODE_EXTENSIONS = new Set([".py", ".r", ".jl", ".m", ".js", ".jsx", ".ts", ".tsx", ".ipynb"]);
 const REPORT_EXTENSIONS = new Set([".md", ".rst", ".tex", ".pdf", ".docx", ".html"]);
 const FIGURE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]);
-const SKIP_PARTS = new Set([".git", ".apex-discovery", ".opencode", ".agents", "node_modules", "target", "dist", "build"]);
+const SKIP_PARTS = new Set([".git", ".apex-discovery", ".agents", "node_modules", "target", "dist", "build"]);
 
 function extension(path) {
   const name = String(path).toLowerCase().split(/[\\/]/).pop() ?? "";
