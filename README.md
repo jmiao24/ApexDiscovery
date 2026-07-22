@@ -185,29 +185,6 @@ localhost, pass `--host 0.0.0.0` and terminate TLS in a reverse proxy in
 front. The browser only holds an HttpOnly session cookie. Provider keys and the
 agent-runtime password stay in the local server/sidecar process.
 
-### Claude Agent SDK backend (experimental)
-
-`apps/claude-bridge/` is an optional APEX Runtime API implementation that
-runs the agent on the [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk/overview)
-instead: a small Node server speaking the same HTTP+SSE wire subset the
-frontend consumes, and accepting the same runtime CLI/environment contract
-— so neither the frontend nor the Rust server changes. Product deployments use
-`ANTHROPIC_API_KEY` and honor the app's approval mode (the approve switch maps
-to the SDK's permission callback). An existing Claude CLI subscription is only
-supported as an explicitly enabled personal local-testing mode.
-
-```bash
-pnpm install   # installs @anthropic-ai/claude-agent-sdk for the bridge
-APEX_TOKEN=<token> APEX_RUNTIME_BIN=$PWD/apps/claude-bridge/src/server.mjs \
-  cargo run --release --manifest-path apps/server/Cargo.toml
-```
-
-Chat with streaming, tool activity (bash/write/edit rows), tool approvals,
-session history/resume, `!` shell mode, and model selection (Sonnet/Opus/Haiku)
-work; unsupported surfaces (multi-provider OAuth catalog, MCP management,
-slash-command discovery) are stubbed. Provenance, runs, files, and git
-snapshots are backend-independent and work unchanged.
-
 ### OpenAI Codex runtime
 
 `apps/codex-bridge/` is the same idea on the
@@ -228,8 +205,6 @@ server and frontend with a fixed browser port and access token:
 cd /Users/jiachengmiao/Desktop/APEX_Science/ApexDiscovery
 
 CODEX_HOME="$HOME/.codex" \
-APEX_CLAUDE_AUTH=subscription \
-APEX_CLAUDE_EXECUTABLE="$HOME/.local/bin/claude" \
 APEX_RUNTIME_BIN="$PWD/apps/codex-bridge/src/server.mjs" \
 apps/server/target/release/apexdiscovery-server \
   --port 49369 \
@@ -238,8 +213,7 @@ apps/server/target/release/apexdiscovery-server \
 ```
 
 Open `http://127.0.0.1:49369/` and use `apex-demo` if the browser asks for the
-access token. This command uses Claude CLI subscription authentication only for
-explicitly launched Claude child agents; the Main Agent continues to use Codex.
+access token. The Main Agent and literature subagent both use Codex.
 
 The bridge discovers Codex-native repository/user skills (`.agents/skills`),
 loads enabled plugin skills, maps local and remote MCP servers into Codex
@@ -252,18 +226,8 @@ expected commit.
 Subagent paths are explicit and bounded. Asking to launch a **literature
 subagent** creates a separate Codex thread with the Main Agent's APEX tools,
 skills, MCP servers, and current permission mode, but nested subagent launch is
-disabled. The Main Agent also has a `LaunchClaudeAgent` tool backed by the
-Claude Agent SDK. A Claude child receives the same APEX capability catalog,
-runs in a separate persisted child session with live activity, and returns its
-memo to the Main thread; it likewise cannot launch another child.
-
-Production Claude children use `ANTHROPIC_API_KEY`. For personal local testing
-only, an already authenticated Claude CLI subscription can be selected
-explicitly with `APEX_CLAUDE_AUTH=subscription`; this mode is never inferred or
-exposed as an end-user login flow. `APEX_CLAUDE_EXECUTABLE` can override the
-local CLI path and `APEX_CLAUDE_MODEL` can select a Claude model. Ordinary
-mentions of agents do not trigger delegation: the Main Agent must invoke the
-dedicated tool.
+disabled. Ordinary mentions of agents do not trigger delegation; the user must
+explicitly ask for the literature subagent.
 
 When a turn creates or changes a reviewable artifact (code, notebook, data,
 report, or figure), the bridge remembers the review targets but does nothing in

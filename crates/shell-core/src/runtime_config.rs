@@ -154,10 +154,10 @@ mod tests {
     #[test]
     fn set_permission_mode_preserves_unrelated_keys() {
         let existing =
-            r#"{"model":"anthropic/claude","provider":{"openai":{"options":{"apiKey":"k"}}}}"#;
+            r#"{"model":"openai/default","provider":{"openai":{"options":{"apiKey":"k"}}}}"#;
         let out = set_permission_mode(existing, MODE_APPROVE).unwrap();
         let v: Value = serde_json::from_str(&out).unwrap();
-        assert_eq!(v["model"], "anthropic/claude");
+        assert_eq!(v["model"], "openai/default");
         assert_eq!(v["provider"]["openai"]["options"]["apiKey"], "k");
     }
 

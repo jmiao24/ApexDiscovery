@@ -14,7 +14,7 @@ const records: ProvenanceRecord[] = [
     ts: 1751503600,
     tool: "edit",
     content: "print(2)",
-    model: "anthropic/claude",
+    model: "openai/default",
     sessionId: "ses_1",
     env: {
       python: "3.12.4",
@@ -67,7 +67,7 @@ describe("ProvenancePanel", () => {
     expect(items[1]).toHaveTextContent("v1");
     // Latest version starts expanded: its code, model, and session link show.
     expect(screen.getByText(codeBlock("print(2)"))).toBeInTheDocument();
-    expect(screen.getByText("anthropic/claude")).toBeInTheDocument();
+    expect(screen.getByText("openai/default")).toBeInTheDocument();
     expect(screen.getByText("Open conversation")).toBeInTheDocument();
   });
 

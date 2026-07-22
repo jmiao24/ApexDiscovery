@@ -22,6 +22,7 @@ const nodeSidecar = join(binaries, `apex-runtime-${target}${suffix}`);
 mkdirSync(binaries, { recursive: true });
 rmSync(bridge, { recursive: true, force: true });
 mkdirSync(runtime, { recursive: true });
+rmSync(nodeSidecar, { force: true });
 copyFileSync(process.execPath, nodeSidecar);
 
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";

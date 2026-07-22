@@ -13,7 +13,7 @@ test("recognizes only explicit English or command-style literature delegation", 
     "Launch a literature subagent to review MC4R biologics",
   );
   assert.equal(literatureSubagentTask("$literature-agent evidence for MC4R obesity"), "evidence for MC4R obesity");
-  assert.equal(literatureSubagentTask("Does Claude Science have subagents?"), null);
+  assert.equal(literatureSubagentTask("Does this product have subagents?"), null);
   assert.equal(literatureSubagentTask("Do not launch a literature subagent"), null);
 });
 
@@ -51,8 +51,8 @@ test("repairs orphaned persisted subagent cards without touching active children
         callID: "orphan",
         state: {
           status: "running",
-          title: "Claude Agent — reviewing evidence",
-          input: { agent: "Claude Agent" },
+          title: "Literature Agent — reviewing evidence",
+          input: { agent: "Literature Agent" },
           metadata: { sessionId: "ses_orphan" },
           time: { start: 100 },
         },
@@ -73,7 +73,7 @@ test("repairs orphaned persisted subagent cards without touching active children
   const result = reconcileOrphanedSubagentSteps(history, (id) => id === "ses_active", 500);
   assert.equal(result.repaired, 1);
   assert.equal(result.history[0].parts[0].state.status, "error");
-  assert.equal(result.history[0].parts[0].state.title, "Claude Agent — interrupted");
+  assert.equal(result.history[0].parts[0].state.title, "Literature Agent — interrupted");
   assert.deepEqual(result.history[0].parts[0].state.time, { start: 100, end: 500 });
   assert.equal(result.history[0].parts[1].state.status, "running");
 });

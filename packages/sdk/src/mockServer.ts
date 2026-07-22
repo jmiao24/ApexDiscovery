@@ -134,7 +134,7 @@ export function startMockApexRuntime(port = 0): Promise<MockApexRuntime> {
         JSON.stringify({
           all: [
             { id: "mock", name: "Mock Provider", env: ["MOCK_API_KEY"] },
-            { id: "anthropic", name: "Anthropic", env: ["ANTHROPIC_API_KEY"] },
+            { id: "example", name: "Example provider", env: ["EXAMPLE_API_KEY"] },
           ],
           connected: ["mock"],
         }),

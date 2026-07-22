@@ -43,7 +43,7 @@ describe("BlockList", () => {
             title: "Literature Agent — researching evidence",
             status: "running",
             childSessionId: "ses_literature",
-            subagentName: "Claude Agent",
+            subagentName: "Literature Agent",
             subagentTask: "Find primary evidence for MC4R obesity programs",
             subagentSandbox: "danger-full-access",
             subagentTools: ["Live web research", "Bash", "ExecuteCode"],
@@ -75,7 +75,7 @@ describe("BlockList", () => {
       />,
     );
 
-    expect(screen.getByText("Claude Agent")).toBeInTheDocument();
+    expect(screen.getByText("Literature Agent")).toBeInTheDocument();
     expect(screen.getByText("Find primary evidence for MC4R obesity programs")).toBeInTheDocument();
     expect(screen.getByText("Full access")).toBeInTheDocument();
     expect(screen.getByText("Cannot launch subagents")).toBeInTheDocument();

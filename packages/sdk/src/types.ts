@@ -236,7 +236,7 @@ export interface ProviderAuthMethod {
 export interface ProviderCatalogEntry {
   id: string;
   name: string;
-  /** Env var(s) that would carry the API key, e.g. ["ANTHROPIC_API_KEY"]. */
+  /** Env var(s) that would carry the API key, e.g. ["OPENAI_API_KEY"]. */
   env: string[];
 }
 

@@ -109,11 +109,6 @@ test("bridge exposes only approved skills and MCP config without persisting secr
     const agents = await fetch(`${base}/agent`).then((r) => r.json());
     assert.deepEqual(agents, [
       {
-        name: "claude-agent",
-        description: "Claude Agent SDK subagent with Main-equivalent APEX tools and skills, excluding nested subagent launch.",
-        mode: "subagent",
-      },
-      {
         name: "literature",
         description: "Independent literature research subagent with Main-equivalent tools and evidence handoff.",
         mode: "subagent",

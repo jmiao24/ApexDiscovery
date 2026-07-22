@@ -899,19 +899,19 @@ describe("approval mode", () => {
 
   it("setDefaultModel applies the model and reconnects seamlessly (no manual Connect)", async () => {
     const before = mocks.clientOpts.length;
-    await useRuntimeStore.getState().setDefaultModel("anthropic/claude-sonnet-5");
-    expect(mocks.setDefaultModelSpy).toHaveBeenCalledWith("anthropic/claude-sonnet-5");
+    await useRuntimeStore.getState().setDefaultModel("openai/default");
+    expect(mocks.setDefaultModelSpy).toHaveBeenCalledWith("openai/default");
     // A fresh client/event stream replaces the one the config change closed —
     // exactly one reconnect, so switching models never strands the app offline.
     expect(mocks.clientOpts.length - before).toBe(1);
     const s = useRuntimeStore.getState();
     expect(s.status).toBe("ready");
     expect(s.switching).toBe(false);
-    expect(s.defaultModel).toBe("anthropic/claude-sonnet-5");
+    expect(s.defaultModel).toBe("openai/default");
   });
 
   it("setDefaultModel masks the reconnect with `switching` (no disconnect flash)", async () => {
-    const p = useRuntimeStore.getState().setDefaultModel("anthropic/claude-sonnet-5");
+    const p = useRuntimeStore.getState().setDefaultModel("openai/default");
     expect(useRuntimeStore.getState().switching).toBe(true);
     await p;
     expect(useRuntimeStore.getState().switching).toBe(false);
