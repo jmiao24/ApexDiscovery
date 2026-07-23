@@ -6,6 +6,8 @@ import {
   AppServerCodex,
   appServerApprovalDecision,
   CodexAppServer,
+  mcpElicitationQuestionState,
+  mcpElicitationResponse,
 } from "./codex-app-server.mjs";
 
 function fakeAppServer() {
@@ -172,4 +174,62 @@ test("Always allow persists a proposed command prefix and keeps other approvals 
   }), "acceptForSession");
   assert.equal(appServerApprovalDecision("once"), "accept");
   assert.equal(appServerApprovalDecision("reject"), "decline");
+});
+
+test("MCP form elicitations round-trip through the APEX question model", () => {
+  const state = mcpElicitationQuestionState({
+    mode: "form",
+    serverName: "dailymed",
+    message: "DailyMed needs a few details.",
+    requestedSchema: {
+      type: "object",
+      required: ["alias", "includeWithdrawn", "sources"],
+      properties: {
+        alias: {
+          type: "string",
+          title: "User alias",
+          description: "Enter the alias used for this request.",
+        },
+        includeWithdrawn: {
+          type: "boolean",
+          title: "Withdrawn labels",
+        },
+        sources: {
+          type: "array",
+          title: "Sources",
+          items: {
+            anyOf: [
+              { const: "label", title: "Current label" },
+              { const: "history", title: "Label history" },
+            ],
+          },
+        },
+      },
+    },
+  });
+
+  assert.equal(state.questions.length, 3);
+  assert.equal(state.questions[0].custom, true);
+  assert.deepEqual(state.questions[1].options.map((option) => option.label), ["Yes", "No"]);
+  assert.equal(state.questions[2].multiple, true);
+  assert.deepEqual(
+    mcpElicitationResponse(state.fields, [
+      ["jmiao"],
+      ["No"],
+      ["Current label", "Label history"],
+    ]),
+    {
+      action: "accept",
+      content: {
+        alias: "jmiao",
+        includeWithdrawn: false,
+        sources: ["label", "history"],
+      },
+      _meta: null,
+    },
+  );
+  assert.deepEqual(
+    mcpElicitationResponse(state.fields, [], true),
+    { action: "decline", content: null, _meta: null },
+  );
 });

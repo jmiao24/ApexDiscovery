@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-22 23:10 · fix(mcp-elicitation-bridge): mapped Codex app-server MCP form elicitations into the existing APEX question UI and returned typed accept/decline responses, preventing MCP-backed research turns from stalling on an unsupported server request.
+
 2026-07-22 22:48 · fix(dailymed-executecode-routing): added stable importable `search`, `profile`, and `history` APIs to the bundled DailyMed helper; changed the skill and Main execution contract to prefer its allowlisted ExecuteCode interface over native Bash while retaining a compatibility CLI fallback; validated the skill and verified a real Repatha query completed as `ExecuteCode` with `Querying Repatha DailyMed labels`, one official result, and an `execution_trace/worker-0.ipynb` record without Bash approval.
 
 2026-07-22 21:35 · fix(managed-executecode-python): made the supervised Codex bridge automatically reuse an isolated `<APEX data dir>/python-env` interpreter across restarts, while retaining explicit `APEX_PYTHON` priority; provisioned the local environment with `requests 2.32.5` and LibreSSL-compatible `urllib3 1.26.20`, then verified warning-free imports and a live allowlisted NCBI `requests.get()` response.

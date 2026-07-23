@@ -27,6 +27,8 @@ import {
   AppServerCodex,
   appServerApprovalDecision,
   CodexAppServer,
+  mcpElicitationQuestionState,
+  mcpElicitationResponse,
 } from "./codex-app-server.mjs";
 import { apexExecutionMcpConfig, mainCodexConfig } from "./codex-client-config.mjs";
 import { commandExecutionMetadata } from "./command-description.mjs";
@@ -430,6 +432,29 @@ function handleCodexServerRequest(message, server) {
     broadcast("question.asked", { sessionID: sessionId, id: requestId, questions });
     return;
   }
+  if (message.method === "mcpServer/elicitation/request") {
+    const state = mcpElicitationQuestionState(message.params);
+    if (!state) {
+      server.respond(message.id, { action: "decline", content: null, _meta: null });
+      return;
+    }
+    const requestId = publicRequestId("question");
+    pendingQuestions.set(requestId, {
+      id: requestId,
+      sessionID: sessionId,
+      questions: state.questions,
+      elicitationFields: state.fields,
+      threadId: message.params?.threadId,
+      rpcId: message.id,
+      server,
+    });
+    broadcast("question.asked", {
+      sessionID: sessionId,
+      id: requestId,
+      questions: state.questions,
+    });
+    return;
+  }
   server.respondError(message.id, -32601, `APEX does not support ${message.method} yet`);
 }
 
@@ -455,7 +480,16 @@ function resolvePermission(entry, reply) {
   broadcast("permission.replied", { sessionID: entry.sessionID, requestID: entry.id });
 }
 
-function resolveQuestion(entry, answers) {
+function resolveQuestion(entry, answers, rejected = false) {
+  if (entry.elicitationFields) {
+    entry.server.respond(
+      entry.rpcId,
+      mcpElicitationResponse(entry.elicitationFields, answers, rejected),
+    );
+    pendingQuestions.delete(entry.id);
+    broadcast("question.replied", { sessionID: entry.sessionID, requestID: entry.id });
+    return;
+  }
   const mapped = {};
   entry.sourceQuestions.forEach((question, index) => {
     mapped[question.id] = { answers: Array.isArray(answers?.[index]) ? answers[index] : [] };
@@ -1555,8 +1589,9 @@ const server = createServer(async (req, res) => {
       const entry = pendingQuestions.get(decodeURIComponent(questionReply[1]));
       if (!entry) return void apiError(res, 404, "no such question request");
       const body = await readBody(req);
-      const answers = questionReply[2] === "reject" ? [] : body.answers;
-      resolveQuestion(entry, answers);
+      const rejected = questionReply[2] === "reject";
+      const answers = rejected ? [] : body.answers;
+      resolveQuestion(entry, answers, rejected);
       return void json(res, { ok: true });
     }
 

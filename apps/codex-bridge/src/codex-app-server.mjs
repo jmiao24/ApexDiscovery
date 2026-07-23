@@ -111,6 +111,137 @@ export function appServerApprovalDecision(reply, {
   return "acceptForSession";
 }
 
+function enumChoices(schema) {
+  if (Array.isArray(schema?.oneOf)) {
+    return schema.oneOf
+      .filter((option) => option && typeof option.const === "string")
+      .map((option) => ({
+        label: typeof option.title === "string" ? option.title : option.const,
+        description: "",
+        value: option.const,
+      }));
+  }
+  if (Array.isArray(schema?.enum)) {
+    return schema.enum
+      .filter((value) => typeof value === "string")
+      .map((value, index) => ({
+        label: typeof schema.enumNames?.[index] === "string" ? schema.enumNames[index] : value,
+        description: "",
+        value,
+      }));
+  }
+  const items = schema?.items;
+  if (Array.isArray(items?.anyOf)) {
+    return items.anyOf
+      .filter((option) => option && typeof option.const === "string")
+      .map((option) => ({
+        label: typeof option.title === "string" ? option.title : option.const,
+        description: "",
+        value: option.const,
+      }));
+  }
+  if (Array.isArray(items?.enum)) {
+    return items.enum
+      .filter((value) => typeof value === "string")
+      .map((value) => ({ label: value, description: "", value }));
+  }
+  return [];
+}
+
+/**
+ * Translate an MCP form elicitation into the existing APEX question model.
+ * Field metadata stays in memory so answers can be converted back to the
+ * structured MCP response without exposing protocol internals in the UI.
+ */
+export function mcpElicitationQuestionState(params = {}) {
+  if (params.mode !== "form" && params.mode !== "openai/form") return null;
+  const schema = params.requestedSchema;
+  const properties = schema && typeof schema === "object" && schema.properties
+    && typeof schema.properties === "object"
+    ? schema.properties
+    : {};
+  const required = new Set(Array.isArray(schema?.required) ? schema.required : []);
+  const fields = [];
+  const questions = [];
+
+  Object.entries(properties).forEach(([name, property], index) => {
+    if (!property || typeof property !== "object") return;
+    const choices = enumChoices(property);
+    const multiple = property.type === "array";
+    const type = multiple ? "array" : property.type;
+    const options = type === "boolean"
+      ? [
+          { label: "Yes", description: "", value: true },
+          { label: "No", description: "", value: false },
+        ]
+      : choices;
+    const title = typeof property.title === "string" && property.title.trim()
+      ? property.title.trim()
+      : name;
+    const description = typeof property.description === "string"
+      ? property.description.trim()
+      : "";
+    const prompt = [index === 0 ? params.message : "", description || title]
+      .filter(Boolean)
+      .join("\n\n");
+
+    fields.push({ name, type, required: required.has(name), options });
+    questions.push({
+      question: prompt || title,
+      header: title,
+      options: options.map(({ label, description: optionDescription }) => ({
+        label,
+        description: optionDescription,
+      })),
+      custom: options.length === 0,
+      multiple,
+    });
+  });
+
+  if (!questions.length) {
+    fields.push({ name: null, type: "object", required: false, options: [] });
+    questions.push({
+      question: typeof params.message === "string" && params.message.trim()
+        ? params.message.trim()
+        : "Continue with this MCP request?",
+      header: typeof params.serverName === "string" ? params.serverName : "MCP request",
+      options: [{ label: "Continue", description: "" }],
+      custom: false,
+      multiple: false,
+    });
+  }
+  return { fields, questions };
+}
+
+function answerValue(field, answers) {
+  const values = Array.isArray(answers) ? answers : [];
+  if (field.name === null) return undefined;
+  if (field.options.length) {
+    const mapped = values
+      .map((label) => field.options.find((option) => option.label === label)?.value)
+      .filter((value) => value !== undefined);
+    return field.type === "array" ? mapped : mapped[0];
+  }
+  const raw = values[0];
+  if (raw === undefined || raw === "") return undefined;
+  if (field.type === "number" || field.type === "integer") {
+    const number = Number(raw);
+    return Number.isFinite(number) ? number : raw;
+  }
+  return raw;
+}
+
+/** Build the exact response expected by `mcpServer/elicitation/request`. */
+export function mcpElicitationResponse(fields, answers, rejected = false) {
+  if (rejected) return { action: "decline", content: null, _meta: null };
+  const content = {};
+  fields.forEach((field, index) => {
+    const value = answerValue(field, answers?.[index]);
+    if (field.name !== null && value !== undefined) content[field.name] = value;
+  });
+  return { action: "accept", content, _meta: null };
+}
+
 /**
  * One long-lived Codex app-server process. Unlike `codex exec`, this transport
  * remains bidirectional while a turn runs, so APEX can steer, interrupt, and
