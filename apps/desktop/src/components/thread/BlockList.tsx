@@ -21,8 +21,8 @@ export interface BlockHandlers {
   onSubagentOpen?: (childSessionId: string) => void;
   /** Cancel a running spawned child without navigating away. */
   onSubagentCancel?: (childSessionId: string) => void;
-  /** Open the audited skill load in the right-side inspector. */
-  onSkillOpen?: (block: Extract<ThreadBlock, { kind: "tool-call" }>) => void;
+  /** Open a tool-linked resource (skill or execution notebook) in the inspector. */
+  onToolOpen?: (block: Extract<ThreadBlock, { kind: "tool-call" }>) => void;
   /** Open an installed SKILL.md linked from an agent response. */
   onSkillPathOpen?: (path: string) => void;
 }
@@ -91,7 +91,7 @@ export function BlockList({
             activityFor={handlers?.subagentActivity}
             traceFor={handlers?.subagentTrace}
             onSubagentOpen={handlers?.onSubagentOpen}
-            onToolOpen={handlers?.onSkillOpen}
+            onToolOpen={handlers?.onToolOpen}
           />
         ) : (
           renderBlock(item.block, item.index, handlers)

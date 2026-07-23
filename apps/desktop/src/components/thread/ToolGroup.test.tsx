@@ -336,4 +336,17 @@ describe("ToolGroup", () => {
     fireEvent.click(screen.getByRole("button"));
     expect(opened).toBe(skill);
   });
+
+  it("opens an ExecuteCode trace notebook from its activity row", () => {
+    const execute = tool({
+      tool: "execute_code",
+      title: "Calculating adjusted cohort size",
+      notebookPath: "execution_trace/worker-0.ipynb",
+      notebookCellIndex: 2,
+    });
+    let opened: ToolCallBlock | undefined;
+    render(<ToolGroup blocks={[execute]} onToolOpen={(block) => { opened = block; }} />);
+    fireEvent.click(screen.getByText("Calculating adjusted cohort size"));
+    expect(opened).toBe(execute);
+  });
 });

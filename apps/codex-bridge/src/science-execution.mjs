@@ -14,6 +14,7 @@ import {
 import { createInterface } from "node:readline";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { workspaceSandboxInvocation } from "./codex-sandbox.mjs";
 
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const STORE_DIR = ".apex-discovery";
@@ -169,9 +170,10 @@ function emptyNotebook(language) {
 }
 
 class PersistentKernel {
-  constructor({ language, cwd }) {
+  constructor({ language, cwd, executionMode }) {
     this.language = language;
     this.cwd = cwd;
+    this.executionMode = executionMode;
     this.pending = new Map();
     this.seq = 0;
     this.queue = Promise.resolve();
@@ -194,7 +196,10 @@ class PersistentKernel {
       writeFileSync(this.rCodeFile, "", { mode: 0o600 });
       args = [join(SOURCE_DIR, "workers", "kernel_bridge.R"), this.rCodeFile];
     }
-    this.child = spawn(command, args, {
+    const invocation = this.executionMode === "workspace-write"
+      ? workspaceSandboxInvocation({ cwd: this.cwd, file: command, args })
+      : { file: command, args };
+    this.child = spawn(invocation.file, invocation.args, {
       cwd: this.cwd,
       stdio: ["pipe", "pipe", "ignore"],
       env: { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" },
@@ -276,19 +281,22 @@ class PersistentKernel {
 }
 
 export class ScienceExecutionRuntime {
-  constructor({ workspaceRoot, sessionId = "session", allowExecution = false } = {}) {
+  constructor({ workspaceRoot, sessionId = "session", executionMode = "disabled" } = {}) {
     if (!workspaceRoot) throw new Error("workspaceRoot is required");
     this.workspaceRoot = realpathSync(workspaceRoot);
     this.sessionId = cleanId(sessionId, "session");
-    this.allowExecution = allowExecution;
+    this.executionMode = executionMode;
+    if (!["disabled", "workspace-write", "danger-full-access"].includes(this.executionMode)) {
+      throw new Error(`unsupported execution mode: ${this.executionMode}`);
+    }
     this.kernels = new Map();
     this.notebookQueues = new Map();
     this.jobs = new Map();
   }
 
   assertAllowed() {
-    if (!this.allowExecution) {
-      throw new Error("APEX execution tools require the user to select Full access");
+    if (this.executionMode === "disabled") {
+      throw new Error("APEX execution tools are disabled");
     }
   }
 
@@ -329,7 +337,7 @@ export class ScienceExecutionRuntime {
     const key = `${this.sessionId}:${cleanId(machineId, "worker-0")}:${language}:${cwd}`;
     let kernel = this.kernels.get(key);
     if (!kernel) {
-      kernel = new PersistentKernel({ language, cwd });
+      kernel = new PersistentKernel({ language, cwd, executionMode: this.executionMode });
       this.kernels.set(key, kernel);
     }
     return kernel;
@@ -339,10 +347,13 @@ export class ScienceExecutionRuntime {
     const shell = process.platform === "win32"
       ? { file: process.env.ComSpec || "cmd.exe", args: ["/d", "/s", "/c", command] }
       : { file: "/bin/sh", args: ["-c", command] };
+    const invocation = this.executionMode === "workspace-write"
+      ? workspaceSandboxInvocation({ cwd, file: shell.file, args: shell.args })
+      : shell;
     return new Promise((resolvePromise) => {
       execFile(
-        shell.file,
-        shell.args,
+        invocation.file,
+        invocation.args,
         { cwd, timeout: timeoutMs, maxBuffer: MAX_CAPTURE_BYTES, windowsHide: true },
         (error, stdout, stderr) => {
           resolvePromise({
@@ -357,6 +368,12 @@ export class ScienceExecutionRuntime {
   }
 
   notebookPath(machineId, language) {
+    const worker = cleanId(machineId, "worker-0");
+    const name = language === "python" ? `${worker}.ipynb` : `${worker}-${language}.ipynb`;
+    return join(this.workspaceRoot, TRACE_DIR, name);
+  }
+
+  legacyNotebookPath(machineId, language) {
     const name = `${cleanId(machineId, "worker-0")}-${language}.ipynb`;
     return join(this.workspaceRoot, STORE_DIR, TRACE_DIR, name);
   }
@@ -365,36 +382,42 @@ export class ScienceExecutionRuntime {
     const path = this.notebookPath(machineId, language);
     const previous = this.notebookQueues.get(path) ?? Promise.resolve();
     const next = previous.then(() => withDirectoryLock(`${path}.lock`, () => {
-        let notebook = emptyNotebook(language);
-        if (existsSync(path)) {
-          try {
-            const parsed = JSON.parse(readFileSync(path, "utf8"));
-            if (Array.isArray(parsed.cells)) notebook = parsed;
-          } catch {
-            throw new Error(`invalid execution notebook: ${relative(this.workspaceRoot, path)}`);
-          }
+      const legacyPath = this.legacyNotebookPath(machineId, language);
+      if (!existsSync(path) && existsSync(legacyPath)) renameSync(legacyPath, path);
+      let notebook = emptyNotebook(language);
+      if (existsSync(path)) {
+        try {
+          const parsed = JSON.parse(readFileSync(path, "utf8"));
+          if (Array.isArray(parsed.cells)) notebook = parsed;
+        } catch {
+          throw new Error(`invalid execution notebook: ${relative(this.workspaceRoot, path)}`);
         }
-        notebook.cells.push({
-          cell_type: "code",
-          source: input.code,
-          outputs: outputCells(result),
-          execution_count: null,
-          metadata: {
-            apex_discovery: {
-              human_description: input.human_description,
-              environment: input.environment,
-              session_id: this.sessionId,
-              job_id: job.id,
-              started_at: job.started_at,
-              ended_at: job.ended_at,
-              status: job.status,
-            },
+      }
+      notebook.cells.push({
+        cell_type: "code",
+        source: input.code,
+        outputs: outputCells(result),
+        execution_count: null,
+        metadata: {
+          apex_discovery: {
+            human_description: input.human_description,
+            environment: input.environment,
+            session_id: this.sessionId,
+            job_id: job.id,
+            started_at: job.started_at,
+            ended_at: job.ended_at,
+            status: job.status,
           },
-        });
-        atomicWrite(path, JSON.stringify(notebook, null, 1));
-      }));
+        },
+      });
+      atomicWrite(path, JSON.stringify(notebook, null, 1));
+      return {
+        path: relative(this.workspaceRoot, path),
+        cellIndex: notebook.cells.length,
+      };
+    }));
     this.notebookQueues.set(path, next.catch(() => undefined));
-    return next.then(() => relative(this.workspaceRoot, path));
+    return next;
   }
 
   async finishJob(job, input, runner, { notebook = false } = {}) {
@@ -409,7 +432,9 @@ export class ScienceExecutionRuntime {
     job.output = outputText(result);
     if (notebook) {
       try {
-        job.notebook_path = await this.appendNotebook(input.machine_id, input.language, input, result, job);
+        const trace = await this.appendNotebook(input.machine_id, input.language, input, result, job);
+        job.notebook_path = trace.path;
+        job.notebook_cell_index = trace.cellIndex;
       } catch (error) {
         job.status = "failed";
         job.output = [job.output, error instanceof Error ? error.message : String(error)].filter(Boolean).join("\n");
@@ -422,6 +447,7 @@ export class ScienceExecutionRuntime {
       session_id: this.sessionId,
       job_id: job.id,
       tool: job.tool,
+      execution_mode: this.executionMode,
       human_description: input.human_description,
       language: input.language,
       environment: input.environment,
@@ -438,12 +464,14 @@ export class ScienceExecutionRuntime {
     const job = {
       id: input.internal_job_id || `job_${randomUUID().replaceAll("-", "").slice(0, 16)}`,
       tool,
+      execution_mode: this.executionMode,
       human_description: input.human_description,
       status: "running",
       started_at: Date.now(),
       ended_at: null,
       output: "",
       notebook_path: null,
+      notebook_cell_index: null,
       ...(input.internal_job_id ? { background: true } : {}),
     };
     this.saveJob(job);
@@ -455,12 +483,14 @@ export class ScienceExecutionRuntime {
     const job = {
       id: `job_${randomUUID().replaceAll("-", "").slice(0, 16)}`,
       tool,
+      execution_mode: this.executionMode,
       human_description: input.human_description,
       status: "running",
       started_at: Date.now(),
       ended_at: null,
       output: "",
       notebook_path: null,
+      notebook_cell_index: null,
       background: true,
     };
     this.saveJob(job);
@@ -470,6 +500,7 @@ export class ScienceExecutionRuntime {
       session_id: this.sessionId,
       job_id: job.id,
       tool,
+      execution_mode: this.executionMode,
       input: { ...input, run_in_background: false },
     }));
     try {

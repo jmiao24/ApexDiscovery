@@ -1327,6 +1327,29 @@ const stringList = (v: unknown) =>
   Array.isArray(v) ? v.filter((item): item is string => typeof item === "string" && !!item.trim()) : [];
 const EDIT_TOOLS = new Set(["edit", "str_replace_editor", "apply_patch"]);
 
+/** Keep historical native Codex shell steps readable. New bridge events carry
+ * human_description directly; older stored events only have the command. */
+export function commandExecutionDescription(command: string): string {
+  const normalized = command.replace(/\s+/g, " ").trim().toLowerCase();
+  if (/agents\.md|knowledge\.md/.test(normalized) && /git status|find |rg --files/.test(normalized)) {
+    return "Inspecting workspace context";
+  }
+  if (/\bgit\s+clone\b/.test(normalized)) return "Cloning source repository";
+  if (/\bgit\s+(?:status|diff|log|show)\b/.test(normalized)) return "Inspecting repository state";
+  if (/\b(?:rg|grep)\b|\bfind\s+/.test(normalized)) return "Searching workspace files";
+  if (/\b(?:pnpm|npm|yarn|bun)\s+(?:test|run test)\b|\bpytest\b|\bcargo\s+test\b|\bgo\s+test\b/.test(normalized)) {
+    return "Running project tests";
+  }
+  if (/\b(?:pnpm|npm|yarn|bun)\s+(?:install|add)\b|\bpip(?:3)?\s+install\b|\bcargo\s+add\b/.test(normalized)) {
+    return "Installing project dependencies";
+  }
+  if (/\b(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?build\b|\bcargo\s+build\b/.test(normalized)) {
+    return "Building project artifacts";
+  }
+  if (/\bpaperclip\b/.test(normalized)) return "Querying Paperclip literature";
+  return "Running workspace shell command";
+}
+
 export function webResearchResultFromOutput(value: unknown): WebResearchResult | undefined {
   if (typeof value !== "string" || !value.trim().startsWith("{")) return undefined;
   try {
@@ -1376,9 +1399,10 @@ export function toolPresentation(
   switch (tool) {
     case "bash":
     case "execute_code": {
+      const commandDescription = commandExecutionDescription(str(input?.command));
       return {
         verb: "Ran",
-        title: humanDescription || "Missing activity description",
+        title: humanDescription || commandDescription,
         naturalTitle: true,
       };
     }
@@ -1469,6 +1493,10 @@ export function foldEvent(
       const key = `tool:${event.callId}`;
       const command = str(event.input?.command) || (event.tool === "execute_code" ? str(event.input?.code) : "");
       const language = event.tool === "execute_code" ? str(event.input?.language) || "python" : "";
+      const notebookPath = event.tool === "execute_code" ? str(event.input?.notebook_path) : "";
+      const notebookCellIndex = event.tool === "execute_code" && typeof event.input?.notebook_cell_index === "number"
+        ? event.input.notebook_cell_index
+        : undefined;
       const filePath = str(event.input?.filePath) || str(event.input?.path);
       const content = str(event.input?.content);
       const skillName = event.tool === "skill" ? str(event.input?.name) : "";
@@ -1515,6 +1543,8 @@ export function foldEvent(
         ...(naturalTitle ? { naturalTitle } : {}),
         ...(command ? { command } : {}),
         ...(language ? { language } : {}),
+        ...(notebookPath ? { notebookPath } : {}),
+        ...(notebookCellIndex ? { notebookCellIndex } : {}),
         ...(query ? { query } : {}),
         ...(webResult ? { webResult } : {}),
         ...(filePath ? { filePath: tidyToolTitle(filePath) } : {}),
@@ -1658,6 +1688,10 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
           if (frozen) interrupted = true;
           const command = str(p.state?.input?.command) || (p.tool === "execute_code" ? str(p.state?.input?.code) : "");
           const language = p.tool === "execute_code" ? str(p.state?.input?.language) || "python" : "";
+          const notebookPath = p.tool === "execute_code" ? str(p.state?.input?.notebook_path) : "";
+          const notebookCellIndex = p.tool === "execute_code" && typeof p.state?.input?.notebook_cell_index === "number"
+            ? p.state.input.notebook_cell_index
+            : undefined;
           const query = p.tool === "websearch" ? str(p.state?.input?.query) || str(p.state?.input?.pattern) : "";
           const webResult = p.tool === "websearch" || p.tool === "webfetch"
             ? webResearchResultFromOutput(p.state?.output)
@@ -1697,6 +1731,8 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
             ...(naturalTitle ? { naturalTitle } : {}),
             ...(command ? { command } : {}),
             ...(language ? { language } : {}),
+            ...(notebookPath ? { notebookPath } : {}),
+            ...(notebookCellIndex ? { notebookCellIndex } : {}),
             ...(query ? { query } : {}),
             ...(webResult ? { webResult } : {}),
             ...(filePath ? { filePath: tidyToolTitle(filePath) } : {}),

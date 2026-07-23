@@ -1,6 +1,10 @@
 const INLINE_HTTP_CITATION = /\[[^\]\n]{1,200}\]\(\s*https?:\/\/[^\s)]+(?:\s+["'][^"']*["'])?\s*\)/gi;
 const TRAILING_REFERENCE_HEADING = /^#{0,6}\s*(?:sources?|references?|bibliography|参考文献|来源)\s*:?[ \t]*$/gim;
 
+export function citationCheckingEnabled(env = process.env) {
+  return env.APEX_ENABLE_CITATION_CHECKING === "1";
+}
+
 export const EVIDENCE_SKILL_NAMES = new Set([
   "assess-disease-expansion",
   "evaluate-label-expansion",

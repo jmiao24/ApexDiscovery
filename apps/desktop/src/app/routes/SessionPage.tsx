@@ -23,7 +23,12 @@ export function SessionPage() {
   return (
     <div className="flex h-full min-w-0">
       <div className="min-w-0 flex-1">
-        <ThreadView session={session} />
+        <ThreadView
+          session={session}
+          onOpenInspector={
+            !showInspector && session.inspector ? () => setInspectorOpen(true) : undefined
+          }
+        />
       </div>
       {showInspector && (
         <RightPane onClose={() => setInspectorOpen(false)}>

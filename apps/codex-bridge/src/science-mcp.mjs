@@ -7,7 +7,7 @@ import { ScienceExecutionRuntime } from "./science-execution.mjs";
 const runtime = new ScienceExecutionRuntime({
   workspaceRoot: process.env.APEX_WORKSPACE_ROOT,
   sessionId: process.env.APEX_SESSION_ID,
-  allowExecution: process.env.APEX_EXECUTION_ALLOWED === "1",
+  executionMode: process.env.APEX_EXECUTION_MODE || "disabled",
 });
 
 const server = new McpServer({ name: "apex-discovery-execution", version: "1.0.0" });

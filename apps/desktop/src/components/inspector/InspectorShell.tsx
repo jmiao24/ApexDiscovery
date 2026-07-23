@@ -35,7 +35,13 @@ export function InspectorShell({
         <FilePreviewInspector data={inspector} onClose={onClose} controls={controls} />
       )}
       {inspector.variant === "notebook-file" && (
-        <NotebookEditor path={inspector.path} root={inspector.root} onClose={onClose} controls={controls} />
+        <NotebookEditor
+          path={inspector.path}
+          root={inspector.root}
+          focusCellIndex={inspector.focusCellIndex}
+          onClose={onClose}
+          controls={controls}
+        />
       )}
       {inspector.variant === "skill" && (
         <SkillInspector data={inspector} onClose={onClose} controls={controls} />

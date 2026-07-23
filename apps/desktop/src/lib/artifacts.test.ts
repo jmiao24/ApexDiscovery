@@ -211,16 +211,20 @@ describe("artifactBlockToInspector", () => {
     expect(deriveArtifact(write({ cell_index: 0 }, { tool: "jupyter_execute_cell" }))).toBeNull();
   });
 
-  it("keeps the ExecuteCode reproducibility notebook behind the inline REPL", () => {
+  it("surfaces the ExecuteCode reproducibility notebook and target cell", () => {
     const artifact = deriveArtifact({
       type: "tool.updated",
       sessionId: "ses_1",
       callId: "call_1",
       tool: "execute_code",
       status: "success",
-      input: { notebook_path: ".apex-discovery/execution_trace/worker-0-python.ipynb" },
+      input: { notebook_path: "execution_trace/worker-0.ipynb", notebook_cell_index: 3 },
     });
-    expect(artifact).toBeNull();
+    expect(artifact).toMatchObject({
+      path: "execution_trace/worker-0.ipynb",
+      artifact: "notebook",
+      notebookCellIndex: 3,
+    });
   });
 
   it("routes .ipynb artifacts to the runnable notebook editor, others to file preview", () => {
@@ -230,8 +234,9 @@ describe("artifactBlockToInspector", () => {
       filename: "run.ipynb",
       artifact: "notebook",
       tool: "write",
+      notebookCellIndex: 4,
     });
-    expect(nb).toEqual({ variant: "notebook-file", path: "analysis/run.ipynb" });
+    expect(nb).toEqual({ variant: "notebook-file", path: "analysis/run.ipynb", focusCellIndex: 4 });
 
     const file = fileInspectorFromBlock({
       kind: "artifact",

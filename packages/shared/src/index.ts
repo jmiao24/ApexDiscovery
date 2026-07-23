@@ -42,6 +42,7 @@ export interface ExecutionJob {
   ended_at: number | null;
   output: string;
   notebook_path: string | null;
+  notebook_cell_index?: number | null;
   background?: boolean;
 }
 
@@ -147,6 +148,9 @@ export interface ToolCallBlock {
   command?: string;
   /** ExecuteCode language shown in the inline REPL detail. */
   language?: string;
+  /** Reproducibility notebook and 1-based cell produced by ExecuteCode. */
+  notebookPath?: string;
+  notebookCellIndex?: number;
   /** Exact query emitted by Codex's built-in web-search tool. */
   query?: string;
   /** Rich APEX WebSearch/WebFetch result with inspectable source metadata. */
@@ -252,6 +256,8 @@ export interface ArtifactBlock {
   /** Text content when the producing tool carried it (write/edit); absent for binary. */
   content?: string;
   language?: string;
+  /** 1-based cell to reveal when this artifact is an execution notebook. */
+  notebookCellIndex?: number;
 }
 
 export interface RunningJob {
@@ -304,6 +310,8 @@ export interface NotebookFileInspector {
   path: string;
   /** Folder tree `path` resolves in (default "workspace"). */
   root?: FileRoot;
+  /** 1-based cell to reveal when opened from an ExecuteCode trace row. */
+  focusCellIndex?: number;
 }
 
 /** A workspace file surfaced for preview — the agent wrote it OR code produced it.

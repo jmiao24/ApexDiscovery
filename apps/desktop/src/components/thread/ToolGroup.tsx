@@ -446,7 +446,9 @@ function ToolRow({
   const running = block.status === "running";
   // While running the live tail is already on screen — the row only becomes
   // expandable once there is a settled detail to reveal.
-  const opensInspector = block.tool === "skill" && !!onOpen;
+  const opensInspector = !!onOpen && (
+    block.tool === "skill" || (block.tool === "execute_code" && !!block.notebookPath)
+  );
   const detail = running || opensInspector ? null : detailFor(block);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const open = userOpen === true && !!detail;

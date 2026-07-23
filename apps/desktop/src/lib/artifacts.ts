@@ -165,7 +165,13 @@ export function fileInspectorFromBlock(
   a: ArtifactBlock,
 ): FilePreviewInspector | NotebookFileInspector {
   // Notebooks open in the runnable editor, not the raw-JSON preview.
-  if (extOf(a.filename) === "ipynb") return { variant: "notebook-file", path: a.path };
+  if (extOf(a.filename) === "ipynb") {
+    return {
+      variant: "notebook-file",
+      path: a.path,
+      ...(a.notebookCellIndex ? { focusCellIndex: a.notebookCellIndex } : {}),
+    };
+  }
   return {
     variant: "file",
     path: a.path,
@@ -206,16 +212,25 @@ export function deriveArtifact(event: ToolUpdatedEvent): ArtifactBlock | null {
   const tool = (event.tool ?? "").toLowerCase();
   const input = event.input ?? {};
 
-  // Explicit Jupyter tools create user-facing notebooks. ExecuteCode's ipynb
-  // is an internal reproducibility trace and stays behind the inline REPL UI.
-  if (tool.includes("jupyter")) {
+  // Explicit Jupyter tools and ExecuteCode both create user-facing notebooks.
+  // ExecuteCode also carries the exact cell appended by this tool call.
+  if (tool.includes("jupyter") || tool === "execute_code") {
     const nb = firstString(input, ["notebook_path", "path", "document_id"]);
     if (!nb || !nb.endsWith(".ipynb")) return null;
     const filename = nb.split(/[\\/]/).pop() || nb;
-    return { kind: "artifact", path: nb, filename, artifact: "notebook", tool: event.tool };
+    const rawCellIndex = input.notebook_cell_index;
+    const notebookCellIndex = typeof rawCellIndex === "number" && Number.isInteger(rawCellIndex) && rawCellIndex > 0
+      ? rawCellIndex
+      : undefined;
+    return {
+      kind: "artifact",
+      path: nb,
+      filename,
+      artifact: "notebook",
+      tool: event.tool,
+      ...(notebookCellIndex ? { notebookCellIndex } : {}),
+    };
   }
-
-  if (tool === "execute_code") return null;
 
   if (!WRITE_TOOLS.has(tool)) return null;
 

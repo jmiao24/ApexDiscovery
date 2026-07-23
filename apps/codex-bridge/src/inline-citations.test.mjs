@@ -2,9 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   auditInlineCitations,
+  citationCheckingEnabled,
   citationRepairPrompt,
   userRequestedBibliography,
 } from "./inline-citations.mjs";
+
+test("keeps runtime citation checking disabled unless explicitly enabled", () => {
+  assert.equal(citationCheckingEnabled({}), false);
+  assert.equal(citationCheckingEnabled({ APEX_ENABLE_CITATION_CHECKING: "0" }), false);
+  assert.equal(citationCheckingEnabled({ APEX_ENABLE_CITATION_CHECKING: "true" }), false);
+  assert.equal(citationCheckingEnabled({ APEX_ENABLE_CITATION_CHECKING: "1" }), true);
+});
 
 test("accepts claim-level inline citations in prose and evidence tables", () => {
   const answer = `EGFR has experimental structures in PDB. [RCSB PDB](https://www.rcsb.org/uniprot/P00533)

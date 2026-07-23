@@ -12,7 +12,7 @@ try {
   runtime = new ScienceExecutionRuntime({
     workspaceRoot: request.workspace_root,
     sessionId: request.session_id,
-    allowExecution: true,
+    executionMode: request.execution_mode,
   });
   const input = {
     ...request.input,

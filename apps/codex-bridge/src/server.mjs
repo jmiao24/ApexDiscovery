@@ -3,8 +3,9 @@
 // It speaks the HTTP + SSE subset consumed by packages/sdk's ApexRuntimeClient.
 //
 // Codex-specific notes:
-// - Approvals: Codex has no interactive per-tool approval callback; it uses OS
-//   sandboxing instead. The app's approve/full switch maps to sandboxMode:
+// - Approvals: the SDK JSONL transport does not relay approval prompts back to
+//   APEX, but Codex still runs with its managed-policy-compatible on-request
+//   approval policy. The app's approve/full switch maps to sandboxMode:
 //   approve → "workspace-write" (writes confined to the workspace), full →
 //   "danger-full-access". permission.asked events never fire on this backend.
 // - Plan mode: the `agent` field on prompt_async is ignored (no plan routing).
@@ -25,7 +26,8 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Codex } from "@openai/codex-sdk";
-import { mainCodexConfig } from "./codex-client-config.mjs";
+import { apexExecutionMcpConfig, mainCodexConfig } from "./codex-client-config.mjs";
+import { commandExecutionMetadata } from "./command-description.mjs";
 import {
   discoverSkills,
   effectiveMcpServers,
@@ -55,6 +57,7 @@ import { executionJobFromResult } from "./execution-result.mjs";
 import {
   EVIDENCE_SKILL_NAMES,
   auditInlineCitations,
+  citationCheckingEnabled,
   citationRepairPrompt,
   userRequestedBibliography,
 } from "./inline-citations.mjs";
@@ -166,7 +169,7 @@ let runtimeApiKey = process.env.OPENAI_API_KEY || null;
 const mcpStatuses = new Map();
 
 const EXECUTION_TOOL_CONTRACT = `## APEX execution tools
-When the apex_execution MCP is available, use its Bash and ExecuteCode tools instead of the built-in shell:
+Use the apex_execution MCP's Bash and ExecuteCode tools for all local execution. The native Codex shell is disabled:
 - Bash is the only tool for CLI and shell commands, including package installation, documentation lookup, file inspection, and database/search CLIs. Its command and stdout remain in conversation history and the execution audit, but are never written to the reproducibility notebook.
 - Useful CLI output is not disposable: cite or summarize it directly when sufficient. When it must become formal research data, use ExecuteCode to parse it into a table/file/artifact so that transformation is captured in the notebook.
 - ExecuteCode accepts only Python or R and is the default for formal data analysis, calculations, transformations, and plotting. Put the complete code for each logical step directly in the code argument so the notebook is self-contained. Split longer work into incremental calls and reuse Python/R state from earlier calls.
@@ -195,24 +198,17 @@ function codexClient(session, { allowSubagents = true } = {}) {
   //     }
   //   : {};
   const research = {};
-  // The execution MCP is only offered after the user explicitly selects Full
-  // access. It is an adapter over APEX's own audited execution runtime, not a
-  // third-party compute backend.
-  const execution = sandboxMode() === "danger-full-access"
-    ? {
-        apex_execution: {
-          command: process.execPath,
-          args: [SCIENCE_MCP_PATH],
-          env: {
-            APEX_WORKSPACE_ROOT: session.directory || process.cwd(),
-            APEX_SESSION_ID: session.id,
-            APEX_EXECUTION_ALLOWED: "1",
-          },
-          enabled: true,
-          default_tools_approval_mode: "writes",
-        },
-      }
-    : {};
+  // Always replace the native shell with APEX's typed execution tools. In the
+  // default mode their subprocesses run through Codex's :workspace OS sandbox;
+  // Full access deliberately keeps the direct execution path.
+  const executionMode = sandboxMode();
+  const execution = apexExecutionMcpConfig({
+    processPath: process.execPath,
+    scienceMcpPath: SCIENCE_MCP_PATH,
+    workspaceRoot: session.directory || process.cwd(),
+    sessionId: session.id,
+    executionMode,
+  });
   const mcpConfig = { ...configured, ...research, ...execution };
   return new Codex({
     ...(runtimeApiKey ? { apiKey: runtimeApiKey } : {}),
@@ -234,7 +230,7 @@ function codexClient(session, { allowSubagents = true } = {}) {
 function reviewerCodexClient() {
   return new Codex({
     ...(runtimeApiKey ? { apiKey: runtimeApiKey } : {}),
-    config: { mcp_servers: {} },
+    config: { mcp_servers: {}, features: { shell_tool: false } },
   });
 }
 
@@ -502,10 +498,11 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
     workingDirectory: session.directory || process.cwd(),
     ...(chosen && chosen !== "default" ? { model: chosen } : {}),
     sandboxMode: sandboxMode(),
-    // The SDK's JSONL transport cannot relay interactive approval callbacks.
-    // Keep the process non-interactive and rely on the workspace sandbox plus
-    // per-MCP tool approval policies (default: writes).
-    approvalPolicy: "never",
+    // Enterprise-managed Codex profiles may require on-request approvals. The
+    // SDK transport cannot surface those prompts in APEX yet, so an operation
+    // that actually needs approval is rejected safely instead of weakening the
+    // user's managed policy.
+    approvalPolicy: "on-request",
     // Use Codex SDK native live research under both ChatGPT-managed and API-key
     // authentication. The custom APEX research MCP remains dormant above.
     webSearchMode: research.webSearchMode,
@@ -518,7 +515,7 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
 
   const skillContext = skillCatalogContext(discoveredSkills);
   const loadedContext = loadedSkillContext(loadedSkills);
-  const executionContext = sandboxMode() === "danger-full-access" ? EXECUTION_TOOL_CONTRACT : "";
+  const executionContext = EXECUTION_TOOL_CONTRACT;
   const codexPrompt = [APEX_MAIN_AGENT_PROMPT, research.prompt, executionContext, skillContext, loadedContext, promptText]
     .filter(Boolean)
     .join("\n\n");
@@ -596,14 +593,10 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
           case "command_execution": {
             const callId = `cll_${prefix}_${item.id}`;
             const running = event.type !== "item.completed";
+            const metadata = commandExecutionMetadata(item.command, phase);
             const state = {
               status: running ? "running" : item.status === "failed" ? "error" : "completed",
-              title: "Missing activity description",
-              input: {
-                command: item.command,
-                phase,
-                description_missing: true,
-              },
+              ...metadata,
               output: running ? undefined : item.aggregated_output ?? "",
               time: running ? { start: Date.now() } : undefined,
             };
@@ -660,7 +653,13 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
               : item.error?.message
                 ?? (item.result ? JSON.stringify(structured ?? item.result.content ?? "") : undefined);
             const baseInput = item.arguments && typeof item.arguments === "object"
-              ? { ...item.arguments, ...(executionJob?.notebook_path ? { notebook_path: executionJob.notebook_path } : {}) }
+              ? {
+                  ...item.arguments,
+                  ...(executionJob?.notebook_path ? { notebook_path: executionJob.notebook_path } : {}),
+                  ...(Number.isInteger(executionJob?.notebook_cell_index)
+                    ? { notebook_cell_index: executionJob.notebook_cell_index }
+                    : {}),
+                }
               : { value: item.arguments };
             const humanDescription = (isExecution || isResearch) && typeof baseInput.human_description === "string"
               ? baseInput.human_description.trim()
@@ -761,9 +760,15 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
 
     const enforceInlineCitations = async ({ result, thread, phase, required, buffered }) => {
       const answer = result.texts.join("\n\n").trim();
-      if (!required) {
+      const checkingEnabled = citationCheckingEnabled();
+      if (!checkingEnabled || !required) {
         if (buffered && answer) publishPhaseText(result, answer, phase);
-        return { ok: true, repaired: false, blocked: false };
+        return {
+          ok: true,
+          repaired: false,
+          blocked: false,
+          ...(required && !checkingEnabled ? { skipped: true } : {}),
+        };
       }
 
       const audit = auditInlineCitations(answer, { required: true, allowBibliography });
@@ -838,7 +843,8 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
       const childSandbox = sandboxMode();
       const childTools = [
         "Live web research",
-        ...(childSandbox === "danger-full-access" ? ["Bash", "ExecuteCode"] : ["Codex shell"]),
+        "Bash",
+        "ExecuteCode",
         ...Object.keys(mcpServers()).map((name) => `MCP · ${name}`),
       ];
       const taskStep = beginWorkflowStep(

@@ -70,7 +70,6 @@ APEX Discovery is a local-first scientific agent workbench. When asked about the
 - Cite factual claims with direct Markdown links to the supporting source. Place each citation inline, immediately after the sentence or clause it supports, using a descriptive source label rather than a bare URL.
 - Do not collect citations in a trailing `Sources`, `References`, or `Bibliography` section unless the user explicitly requests a bibliography or a specific numbered citation style.
 - Never invent, renumber, or imply a citation that was not consulted.
-- APEX checks evidence-backed answers at runtime and makes one best-effort citation repair pass. Always return the best available research answer even when local, private, or workspace evidence has no HTTP record page; do not rely on a trailing source list as a substitute for inline links.
 
 ## Evidence interpretation
 

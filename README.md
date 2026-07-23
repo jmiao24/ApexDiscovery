@@ -13,6 +13,8 @@ still available for existing users.
 
 ---
 
+🎉 **Recognition:** APEX Discovery Desktop ranks #1 by scored-task average on [ResearchClawBench](https://internscience.github.io/ResearchClawBench-Home/), an end-to-end benchmark for autonomous scientific research agents (Pass@1 leaderboard, July 9, 2026).
+
 ---
 
 ## Contents
@@ -187,11 +189,25 @@ agent-runtime password stay in the local server/sidecar process.
 
 `apps/codex-bridge/` is the same idea on the
 [OpenAI Codex SDK](https://developers.openai.com/codex/sdk) behind the APEX
-Runtime API. For the browser distribution, provide
-`OPENAI_API_KEY`; it stays in process memory and is not written to the bridge's
-JSON configuration. The bridge uses an app-private `CODEX_HOME`.
+Runtime API. Choose exactly one OpenAI authentication source when starting the
+browser distribution:
+
+- **Codex subscription:** pass `CODEX_HOME="$HOME/.codex"` so the sidecar can
+  read the existing Codex login. Setting this variable only on a later shell or
+  refreshing the browser is insufficient; the server and Node sidecar must be
+  restarted with it.
+- **API key:** pass `OPENAI_API_KEY`; it stays in process memory and is not
+  written to the bridge's JSON configuration. Without an explicit
+  `CODEX_HOME`, the bridge uses an app-private directory that does not
+  automatically inherit the user's Codex subscription login.
 
 ```bash
+# Codex subscription
+CODEX_HOME="$HOME/.codex" \
+APEX_RUNTIME_BIN="$PWD/apps/codex-bridge/src/server.mjs" \
+  cargo run --release --manifest-path apps/server/Cargo.toml
+
+# API key
 OPENAI_API_KEY=<key> APEX_RUNTIME_BIN=$PWD/apps/codex-bridge/src/server.mjs \
   cargo run --release --manifest-path apps/server/Cargo.toml
 ```
@@ -200,7 +216,7 @@ For the current local APEX Discovery development build, launch the prebuilt
 server and frontend with a fixed browser port and access token:
 
 ```bash
-cd /Users/jiachengmiao/Desktop/APEX_Science/ApexDiscovery
+cd /path/to/APEX_Discovery
 
 CODEX_HOME="$HOME/.codex" \
 APEX_RUNTIME_BIN="$PWD/apps/codex-bridge/src/server.mjs" \
@@ -213,9 +229,23 @@ apps/server/target/release/apexdiscovery-server \
 Open `http://127.0.0.1:49369/` and use `apex-demo` if the browser asks for the
 access token. The Main Agent and literature subagent both use Codex.
 
+If a turn repeatedly reports `401 Unauthorized: Missing bearer or basic
+authentication in header` for `wss://api.openai.com/v1/responses`, the bridge
+has no usable OpenAI credential. This is separate from the local `--token`,
+which only protects the APEX browser. For subscription authentication, confirm
+that `$HOME/.codex/auth.json` exists, stop the complete APEX server process, and
+restart it with `CODEX_HOME="$HOME/.codex"` as shown above. Also confirm that
+`node` is on `PATH`, because the Rust server launches `server.mjs` through its
+Node shebang. Never copy the contents of `auth.json` into APEX configuration or
+logs.
+
 The bridge discovers Codex-native repository/user skills (`.agents/skills`),
 loads enabled plugin skills, maps local and remote MCP servers into Codex
 configuration, and streams MCP arguments/results/errors into the tool log.
+Automatic runtime citation checking and repair are currently disabled. The
+implementation remains available for controlled testing by starting the bridge
+with `APEX_ENABLE_CITATION_CHECKING=1`; citation guidance in the research prompt
+and citation findings in a user-triggered Reviewer remain active.
 The Extensions page installs a local plugin directory or HTTPS Git repository,
 validates `.codex-plugin/plugin.json`, shows skills/MCP/scripts/hooks, and keeps
 new installs and updates disabled until reviewed. Remote catalogs should pin an
@@ -239,12 +269,15 @@ for citation verification. Settings controls whether a manually started review
 may perform the one bounded fix/re-review cycle. Each phase is persisted in the
 task timeline.
 
-Codex sandboxes agent commands: approve maps to `workspace-write`, full maps to
-`danger-full-access`. Direct `!` shell execution is disabled in approve mode
-because it bypasses Codex's sandbox. MCP tools default to the conservative
-`writes` approval policy; the current TypeScript SDK transport cannot relay
-interactive approval callbacks to the browser. Plan-first routing remains
-ignored.
+The native Codex shell is disabled throughout APEX Discovery. Agent-side local
+execution uses the audited APEX `Bash` and persistent Python/R `ExecuteCode`
+tools instead. In the default approve mode, both tools launch their subprocesses
+through Codex's `:workspace` OS sandbox; full maps to direct
+`danger-full-access` execution. Direct `!` shell execution remains disabled in
+approve mode because it bypasses this contract. MCP tools default to the
+conservative `writes` approval policy; the current TypeScript SDK transport
+cannot relay interactive approval callbacks to the browser. Plan-first routing
+remains ignored.
 
 ## Build from source
 

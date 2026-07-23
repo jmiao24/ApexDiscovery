@@ -10,6 +10,8 @@
   "files": [
     "src/server.mjs",
     "src/codex-client-config.mjs",
+    "src/command-description.mjs",
+    "src/codex-sandbox.mjs",
     "src/inline-citations.mjs",
     "src/main-agent-prompt.mjs",
     "src/prompts",

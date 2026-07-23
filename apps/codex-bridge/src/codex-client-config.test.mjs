@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mainCodexConfig } from "./codex-client-config.mjs";
+import { apexExecutionMcpConfig, mainCodexConfig } from "./codex-client-config.mjs";
 
 test("disables the native Codex shell when APEX execution is available", () => {
   assert.deepEqual(
@@ -33,5 +33,45 @@ test("disables nested subagents without removing the shared APEX tools", () => {
       mcp_servers: { apex_execution: { command: "node", args: ["science-mcp.mjs"] } },
       features: { shell_tool: false, multi_agent: false },
     },
+  );
+});
+
+test("registers sandboxed APEX execution in WorkspaceWrite mode", () => {
+  const execution = apexExecutionMcpConfig({
+    processPath: "/usr/bin/node",
+    scienceMcpPath: "/app/science-mcp.mjs",
+    workspaceRoot: "/workspace/project",
+    sessionId: "ses_123",
+    executionMode: "workspace-write",
+  });
+  assert.deepEqual(execution, {
+    apex_execution: {
+      command: "/usr/bin/node",
+      args: ["/app/science-mcp.mjs"],
+      env: {
+        APEX_WORKSPACE_ROOT: "/workspace/project",
+        APEX_SESSION_ID: "ses_123",
+        APEX_EXECUTION_MODE: "workspace-write",
+      },
+      enabled: true,
+      default_tools_approval_mode: "writes",
+    },
+  });
+  assert.deepEqual(mainCodexConfig({ mcpServers: execution, hasApexExecution: true }), {
+    mcp_servers: execution,
+    features: { shell_tool: false },
+  });
+});
+
+test("rejects an execution mode without a safe runtime contract", () => {
+  assert.throws(
+    () => apexExecutionMcpConfig({
+      processPath: "/usr/bin/node",
+      scienceMcpPath: "/app/science-mcp.mjs",
+      workspaceRoot: "/workspace/project",
+      sessionId: "ses_123",
+      executionMode: "read-only",
+    }),
+    /unsupported APEX execution mode/,
   );
 });

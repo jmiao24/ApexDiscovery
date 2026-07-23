@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, beforeEach } from "vitest";
 import { useUiStore } from "@/lib/store";
 import { renderAt } from "@/test/render";
@@ -28,6 +29,13 @@ describe("SessionPage", () => {
     renderAt(`${base}/figure-canvas`);
     expect(document.querySelector('[data-variant="artifact"]')).toBeInTheDocument();
     expect(screen.getByText("Download script")).toBeInTheDocument();
+  });
+
+  it("can reopen the inspector after it is closed", async () => {
+    renderAt(`${base}/figure-canvas`);
+    await userEvent.click(screen.getByRole("button", { name: "Close inspector" }));
+    await userEvent.click(screen.getByRole("button", { name: "Open inspector" }));
+    expect(document.querySelector('[data-variant="artifact"]')).toBeInTheDocument();
   });
 
   it("shows a not-found state for an unknown session", () => {

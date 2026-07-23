@@ -13,7 +13,7 @@ test("ships an APEX biomedical research prompt without Biomni-only infrastructur
   assert.match(APEX_MAIN_AGENT_PROMPT, /Bash/);
   assert.match(APEX_MAIN_AGENT_PROMPT, /Place each citation inline/);
   assert.match(APEX_MAIN_AGENT_PROMPT, /do not append a standalone source list/);
-  assert.match(APEX_MAIN_AGENT_PROMPT, /Always return the best available research answer/);
+  assert.doesNotMatch(APEX_MAIN_AGENT_PROMPT, /checks evidence-backed answers at runtime/);
   assert.doesNotMatch(APEX_MAIN_AGENT_PROMPT, /blocked if they still lack/);
 
   for (const unsupported of [

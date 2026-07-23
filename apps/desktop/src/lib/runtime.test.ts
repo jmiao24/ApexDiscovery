@@ -61,10 +61,10 @@ describe("foldCarriageReturns", () => {
 });
 
 describe("toolPresentation", () => {
-  it("does not infer a human description from a bash command", () => {
+  it("gives native bash commands a deterministic activity description", () => {
     expect(toolPresentation("bash", "install deps", { command: "cd x && pip install numpy" })).toEqual({
       verb: "Ran",
-      title: "Missing activity description",
+      title: "Installing project dependencies",
       naturalTitle: true,
     });
   });
@@ -291,6 +291,37 @@ describe("foldEvent", () => {
     expect(artifacts[0]).toMatchObject({ kind: "artifact", filename: "fig.py", artifact: "script", content: "print(1)" });
     // The tool-call row is still present alongside the artifact.
     expect(s.blocks.some((b) => b.kind === "tool-call")).toBe(true);
+  });
+
+  it("links ExecuteCode activity to its visible notebook cell", () => {
+    const s = foldAll([
+      {
+        type: "tool.updated",
+        sessionId: S,
+        callId: "code1",
+        tool: "execute_code",
+        status: "success",
+        title: "Calculating adjusted cohort size",
+        input: {
+          code: "cohort_size + 1",
+          language: "python",
+          notebook_path: "execution_trace/worker-0.ipynb",
+          notebook_cell_index: 2,
+        },
+        output: "42",
+      },
+    ]);
+    expect(s.blocks).toHaveLength(2);
+    expect(s.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      notebookPath: "execution_trace/worker-0.ipynb",
+      notebookCellIndex: 2,
+    });
+    expect(s.blocks[1]).toMatchObject({
+      kind: "artifact",
+      path: "execution_trace/worker-0.ipynb",
+      notebookCellIndex: 2,
+    });
   });
 
   it("carries a running bash step's live output tail, \\r-folded; completion clears it", () => {
@@ -570,19 +601,29 @@ describe("historyToThread", () => {
     ]);
   });
 
-  it("shows an explicit missing-description state for historical agent steps", () => {
+  it("repairs missing descriptions in historical native agent steps", () => {
     const msgs: HistoryMessage[] = [
       {
         role: "assistant",
         parts: [
-          { type: "tool", tool: "bash", state: { status: "completed", title: "", input: { command: "ls -la" } } },
+          {
+            type: "tool",
+            tool: "bash",
+            state: {
+              status: "completed",
+              title: "",
+              input: {
+                command: "pwd && sed -n '1,240p' AGENTS.md && git status --short && find . -maxdepth 2 -type f",
+              },
+            },
+          },
         ],
       },
     ];
     const t = historyToThread(msgs);
     expect(t.blocks[0]).toMatchObject({
       kind: "tool-call",
-      title: "Missing activity description",
+      title: "Inspecting workspace context",
       naturalTitle: true,
     });
     // An agent bash step (no synthetic marker) never shows inline output.

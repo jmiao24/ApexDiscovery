@@ -133,7 +133,20 @@ export function LiveSessionPage() {
     subagentTrace: (childId) => threads[childId]?.blocks,
     onSubagentOpen: (childId) => navigate(`/live/${childId}`),
     onSubagentCancel: (childId) => void interruptSession(childId),
-    onSkillOpen: (block) => {
+    onToolOpen: (block) => {
+      if (block.tool === "execute_code" && block.notebookPath) {
+        setSkillPickerOpen(false);
+        setActiveSkill(null);
+        openArtifact({
+          kind: "artifact",
+          path: block.notebookPath,
+          filename: block.notebookPath.split(/[\\/]/).pop() || block.notebookPath,
+          artifact: "notebook",
+          tool: block.tool,
+          ...(block.notebookCellIndex ? { notebookCellIndex: block.notebookCellIndex } : {}),
+        });
+        return;
+      }
       const inspector = skillInspectorFromBlock(block);
       if (!inspector) return;
       setSkillPickerOpen(false);
@@ -278,19 +291,26 @@ export function LiveSessionPage() {
   const chatRef = useRef<HTMLDivElement>(null);
   const onChatScroll = useScrollMemory(chatRef, `chat:${currentId ?? DRAFT_KEY}`, !historyLoading);
 
-  // When the agent starts working a notebook (Jupyter MCP), open it beside the
-  // chat automatically — once per notebook, so a manual close stays closed.
+  // When the agent starts working a notebook, open it beside the chat once.
+  // If it is already open, keep its focus synchronized to the newest cell;
+  // a manual close still stays closed.
   const autoOpened = useRef(new Set<string>());
   useEffect(() => {
-    const agentNb = uniqueNotebooks.find(
-      (b) => b.tool.toLowerCase().includes("jupyter") && !autoOpened.current.has(b.path),
+    const agentNb = [...uniqueNotebooks].reverse().find(
+      (b) => b.tool.toLowerCase().includes("jupyter") || b.tool === "execute_code",
     );
-    if (agentNb) {
+    if (!agentNb) return;
+    if (!autoOpened.current.has(agentNb.path)) {
       autoOpened.current.add(agentNb.path);
+      openArtifact(agentNb);
+    } else if (
+      activeArtifact?.path === agentNb.path
+      && activeArtifact.notebookCellIndex !== agentNb.notebookCellIndex
+    ) {
       openArtifact(agentNb);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNotebooks.length]);
+  }, [uniqueNotebooks.map((b) => `${b.path}:${b.notebookCellIndex ?? 0}`).join("|")]);
 
   // With the sidebar collapsed this header doubles as the titlebar (macOS
   // overlay): it clears the traffic lights, hosts the sidebar expand button,

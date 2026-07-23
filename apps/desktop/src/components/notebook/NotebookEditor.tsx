@@ -38,6 +38,7 @@ import { cn } from "@/lib/cn";
 export function NotebookEditor({
   path,
   root,
+  focusCellIndex,
   onBack,
   onClose,
   controls,
@@ -46,6 +47,8 @@ export function NotebookEditor({
   /** Folder tree `path` resolves in (default the active workspace). The
    *  kernel also runs with the notebook's own folder as cwd. */
   root?: "workspace" | "base";
+  /** 1-based cell to reveal when opened from an execution trace row. */
+  focusCellIndex?: number;
   /** Back navigation (full-page use). */
   onBack?: () => void;
   /** Close the pane (inspector use). */
@@ -235,6 +238,19 @@ export function NotebookEditor({
   // (session switch, pane reopen) — once the cells are in, so the offset holds.
   const scrollRef = useRef<HTMLDivElement>(null);
   const onScroll = useScrollMemory(scrollRef, `file:${path}`, cells !== null);
+  const focusedCellRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!cells || !focusCellIndex || showHistory) return;
+    const key = `${path}:${focusCellIndex}`;
+    if (focusedCellRef.current === key) return;
+    focusedCellRef.current = key;
+    const frame = window.requestAnimationFrame(() => {
+      scrollRef.current
+        ?.querySelector<HTMLElement>(`[data-notebook-cell-index="${focusCellIndex}"]`)
+        ?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [cells, focusCellIndex, path, showHistory]);
 
   const onCellKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>, cell: NotebookCell) => {
     if ((e.metaKey || e.ctrlKey || e.shiftKey) && e.key === "Enter") {
@@ -331,7 +347,14 @@ export function NotebookEditor({
             </div>
           )}
           {cells?.map((cell) => (
-            <div key={cell.index} className="group mb-4">
+            <div
+              key={cell.index}
+              data-notebook-cell-index={cell.index}
+              className={cn(
+                "group mb-4 rounded-[12px] transition-shadow",
+                focusCellIndex === cell.index && "ring-1 ring-accent/40",
+              )}
+            >
               <div className="mb-1 flex items-center gap-2 text-xs text-muted">
                 <span className="font-mono">[{cell.index}]</span>
                 <span>{cell.language}</span>

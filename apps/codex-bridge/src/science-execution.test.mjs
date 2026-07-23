@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import test from "node:test";
 import { ScienceExecutionRuntime, validateHumanDescription } from "./science-execution.mjs";
 
@@ -31,7 +31,7 @@ test("human_description is mandatory and must be a 3-8 word action label", () =>
 
 test("Bash is stateless, audited, and does not create a notebook", async () => {
   const root = workspace();
-  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", allowExecution: true });
+  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", executionMode: "danger-full-access" });
   try {
     const job = await runtime.runBash({
       command: "printf 'hello'",
@@ -43,6 +43,7 @@ test("Bash is stateless, audited, and does not create a notebook", async () => {
     assert.equal(job.notebook_path, null);
     const audit = readFileSync(join(root, ".apex-discovery", "execution-audit.jsonl"), "utf8");
     assert.match(audit, /"tool":"Bash"/);
+    assert.match(audit, /"execution_mode":"danger-full-access"/);
     assert.match(audit, /"human_description":"Checking the shell runtime"/);
   } finally {
     runtime.close();
@@ -52,7 +53,7 @@ test("Bash is stateless, audited, and does not create a notebook", async () => {
 
 test("ExecuteCode keeps Python state and appends every call to an ipynb trace", async () => {
   const root = workspace();
-  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", allowExecution: true });
+  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", executionMode: "danger-full-access" });
   try {
     const first = await runtime.runCode({
       code: "cohort_size = 41",
@@ -71,7 +72,10 @@ test("ExecuteCode keeps Python state and appends every call to an ipynb trace", 
     assert.equal(first.status, "completed");
     assert.equal(second.status, "completed");
     assert.equal(second.output, "42");
-    assert.equal(first.notebook_path, ".apex-discovery/execution_trace/worker-0-python.ipynb");
+    assert.equal(first.notebook_path, "execution_trace/worker-0.ipynb");
+    assert.equal(relative(runtime.workspaceRoot, runtime.notebookPath("worker-0", "r")), "execution_trace/worker-0-r.ipynb");
+    assert.equal(first.notebook_cell_index, 1);
+    assert.equal(second.notebook_cell_index, 2);
     const notebook = JSON.parse(readFileSync(join(root, second.notebook_path), "utf8"));
     assert.equal(notebook.nbformat, 4);
     assert.equal(notebook.cells.length, 2);
@@ -82,9 +86,41 @@ test("ExecuteCode keeps Python state and appends every call to an ipynb trace", 
   }
 });
 
+test("ExecuteCode migrates the hidden legacy Python trace into the visible notebook", async () => {
+  const root = workspace();
+  const legacy = join(root, ".apex-discovery", "execution_trace", "worker-0-python.ipynb");
+  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", executionMode: "danger-full-access" });
+  try {
+    const seed = await runtime.runCode({
+      code: "print('legacy')",
+      language: "python",
+      human_description: "Writing the legacy notebook cell",
+      environment: "workspace",
+    });
+    const visible = join(root, seed.notebook_path);
+    mkdirSync(dirname(legacy), { recursive: true });
+    renameSync(visible, legacy);
+
+    const migrated = await runtime.runCode({
+      code: "print('visible')",
+      language: "python",
+      human_description: "Migrating the execution notebook trace",
+      environment: "workspace",
+    });
+    assert.equal(migrated.notebook_path, "execution_trace/worker-0.ipynb");
+    assert.equal(migrated.notebook_cell_index, 2);
+    assert.equal(existsSync(legacy), false);
+    const notebook = JSON.parse(readFileSync(join(root, migrated.notebook_path), "utf8"));
+    assert.equal(notebook.cells.length, 2);
+  } finally {
+    runtime.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("ExecuteCode rejects staged script wrappers", () => {
   const root = workspace();
-  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", allowExecution: true });
+  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", executionMode: "danger-full-access" });
   try {
     assert.throws(
       () => runtime.runCode({
@@ -112,7 +148,7 @@ test("ExecuteCode rejects staged script wrappers", () => {
 
 test("ExecuteCode rejects Bash and directs CLI work to the Bash tool", () => {
   const root = workspace();
-  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", allowExecution: true });
+  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", executionMode: "danger-full-access" });
   try {
     assert.throws(
       () => runtime.runCode({
@@ -131,7 +167,7 @@ test("ExecuteCode rejects Bash and directs CLI work to the Bash tool", () => {
 
 test("background Bash survives closing its requesting runtime", async () => {
   const root = workspace();
-  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", allowExecution: true });
+  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", executionMode: "danger-full-access" });
   try {
     const started = await runtime.runBash({
       command: "sleep 0.15; printf 'background-ok'",
@@ -159,7 +195,7 @@ test("background Bash survives closing its requesting runtime", async () => {
 
 test("concurrent background code safely appends both notebook cells", async () => {
   const root = workspace();
-  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", allowExecution: true });
+  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, sessionId: "ses_test", executionMode: "danger-full-access" });
   try {
     const first = await runtime.runCode({
       code: "print('first')",
@@ -195,9 +231,9 @@ test("concurrent background code safely appends both notebook cells", async () =
   }
 });
 
-test("execution refuses to run unless Full access was explicitly granted", async () => {
+test("execution refuses to run when no execution mode was granted", async () => {
   const root = workspace();
-  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root, allowExecution: false });
+  const runtime = new ScienceExecutionRuntime({ workspaceRoot: root });
   try {
     assert.throws(
       () => runtime.runBash({
@@ -205,7 +241,7 @@ test("execution refuses to run unless Full access was explicitly granted", async
         human_description: "Checking the workspace location",
         environment: "workspace",
       }),
-      /Full access/,
+      /disabled/,
     );
   } finally {
     runtime.close();

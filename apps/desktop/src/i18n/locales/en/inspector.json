@@ -2,6 +2,7 @@
   "shell": {
     "maximizePanel": "Maximize panel",
     "restorePanel": "Restore panel",
+    "openInspector": "Open inspector",
     "closeInspector": "Close inspector"
   },
   "skill": {

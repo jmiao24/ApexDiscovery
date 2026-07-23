@@ -1,11 +1,17 @@
 import { Link } from "react-router-dom";
-import { Sparkles } from "lucide-react";
+import { PanelRightOpen, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Session } from "@ai4s/shared";
 import { BlockList } from "./BlockList";
 
-export function ThreadView({ session }: { session: Session }) {
-  const { t } = useTranslation(["session", "common"]);
+export function ThreadView({
+  session,
+  onOpenInspector,
+}: {
+  session: Session;
+  onOpenInspector?: () => void;
+}) {
+  const { t } = useTranslation(["session", "common", "inspector"]);
   const isExample = session.group === "Examples";
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -15,6 +21,18 @@ export function ThreadView({ session }: { session: Session }) {
           <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] text-muted ring-1 ring-border">
             {t("thread.exampleBadge")}
           </span>
+        )}
+        {onOpenInspector && (
+          <button
+            type="button"
+            onClick={onOpenInspector}
+            className="ml-auto flex items-center gap-1.5 rounded-input px-2 py-1 text-[11px] text-muted hover:bg-surface-2 hover:text-text"
+            aria-label={t("inspector:shell.openInspector")}
+            title={t("inspector:shell.openInspector")}
+          >
+            <PanelRightOpen size={14} strokeWidth={1.5} />
+            <span>{t("inspector:shell.openInspector")}</span>
+          </button>
         )}
       </div>
       <div className="flex-1 overflow-y-auto">
