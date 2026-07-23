@@ -315,6 +315,12 @@ it cannot auto-upload files; it cannot silently install dependencies.
 APEX Runtime has a per-tool permission system (allow / ask / deny per agent). The desktop
 maps high-risk actions to "ask" and must never blanket-allow them.
 
+For native Codex command approvals, **Allow once** returns `accept`. **Always
+allow** accepts Codex's proposed narrow execpolicy amendment and persists that
+prefix rule through the Codex user configuration; when no safe amendment is
+available, the approval falls back to `acceptForSession`. File-change approvals
+are never converted into persistent command rules.
+
 ### 11.3 API keys
 
 Stored in macOS Keychain / Windows Credential Manager (fallback: encrypted local

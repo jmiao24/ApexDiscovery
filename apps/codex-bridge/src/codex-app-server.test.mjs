@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import test from "node:test";
-import { AppServerCodex, CodexAppServer } from "./codex-app-server.mjs";
+import {
+  AppServerCodex,
+  appServerApprovalDecision,
+  CodexAppServer,
+} from "./codex-app-server.mjs";
 
 function fakeAppServer() {
   const received = [];
@@ -151,4 +155,21 @@ test("app-server interruption targets the active Codex turn", async () => {
   assert(fake.received.some((message) => message.method === "turn/interrupt"
     && message.params.turnId === "turn_1"));
   server.close();
+});
+
+test("Always allow persists a proposed command prefix and keeps other approvals session-scoped", () => {
+  const amendment = { command: ["paperclip", "map"] };
+  assert.deepEqual(appServerApprovalDecision("always", {
+    method: "item/commandExecution/requestApproval",
+    proposedExecpolicyAmendment: amendment,
+  }), {
+    acceptWithExecpolicyAmendment: {
+      execpolicy_amendment: amendment,
+    },
+  });
+  assert.equal(appServerApprovalDecision("always", {
+    method: "item/fileChange/requestApproval",
+  }), "acceptForSession");
+  assert.equal(appServerApprovalDecision("once"), "accept");
+  assert.equal(appServerApprovalDecision("reject"), "decline");
 });

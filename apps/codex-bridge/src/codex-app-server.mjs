@@ -94,6 +94,23 @@ function requestError(message) {
   return error;
 }
 
+/** Translate the APEX approval choice into the app-server protocol decision. */
+export function appServerApprovalDecision(reply, {
+  method,
+  proposedExecpolicyAmendment,
+} = {}) {
+  if (reply === "reject") return "decline";
+  if (reply !== "always") return "accept";
+  if (method === "item/commandExecution/requestApproval" && proposedExecpolicyAmendment) {
+    return {
+      acceptWithExecpolicyAmendment: {
+        execpolicy_amendment: proposedExecpolicyAmendment,
+      },
+    };
+  }
+  return "acceptForSession";
+}
+
 /**
  * One long-lived Codex app-server process. Unlike `codex exec`, this transport
  * remains bidirectional while a turn runs, so APEX can steer, interrupt, and

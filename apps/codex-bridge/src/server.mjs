@@ -23,7 +23,11 @@ import {
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AppServerCodex, CodexAppServer } from "./codex-app-server.mjs";
+import {
+  AppServerCodex,
+  appServerApprovalDecision,
+  CodexAppServer,
+} from "./codex-app-server.mjs";
 import { apexExecutionMcpConfig, mainCodexConfig } from "./codex-client-config.mjs";
 import { commandExecutionMetadata } from "./command-description.mjs";
 import {
@@ -380,6 +384,7 @@ function handleCodexServerRequest(message, server) {
       patterns: permissionResources(message.params ?? {}),
       rpcId: message.id,
       method: message.method,
+      proposedExecpolicyAmendment: message.params?.proposedExecpolicyAmendment,
       threadId: message.params?.threadId,
       server,
     };
@@ -434,11 +439,7 @@ function handleCodexNotification(message) {
 }
 
 function resolvePermission(entry, reply) {
-  const decision = reply === "always"
-    ? "acceptForSession"
-    : reply === "once"
-      ? "accept"
-      : "decline";
+  const decision = appServerApprovalDecision(reply, entry);
   entry.server.respond(entry.rpcId, { decision });
   pendingPermissions.delete(entry.id);
   broadcast("permission.replied", { sessionID: entry.sessionID, requestID: entry.id });

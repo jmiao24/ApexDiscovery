@@ -275,8 +275,12 @@ CLI and shell work uses Codex's native command execution, while formal Python/R
 analysis uses APEX's persistent `ExecuteCode` notebook tool. In the default
 approve mode, native commands run in Codex's workspace sandbox and requests for
 network, out-of-workspace access, or other elevated permissions appear in the
-APEX permission card. `ExecuteCode` remains workspace-contained and records each
-step in `execution_trace/worker-0.ipynb`. Full maps to explicit
+APEX permission card. **Allow once** approves only that invocation; when Codex
+proposes a narrow command-prefix rule, **Always allow** accepts and persists
+that execpolicy amendment in the user's Codex rules so matching commands skip
+future prompts. File-change approvals remain session-scoped. `ExecuteCode`
+remains workspace-contained and records each step in
+`execution_trace/worker-0.ipynb`. Full maps to explicit
 `danger-full-access` execution. Direct `!` shell execution remains disabled in
 approve mode. A message sent while the agent is working steers the active Codex
 turn instead of starting a competing turn. Plan-first routing remains ignored.
