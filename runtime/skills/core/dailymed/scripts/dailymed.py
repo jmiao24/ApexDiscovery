@@ -298,6 +298,56 @@ def search_labels(
     }
 
 
+def search(
+    *,
+    drug_name: str | None = None,
+    name_type: str = "both",
+    application_number: str | None = None,
+    ndc: str | None = None,
+    rxcui: str | None = None,
+    unii: str | None = None,
+    setid: str | None = None,
+    labeler: str | None = None,
+    boxed_warning: bool | str | None = None,
+    limit: int = 10,
+    page: int = 1,
+    timeout: float = 60.0,
+) -> dict[str, Any]:
+    """Search current labels through the importable ExecuteCode interface."""
+    if name_type not in {"brand", "generic", "both"}:
+        raise ValueError("name_type must be brand, generic, or both")
+    if limit < 1 or limit > 100:
+        raise ValueError("limit must be between 1 and 100")
+    if page < 1:
+        raise ValueError("page must be positive")
+    filters = {
+        "drug_name": drug_name,
+        "name_type": {"brand": "b", "generic": "g", "both": "both"}[name_type]
+        if drug_name
+        else None,
+        "application_number": application_number,
+        "ndc": ndc,
+        "rxcui": rxcui,
+        "unii_code": unii,
+        "setid": _validate_setid(setid) if setid else None,
+        "labeler": labeler,
+        "boxed_warning": (
+            str(boxed_warning).lower()
+            if isinstance(boxed_warning, bool)
+            else boxed_warning
+        ),
+    }
+    filters = {key: value for key, value in filters.items() if value is not None}
+    if not filters:
+        raise ValueError("provide at least one search filter")
+    return search_labels(
+        filters=filters,
+        limit=limit,
+        page=page,
+        timeout=timeout,
+    )
+
+
 def get_history(setid: str, *, timeout: float) -> dict[str, Any]:
     payload, url = _request_json(
         f"spls/{setid}/history.json", timeout=timeout
@@ -315,6 +365,11 @@ def get_history(setid: str, *, timeout: float) -> dict[str, Any]:
             "retrieved_at": _utc_now(),
         },
     }
+
+
+def history(setid: str, *, timeout: float = 60.0) -> dict[str, Any]:
+    """Retrieve version history through the importable ExecuteCode interface."""
+    return get_history(_validate_setid(setid), timeout=timeout)
 
 
 def _bounded_sections(
@@ -500,6 +555,41 @@ def get_profile(
     }
 
 
+def profile(
+    setid: str,
+    *,
+    version: int | None = None,
+    sections: str | Iterable[str] = DEFAULT_SECTIONS,
+    max_section_chars: int = 6000,
+    timeout: float = 60.0,
+) -> dict[str, Any]:
+    """Retrieve a bounded label profile through the ExecuteCode interface."""
+    if isinstance(sections, str):
+        aliases = _sections(sections)
+    else:
+        aliases = tuple(str(alias).strip().lower() for alias in sections)
+        unknown = set(aliases) - set(SECTION_CODES)
+        if not aliases:
+            raise ValueError("at least one section alias is required")
+        if unknown:
+            raise ValueError(
+                "unknown section alias(es): " + ", ".join(sorted(unknown))
+            )
+    if version is not None and version < 1:
+        raise ValueError("version must be positive")
+    if max_section_chars < 500 or max_section_chars > 20000:
+        raise ValueError(
+            "max_section_chars must be between 500 and 20000"
+        )
+    return get_profile(
+        setid=_validate_setid(setid),
+        version=version,
+        aliases=aliases,
+        max_section_chars=max_section_chars,
+        timeout=timeout,
+    )
+
+
 def _sections(value: str) -> tuple[str, ...]:
     aliases = tuple(part.strip().lower() for part in value.split(",") if part.strip())
     if not aliases:
@@ -591,41 +681,30 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "search":
-            if args.limit > 100:
-                raise ValueError("limit cannot exceed the DailyMed maximum page size of 100")
-            name_type = {"brand": "b", "generic": "g", "both": "both"}[args.name_type]
-            filters = {
-                "drug_name": args.drug_name,
-                "name_type": name_type if args.drug_name else None,
-                "application_number": args.application_number,
-                "ndc": args.ndc,
-                "rxcui": args.rxcui,
-                "unii_code": args.unii,
-                "setid": _validate_setid(args.setid) if args.setid else None,
-                "labeler": args.labeler,
-                "boxed_warning": args.boxed_warning,
-            }
-            filters = {key: value for key, value in filters.items() if value is not None}
-            if not filters:
-                raise ValueError("provide at least one search filter")
             print("Searching DailyMed labels...", file=sys.stderr)
-            result = search_labels(
-                filters=filters,
+            result = search(
+                drug_name=args.drug_name,
+                name_type=args.name_type,
+                application_number=args.application_number,
+                ndc=args.ndc,
+                rxcui=args.rxcui,
+                unii=args.unii,
+                setid=args.setid,
+                labeler=args.labeler,
+                boxed_warning=args.boxed_warning,
                 limit=args.limit,
                 page=args.page,
                 timeout=args.timeout,
             )
         elif args.command == "history":
-            setid = _validate_setid(args.setid)
             print("Fetching DailyMed label history...", file=sys.stderr)
-            result = get_history(setid, timeout=args.timeout)
+            result = history(args.setid, timeout=args.timeout)
         else:
-            setid = _validate_setid(args.setid)
             print("Fetching DailyMed label profile...", file=sys.stderr)
-            result = get_profile(
-                setid=setid,
+            result = profile(
+                setid=args.setid,
                 version=args.version,
-                aliases=args.sections,
+                sections=args.sections,
                 max_section_chars=args.max_section_chars,
                 timeout=args.timeout,
             )

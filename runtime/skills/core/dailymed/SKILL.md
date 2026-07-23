@@ -31,47 +31,70 @@ Retrieve bounded, attributable U.S. product-label evidence from DailyMed without
 5. Preserve the label title, `SETID`, SPL version, published/effective date, retrieval time, and DailyMed link in the answer.
 6. Quote sparingly. Prefer a faithful summary with a direct source link and identify the label section supporting each material claim.
 
-## Deterministic helper
+## ExecuteCode interface
 
 Resolve `<skill-directory>` to the directory containing this `SKILL.md`.
 
+Use APEX `ExecuteCode` with `language="python"` for every DailyMed API search,
+profile, and history request. Do not invoke the helper through Bash when
+ExecuteCode is available. This keeps the query in the execution notebook, uses
+the configured DailyMed domain allowlist, and avoids a separate shell-network
+approval.
+
+Load the bundled, read-only helper once in the persistent Python kernel:
+
+```python
+import importlib.util
+import json
+from pathlib import Path
+
+_dailymed_path = Path("<skill-directory>") / "scripts" / "dailymed.py"
+_dailymed_spec = importlib.util.spec_from_file_location("apex_dailymed", _dailymed_path)
+dailymed = importlib.util.module_from_spec(_dailymed_spec)
+_dailymed_spec.loader.exec_module(dailymed)
+```
+
+Reuse `dailymed` in later cells. Give every call a concrete `human_description`,
+such as `Querying Repatha DailyMed labels` or `Fetching Repatha label profile`.
+
 Search by product name:
 
-```bash
-python3 <skill-directory>/scripts/dailymed.py search --drug-name Repatha --limit 10
+```python
+search_result = dailymed.search(drug_name="Repatha", limit=10)
+print(json.dumps(search_result, indent=2))
 ```
 
-Other supported search filters:
-
-```bash
-python3 <skill-directory>/scripts/dailymed.py search --application-number BLA125522
-python3 <skill-directory>/scripts/dailymed.py search --ndc 72511-760-01
-python3 <skill-directory>/scripts/dailymed.py search --rxcui 1665906
-python3 <skill-directory>/scripts/dailymed.py search --unii LKC0U3A8NJ
-python3 <skill-directory>/scripts/dailymed.py search --labeler "Amgen USA Inc."
-```
+Other supported search arguments are `application_number`, `ndc`, `rxcui`,
+`unii`, `setid`, `labeler`, `boxed_warning`, `name_type`, `limit`, and `page`.
 
 Fetch a bounded current-label profile:
 
-```bash
-python3 <skill-directory>/scripts/dailymed.py profile \
-  --setid cd61e902-166d-4aa6-9f3c-a18c1008d07e \
-  --sections indications,dosage,contraindications,warnings,adverse_reactions
+```python
+label = dailymed.profile(
+    "cd61e902-166d-4aa6-9f3c-a18c1008d07e",
+    sections="indications,dosage,contraindications,warnings,adverse_reactions",
+)
+print(json.dumps(label, indent=2))
 ```
 
 Inspect version history and retrieve an older label:
 
-```bash
-python3 <skill-directory>/scripts/dailymed.py history \
-  --setid cd61e902-166d-4aa6-9f3c-a18c1008d07e
-
-python3 <skill-directory>/scripts/dailymed.py profile \
-  --setid cd61e902-166d-4aa6-9f3c-a18c1008d07e \
-  --version 26 \
-  --sections indications,warnings
+```python
+versions = dailymed.history("cd61e902-166d-4aa6-9f3c-a18c1008d07e")
+older = dailymed.profile(
+    "cd61e902-166d-4aa6-9f3c-a18c1008d07e",
+    version=26,
+    sections="indications,warnings",
+)
 ```
 
-Use `--output PATH` to save JSON instead of printing it. Profile text is truncated per section by default; increase `--max-section-chars` only when the question requires more text, and keep the script's hard limit.
+Profile text is truncated per section by default; increase
+`max_section_chars` only when the question requires more text, and keep the
+helper's hard limit.
+
+If ExecuteCode is unavailable, the compatibility CLI remains
+`python3 <skill-directory>/scripts/dailymed.py ...`; explain that this fallback
+uses native Bash and may request network approval.
 
 ## Section aliases
 

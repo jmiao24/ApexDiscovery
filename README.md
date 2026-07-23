@@ -298,6 +298,12 @@ that variable is absent and `<data-dir>/python-env/bin/python` exists (or
 app-managed interpreter on every restart instead of falling back to the system
 Python.
 
+Bundled Python API skills can opt into the same ExecuteCode path. DailyMed
+search, profile, and history calls do so by default: they run through the
+configured domain allowlist with an explicit activity description and are
+recorded in the execution notebook. Its native Python CLI remains a fallback
+only when ExecuteCode is unavailable.
+
 ## Build from source
 
 Prerequisites for development:
