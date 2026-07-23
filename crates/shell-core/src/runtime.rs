@@ -224,6 +224,27 @@ pub struct SidecarSpec {
     pub cwd: PathBuf,
 }
 
+fn managed_python_path(data_dir: &Path) -> PathBuf {
+    #[cfg(windows)]
+    return data_dir.join("python-env").join("Scripts").join("python.exe");
+    #[cfg(not(windows))]
+    data_dir.join("python-env").join("bin").join("python")
+}
+
+/// Prefer an operator-provided interpreter. Otherwise, reuse the isolated
+/// APEX-managed environment when it has been provisioned under app data.
+fn execution_python(ctx: &ShellCtx) -> Option<String> {
+    std::env::var("APEX_PYTHON")
+        .ok()
+        .filter(|path| !path.trim().is_empty())
+        .or_else(|| {
+            let managed = managed_python_path(&ctx.data_dir);
+            managed
+                .is_file()
+                .then(|| managed.to_string_lossy().to_string())
+        })
+}
+
 pub fn build_sidecar_spec(ctx: &ShellCtx, port: u16) -> Result<SidecarSpec, String> {
     let root = ctx.runtime_root();
     let cfg = root.join("xdg-config");
@@ -280,6 +301,9 @@ pub fn build_sidecar_spec(ctx: &ShellCtx, port: u16) -> Result<SidecarSpec, Stri
         // GUI-launched apps get a minimal PATH; give the agent the user's real tools.
         ("PATH".into(), enriched_path()),
     ];
+    if let Some(python) = execution_python(ctx) {
+        envs.push(("APEX_PYTHON".into(), python));
+    }
     // Apply the network-proxy setting so provider logins and API calls work
     // where direct connections are blocked (see resolve_proxy_env).
     let (proxy_mode, proxy_url) = read_proxy_setting(ctx);
@@ -451,8 +475,8 @@ pub fn preview_token() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_scutil_proxy, prune_stale_skills, resolve_proxy_env, sync_skill_pack,
-        validate_proxy_url,
+        managed_python_path, parse_scutil_proxy, prune_stale_skills, resolve_proxy_env,
+        sync_skill_pack, validate_proxy_url,
     };
     use std::fs;
 
@@ -482,6 +506,21 @@ mod tests {
         assert!(custom
             .iter()
             .any(|(k, v)| *k == "NO_PROXY" && v.contains("127.0.0.1")));
+    }
+
+    #[test]
+    fn managed_python_lives_under_private_app_data() {
+        let path = managed_python_path(std::path::Path::new("/private/apex"));
+        #[cfg(windows)]
+        assert_eq!(
+            path,
+            std::path::Path::new("/private/apex/python-env/Scripts/python.exe")
+        );
+        #[cfg(not(windows))]
+        assert_eq!(
+            path,
+            std::path::Path::new("/private/apex/python-env/bin/python")
+        );
     }
 
     #[test]

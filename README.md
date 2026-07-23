@@ -292,6 +292,12 @@ and private addresses remain blocked. Full maps to explicit
 approve mode. A message sent while the agent is working steers the active Codex
 turn instead of starting a competing turn. Plan-first routing remains ignored.
 
+For self-hosted installs, Python `ExecuteCode` uses `APEX_PYTHON` when set. If
+that variable is absent and `<data-dir>/python-env/bin/python` exists (or
+`Scripts/python.exe` on Windows), APEX automatically reuses that isolated
+app-managed interpreter on every restart instead of falling back to the system
+Python.
+
 ## Build from source
 
 Prerequisites for development:

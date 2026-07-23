@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-22 21:35 · fix(managed-executecode-python): made the supervised Codex bridge automatically reuse an isolated `<APEX data dir>/python-env` interpreter across restarts, while retaining explicit `APEX_PYTHON` priority; provisioned the local environment with `requests 2.32.5` and LibreSSL-compatible `urllib3 1.26.20`, then verified warning-free imports and a live allowlisted NCBI `requests.get()` response.
+
 2026-07-22 19:45 · feat(executecode-network-allowlist): added a Settings-managed domain allowlist for WorkspaceWrite Python ExecuteCode, preserving Codex's network-disabled sandbox while routing `requests`/`urllib` through a private mode-0600 Unix-socket broker that restricts ports, resolves and pins public IPs, and rejects unlisted, local, private, reserved, and redirect hosts; verified 66 bridge tests (two opt-in real sandbox tests), all 461 desktop tests, TypeScript, the production build, live NCBI access, and denial of an unlisted public domain.
 
 2026-07-22 19:13 · fix(persistent-command-allowlist): made the APEX **Always allow** approval accept Codex's proposed narrow execpolicy amendment instead of merely approving for the current session, retained session-only fallback for file changes and commands without a safe amendment, documented the behavior, and verified 59/60 bridge tests (one opt-in containment test skipped) plus syntax checks.
