@@ -8,7 +8,14 @@ export function mainCodexConfig({ mcpServers, hasApexExecution, allowSubagents =
   };
 }
 
-export function apexExecutionMcpConfig({ processPath, scienceMcpPath, workspaceRoot, sessionId, executionMode }) {
+export function apexExecutionMcpConfig({
+  processPath,
+  scienceMcpPath,
+  workspaceRoot,
+  sessionId,
+  executionMode,
+  allowedDomains = [],
+}) {
   if (executionMode !== "workspace-write" && executionMode !== "danger-full-access") {
     throw new Error(`unsupported APEX execution mode: ${executionMode}`);
   }
@@ -20,6 +27,7 @@ export function apexExecutionMcpConfig({ processPath, scienceMcpPath, workspaceR
         APEX_WORKSPACE_ROOT: workspaceRoot,
         APEX_SESSION_ID: sessionId,
         APEX_EXECUTION_MODE: executionMode,
+        APEX_EXECUTION_ALLOWED_DOMAINS: JSON.stringify(allowedDomains),
       },
       enabled: true,
       default_tools_approval_mode: "writes",

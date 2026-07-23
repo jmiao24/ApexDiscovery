@@ -14,7 +14,8 @@ import {
 import { createInterface } from "node:readline";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { workspaceSandboxInvocation } from "./codex-sandbox.mjs";
+import { normalizeNetworkDomains, workspaceSandboxInvocation } from "./codex-sandbox.mjs";
+import { AllowlistedNetworkBroker } from "./network-broker.mjs";
 
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const STORE_DIR = ".apex-discovery";
@@ -170,10 +171,11 @@ function emptyNotebook(language) {
 }
 
 class PersistentKernel {
-  constructor({ language, cwd, executionMode }) {
+  constructor({ language, cwd, executionMode, networkBroker }) {
     this.language = language;
     this.cwd = cwd;
     this.executionMode = executionMode;
+    this.networkBroker = networkBroker;
     this.pending = new Map();
     this.seq = 0;
     this.queue = Promise.resolve();
@@ -182,8 +184,11 @@ class PersistentKernel {
     this.rCodeFile = null;
   }
 
-  start() {
+  async start() {
     if (this.child) return;
+    const brokerSocket = this.language === "python" && this.networkBroker
+      ? await this.networkBroker.start()
+      : null;
     let command;
     let args;
     if (this.language === "python") {
@@ -197,12 +202,22 @@ class PersistentKernel {
       args = [join(SOURCE_DIR, "workers", "kernel_bridge.R"), this.rCodeFile];
     }
     const invocation = this.executionMode === "workspace-write"
-      ? workspaceSandboxInvocation({ cwd: this.cwd, file: command, args })
+      ? workspaceSandboxInvocation({
+          cwd: this.cwd,
+          file: command,
+          args,
+          allowedUnixSockets: brokerSocket ? [brokerSocket] : [],
+        })
       : { file: command, args };
     this.child = spawn(invocation.file, invocation.args, {
       cwd: this.cwd,
       stdio: ["pipe", "pipe", "ignore"],
-      env: { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" },
+      env: {
+        ...process.env,
+        PYTHONUTF8: "1",
+        PYTHONIOENCODING: "utf-8",
+        ...(brokerSocket ? { APEX_NETWORK_BROKER_SOCKET: brokerSocket } : {}),
+      },
     });
     this.lines = createInterface({ input: this.child.stdout });
     this.lines.on("line", (line) => {
@@ -245,8 +260,8 @@ class PersistentKernel {
     return task;
   }
 
-  executeOne(code, timeoutMs) {
-    this.start();
+  async executeOne(code, timeoutMs) {
+    await this.start();
     const id = String(++this.seq);
     return new Promise((resolvePromise, reject) => {
       const timer = setTimeout(() => {
@@ -281,14 +296,30 @@ class PersistentKernel {
 }
 
 export class ScienceExecutionRuntime {
-  constructor({ workspaceRoot, sessionId = "session", executionMode = "disabled" } = {}) {
+  constructor({
+    workspaceRoot,
+    sessionId = "session",
+    executionMode = "disabled",
+    allowedDomains = [],
+  } = {}) {
     if (!workspaceRoot) throw new Error("workspaceRoot is required");
     this.workspaceRoot = realpathSync(workspaceRoot);
     this.sessionId = cleanId(sessionId, "session");
     this.executionMode = executionMode;
+    this.allowedDomains = normalizeNetworkDomains(allowedDomains);
     if (!["disabled", "workspace-write", "danger-full-access"].includes(this.executionMode)) {
       throw new Error(`unsupported execution mode: ${this.executionMode}`);
     }
+    if (process.platform === "win32" && this.allowedDomains.length) {
+      throw new Error("ExecuteCode network allowlists are not yet supported on Windows");
+    }
+    this.networkBroker = this.executionMode === "workspace-write" && this.allowedDomains.length
+      ? new AllowlistedNetworkBroker({
+          workspaceRoot: this.workspaceRoot,
+          sessionId: this.sessionId,
+          allowedDomains: this.allowedDomains,
+        })
+      : null;
     this.kernels = new Map();
     this.notebookQueues = new Map();
     this.jobs = new Map();
@@ -337,7 +368,12 @@ export class ScienceExecutionRuntime {
     const key = `${this.sessionId}:${cleanId(machineId, "worker-0")}:${language}:${cwd}`;
     let kernel = this.kernels.get(key);
     if (!kernel) {
-      kernel = new PersistentKernel({ language, cwd, executionMode: this.executionMode });
+      kernel = new PersistentKernel({
+        language,
+        cwd,
+        executionMode: this.executionMode,
+        networkBroker: this.networkBroker,
+      });
       this.kernels.set(key, kernel);
     }
     return kernel;
@@ -348,7 +384,11 @@ export class ScienceExecutionRuntime {
       ? { file: process.env.ComSpec || "cmd.exe", args: ["/d", "/s", "/c", command] }
       : { file: "/bin/sh", args: ["-c", command] };
     const invocation = this.executionMode === "workspace-write"
-      ? workspaceSandboxInvocation({ cwd, file: shell.file, args: shell.args })
+      ? workspaceSandboxInvocation({
+          cwd,
+          file: shell.file,
+          args: shell.args,
+        })
       : shell;
     return new Promise((resolvePromise) => {
       execFile(
@@ -448,6 +488,7 @@ export class ScienceExecutionRuntime {
       job_id: job.id,
       tool: job.tool,
       execution_mode: this.executionMode,
+      allowed_domains: this.allowedDomains,
       human_description: input.human_description,
       language: input.language,
       environment: input.environment,
@@ -501,6 +542,7 @@ export class ScienceExecutionRuntime {
       job_id: job.id,
       tool,
       execution_mode: this.executionMode,
+      allowed_domains: this.allowedDomains,
       input: { ...input, run_in_background: false },
     }));
     try {
@@ -579,5 +621,6 @@ export class ScienceExecutionRuntime {
   close() {
     for (const kernel of this.kernels.values()) kernel.stop();
     this.kernels.clear();
+    this.networkBroker?.close();
   }
 }

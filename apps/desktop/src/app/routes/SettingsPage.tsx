@@ -10,6 +10,7 @@ import {
   Search,
 } from "lucide-react";
 import type {
+  ExecutionNetworkConfig,
   McpServer,
   OAuthAuthorization,
   ProviderAuthMethod,
@@ -106,6 +107,10 @@ export function SettingsPage() {
     autoFix: false,
     maxPasses: 2,
   });
+  const [executionNetwork, setExecutionNetwork] = useState<ExecutionNetworkConfig>({
+    allowedDomains: [],
+  });
+  const [executionDomainsInput, setExecutionDomainsInput] = useState("");
   const [jupyter, setJupyter] = useState<JupyterStatus | null>(null);
   // The interpreter local Python kernels resolve to + the manual override input.
   const [pyInfo, setPyInfo] = useState<PythonInterpreter | null>(null);
@@ -139,18 +144,21 @@ export function SettingsPage() {
     const client = getClient();
     if (!client) return;
     try {
-      const [p, m, c, mcp, reviewerConfig] = await Promise.all([
+      const [p, m, c, mcp, reviewerConfig, executionConfig] = await Promise.all([
         client.listProviders(),
         client.listAuthMethods(),
         client.listProviderCatalog(),
         client.listMcpServers().catch(() => []),
         client.getReviewerConfig(),
+        client.getExecutionNetworkConfig(),
       ]);
       setProviders(p);
       setAuthMethods(m);
       setCatalog(c.all);
       setMcpServers(mcp);
       setReviewer(reviewerConfig);
+      setExecutionNetwork(executionConfig);
+      setExecutionDomainsInput(executionConfig.allowedDomains.join("\n"));
       setJupyter(await jupyterStatus());
     } catch {
       /* runtime not ready yet */
@@ -263,6 +271,17 @@ export function SettingsPage() {
       // (masked by `switching`) — no disconnect, no manual Connect afterward.
       if (model) await useRuntimeStore.getState().setDefaultModel(model);
       toast.success(t("toast.defaultModelSet", { model }));
+    });
+
+  const saveExecutionDomains = () =>
+    run(t("executionNetwork.updateFailed"), async () => {
+      const allowedDomains = executionDomainsInput
+        .split(/[\s,]+/)
+        .map((domain) => domain.trim())
+        .filter(Boolean);
+      await getClient()!.setExecutionNetworkConfig({ allowedDomains });
+      setExecutionNetwork({ allowedDomains });
+      toast.success(t("executionNetwork.updated"));
     });
 
   const saveKey = (providerID: string) =>
@@ -1058,6 +1077,38 @@ export function SettingsPage() {
             </div>
           </Card>
         )}
+
+        {/* ---- Sandboxed ExecuteCode network policy ---- */}
+        <Card title={t("executionNetwork.title")} hint={t("executionNetwork.hint")}>
+          {!connected ? (
+            <p className="text-[13px] text-muted">{t("executionNetwork.connectPrompt")}</p>
+          ) : (
+            <div className="space-y-2">
+              <textarea
+                value={executionDomainsInput}
+                onChange={(event) => setExecutionDomainsInput(event.target.value)}
+                aria-label={t("executionNetwork.domainsLabel")}
+                placeholder={t("executionNetwork.placeholder")}
+                className={inputCls("min-h-24 w-full resize-y font-mono leading-relaxed")}
+                spellCheck={false}
+              />
+              <div className="flex items-start gap-3">
+                <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-muted">
+                  {executionNetwork.allowedDomains.length
+                    ? t("executionNetwork.active", { count: executionNetwork.allowedDomains.length })
+                    : t("executionNetwork.disabled")}
+                </p>
+                <button
+                  className={btnAccent()}
+                  onClick={() => void saveExecutionDomains()}
+                  disabled={busy}
+                >
+                  <Check size={13} /> {t("common:actions.save")}
+                </button>
+              </div>
+            </div>
+          )}
+        </Card>
 
         <RemoteComputeCard />
 

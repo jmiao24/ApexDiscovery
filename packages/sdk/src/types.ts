@@ -291,6 +291,12 @@ export interface ReviewerConfig {
   maxPasses: 2;
 }
 
+/** Domain-level outbound network policy for the sandboxed ExecuteCode kernel. */
+export interface ExecutionNetworkConfig {
+  /** Exact hosts or Codex network-policy wildcards such as `**.ncbi.nlm.nih.gov`. */
+  allowedDomains: string[];
+}
+
 // ---- Raw APEX Runtime wire shapes (subset we consume) ----
 
 export interface ApexRuntimeRawEvent {

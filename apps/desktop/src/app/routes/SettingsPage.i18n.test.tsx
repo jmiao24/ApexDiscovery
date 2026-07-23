@@ -11,6 +11,7 @@ describe("Settings page strings (i18n)", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Agent runtime")).toBeInTheDocument();
     expect(screen.getByText("MCP servers")).toBeInTheDocument();
+    expect(screen.getByText("ExecuteCode network")).toBeInTheDocument();
     expect(screen.getByText("Workspace")).toBeInTheDocument();
   });
 
@@ -18,6 +19,7 @@ describe("Settings page strings (i18n)", () => {
     renderAt("/settings");
     expect(await screen.findByText("Connect the runtime to configure models.")).toBeInTheDocument();
     expect(screen.getByText("Connect the runtime to configure MCP servers.")).toBeInTheDocument();
+    expect(screen.getByText("Connect the runtime to configure ExecuteCode network access.")).toBeInTheDocument();
     expect(screen.getByText("available in the desktop app")).toBeInTheDocument();
   });
 });

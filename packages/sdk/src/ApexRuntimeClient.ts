@@ -1,6 +1,7 @@
 import type {
   AgentInfo,
   CommandInfo,
+  ExecutionNetworkConfig,
   HistoryMessage,
   McpConfig,
   McpServer,
@@ -421,6 +422,28 @@ export class ApexRuntimeClient {
       body: JSON.stringify({ reviewer: { ...config, maxPasses: 2 } }),
     });
     if (!res.ok) throw await this.apiError(res, "Failed to update reviewer settings");
+  }
+
+  /** Read the outbound domain allowlist used by sandboxed ExecuteCode kernels. */
+  async getExecutionNetworkConfig(): Promise<ExecutionNetworkConfig> {
+    const res = await this.fetchImpl(`${this.baseUrl}/global/config`, { headers: this.headers() });
+    if (!res.ok) return { allowedDomains: [] };
+    const cfg = (await res.json()) as { execution?: Partial<ExecutionNetworkConfig> };
+    return {
+      allowedDomains: Array.isArray(cfg.execution?.allowedDomains)
+        ? cfg.execution.allowedDomains.filter((domain): domain is string => typeof domain === "string")
+        : [],
+    };
+  }
+
+  /** Persist the allowlist and restart Codex's execution MCP before its next use. */
+  async setExecutionNetworkConfig(config: ExecutionNetworkConfig): Promise<void> {
+    const res = await this.fetchImpl(`${this.baseUrl}/global/config`, {
+      method: "PATCH",
+      headers: this.headers(true),
+      body: JSON.stringify({ execution: config }),
+    });
+    if (!res.ok) throw await this.apiError(res, "Failed to update ExecuteCode network settings");
   }
 
   /** Providers APEX Runtime can use right now, with their models. */

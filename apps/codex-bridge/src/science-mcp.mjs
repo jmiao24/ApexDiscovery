@@ -8,6 +8,7 @@ const runtime = new ScienceExecutionRuntime({
   workspaceRoot: process.env.APEX_WORKSPACE_ROOT,
   sessionId: process.env.APEX_SESSION_ID,
   executionMode: process.env.APEX_EXECUTION_MODE || "disabled",
+  allowedDomains: JSON.parse(process.env.APEX_EXECUTION_ALLOWED_DOMAINS || "[]"),
 });
 
 const server = new McpServer({ name: "apex-discovery-execution", version: "1.0.0" });

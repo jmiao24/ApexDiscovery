@@ -12,5 +12,8 @@ can change without touching the frontend:
 - Normalizes APEX Runtime's idempotent "updated" events into a small app-facing event union
   (`text.updated`, `tool.updated`, `session.idle`, `error`) so the UI upserts by part/call id.
 - Pins the supported APEX Runtime version (`APEX_RUNTIME_API_VERSION`).
+- Reads and updates the WorkspaceWrite Python `ExecuteCode` domain allowlist through
+  `getExecutionNetworkConfig()` / `setExecutionNetworkConfig()`; the bridge keeps the
+  kernel offline and applies the list through its constrained network broker.
 
 `mockServer.ts` provides a minimal APEX Runtime API server for tests and local dev.

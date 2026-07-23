@@ -30,6 +30,7 @@ import {
 } from "./codex-app-server.mjs";
 import { apexExecutionMcpConfig, mainCodexConfig } from "./codex-client-config.mjs";
 import { commandExecutionMetadata } from "./command-description.mjs";
+import { normalizeNetworkDomains } from "./codex-sandbox.mjs";
 import {
   discoverSkills,
   effectiveMcpServers,
@@ -161,6 +162,13 @@ if (!bridgeConfig.mcp || typeof bridgeConfig.mcp !== "object") bridgeConfig.mcp 
 if (!bridgeConfig.reviewer || typeof bridgeConfig.reviewer !== "object") {
   bridgeConfig.reviewer = { enabled: false, autoFix: true, maxPasses: 2 };
 }
+try {
+  bridgeConfig.execution = {
+    allowedDomains: normalizeNetworkDomains(bridgeConfig.execution?.allowedDomains ?? []),
+  };
+} catch {
+  bridgeConfig.execution = { allowedDomains: [] };
+}
 // Review is user-triggered from the task composer. Keep the legacy field for
 // wire compatibility, but never turn artifact review into a background action.
 bridgeConfig.reviewer.enabled = false;
@@ -210,6 +218,7 @@ function codexClient(session, { allowSubagents = true } = {}) {
     workspaceRoot: session.directory || process.cwd(),
     sessionId: session.id,
     executionMode,
+    allowedDomains: bridgeConfig.execution.allowedDomains,
   });
   const mcpConfig = { ...configured, ...research, ...execution };
   return new AppServerCodex(appServer(), {
@@ -1437,6 +1446,7 @@ const server = createServer(async (req, res) => {
     if (method === "GET" && path === "/config") return void json(res, {
       model: bridgeConfig.model ?? null,
       reviewer: bridgeConfig.reviewer,
+      execution: bridgeConfig.execution,
     });
     if (path === "/global/config") {
       if (method === "GET") return void json(res, {
@@ -1444,9 +1454,11 @@ const server = createServer(async (req, res) => {
         provider: {},
         mcp: mcpServers(),
         reviewer: bridgeConfig.reviewer,
+        execution: bridgeConfig.execution,
       });
       if (method === "PATCH") {
         const body = await readBody(req);
+        let restartExecutionRuntime = false;
         if (typeof body.model === "string") bridgeConfig.model = body.model;
         if (body.reviewer && typeof body.reviewer === "object") {
           bridgeConfig.reviewer.enabled = false;
@@ -1463,7 +1475,21 @@ const server = createServer(async (req, res) => {
             else bridgeConfig.mcp[name] = protectMcpSecrets(name, config);
           }
         }
+        if (body.execution && typeof body.execution === "object") {
+          if (runningTurns.size) {
+            return void apiError(res, 409, "finish or stop the active turn before changing ExecuteCode network access");
+          }
+          try {
+            bridgeConfig.execution = {
+              allowedDomains: normalizeNetworkDomains(body.execution.allowedDomains ?? []),
+            };
+          } catch (error) {
+            return void apiError(res, 400, error instanceof Error ? error.message : String(error));
+          }
+          restartExecutionRuntime = true;
+        }
         saveConfig();
+        if (restartExecutionRuntime) restartAppServer();
         return void json(res, { ok: true });
       }
     }

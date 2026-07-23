@@ -31,7 +31,30 @@ export function resolveCodexExecutable({ platform = process.platform, arch = pro
   throw new Error(`Codex sandbox executable is missing for ${target[1]}`);
 }
 
-export function workspaceSandboxInvocation({ cwd, file, args = [], executable } = {}) {
+const DOMAIN_PATTERN = /^(?:\*\*?\.)?(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+export function normalizeNetworkDomains(values) {
+  if (!Array.isArray(values)) throw new Error("ExecuteCode allowed domains must be an array");
+  if (values.length > 100) throw new Error("ExecuteCode allowed domains are limited to 100 entries");
+  const normalized = [];
+  for (const raw of values) {
+    const domain = String(raw ?? "").trim().toLowerCase().replace(/\.$/, "");
+    if (!domain) continue;
+    if (!DOMAIN_PATTERN.test(domain) || domain.endsWith(".localhost") || domain.endsWith(".local")) {
+      throw new Error(`Invalid ExecuteCode allowed domain: ${domain}`);
+    }
+    if (!normalized.includes(domain)) normalized.push(domain);
+  }
+  return normalized;
+}
+
+export function workspaceSandboxInvocation({
+  cwd,
+  file,
+  args = [],
+  executable,
+  allowedUnixSockets = [],
+} = {}) {
   if (!cwd) throw new Error("sandbox cwd is required");
   if (!file) throw new Error("sandbox command is required");
   return {
@@ -43,6 +66,7 @@ export function workspaceSandboxInvocation({ cwd, file, args = [], executable } 
       "--include-managed-config",
       "--cd",
       cwd,
+      ...allowedUnixSockets.flatMap((path) => ["--allow-unix-socket", path]),
       "--",
       file,
       ...args,

@@ -51,6 +51,7 @@ test("registers sandboxed APEX execution in WorkspaceWrite mode", () => {
         APEX_WORKSPACE_ROOT: "/workspace/project",
         APEX_SESSION_ID: "ses_123",
         APEX_EXECUTION_MODE: "workspace-write",
+        APEX_EXECUTION_ALLOWED_DOMAINS: "[]",
       },
       enabled: true,
       default_tools_approval_mode: "writes",
@@ -59,6 +60,21 @@ test("registers sandboxed APEX execution in WorkspaceWrite mode", () => {
   assert.deepEqual(mainCodexConfig({ mcpServers: execution, hasApexExecution: true }), {
     mcp_servers: execution,
   });
+});
+
+test("passes the persisted ExecuteCode domain allowlist to the execution MCP", () => {
+  const execution = apexExecutionMcpConfig({
+    processPath: "/usr/bin/node",
+    scienceMcpPath: "/app/science-mcp.mjs",
+    workspaceRoot: "/workspace/project",
+    sessionId: "ses_123",
+    executionMode: "workspace-write",
+    allowedDomains: ["eutils.ncbi.nlm.nih.gov"],
+  });
+  assert.equal(
+    execution.apex_execution.env.APEX_EXECUTION_ALLOWED_DOMAINS,
+    '["eutils.ncbi.nlm.nih.gov"]',
+  );
 });
 
 test("rejects an execution mode without a safe runtime contract", () => {

@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-22 19:45 · feat(executecode-network-allowlist): added a Settings-managed domain allowlist for WorkspaceWrite Python ExecuteCode, preserving Codex's network-disabled sandbox while routing `requests`/`urllib` through a private mode-0600 Unix-socket broker that restricts ports, resolves and pins public IPs, and rejects unlisted, local, private, reserved, and redirect hosts; verified 66 bridge tests (two opt-in real sandbox tests), all 461 desktop tests, TypeScript, the production build, live NCBI access, and denial of an unlisted public domain.
+
 2026-07-22 19:13 · fix(persistent-command-allowlist): made the APEX **Always allow** approval accept Codex's proposed narrow execpolicy amendment instead of merely approving for the current session, retained session-only fallback for file changes and commands without a safe amendment, documented the behavior, and verified 59/60 bridge tests (one opt-in containment test skipped) plus syntax checks.
 
 2026-07-22 18:55 · feat(codex-app-server): replaced the one-shot Codex SDK exec transport with a long-lived stdio app-server, relayed native command/file approvals and user questions through the existing APEX interaction cards, added mid-turn steering and real interruption, restored native command execution while retaining notebook-first ExecuteCode, and verified 58/59 bridge tests (one opt-in containment test skipped), all 460 desktop tests, TypeScript, a production build, a subscription-backed turn, and an end-to-end Paperclip network approval that returned a live PMC result.

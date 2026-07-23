@@ -491,7 +491,13 @@ defer Docker / Jupyter.
 
 Risk: the agent runs commands, reads/writes files, accesses the network. Mitigation:
 manual approval by default; workspace allowlist; isolated local secrets; dangerous-
-command dialogs; optional Docker sandbox; full provenance recording.
+command dialogs; optional Docker sandbox; full provenance recording. WorkspaceWrite
+`ExecuteCode` kernels remain network-disabled unless the user configures an exact or
+wildcard domain allowlist. Python `requests`/`urllib` connections then traverse a
+mode-0600 Unix-socket broker outside the kernel sandbox; the broker revalidates the
+hostname, permits only ports 80/443, rejects local/private/reserved addresses, pins the
+resolved public address, and relays the raw stream so TLS remains end-to-end. The
+sandbox never receives general network access.
 
 ## 19. Final stack
 

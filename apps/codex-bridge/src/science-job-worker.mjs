@@ -13,6 +13,7 @@ try {
     workspaceRoot: request.workspace_root,
     sessionId: request.session_id,
     executionMode: request.execution_mode,
+    allowedDomains: request.allowed_domains ?? [],
   });
   const input = {
     ...request.input,

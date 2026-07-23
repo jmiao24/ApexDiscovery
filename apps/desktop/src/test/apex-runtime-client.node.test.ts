@@ -326,4 +326,28 @@ describe("ApexRuntimeClient ↔ APEX Runtime server", () => {
       reviewer: { enabled: false, autoFix: false, maxPasses: 2 },
     });
   });
+
+  it("reads and updates the ExecuteCode network allowlist", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push({ url: String(input), init });
+      if (init?.method === "PATCH") return new Response("{}", { status: 200 });
+      return new Response(
+        JSON.stringify({ execution: { allowedDomains: ["eutils.ncbi.nlm.nih.gov"] } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+    const client = new ApexRuntimeClient({ baseUrl: "http://execution.test", fetchImpl });
+
+    await expect(client.getExecutionNetworkConfig()).resolves.toEqual({
+      allowedDomains: ["eutils.ncbi.nlm.nih.gov"],
+    });
+    await client.setExecutionNetworkConfig({ allowedDomains: ["**.gxl.ai"] });
+
+    expect(requests[1].url).toBe("http://execution.test/global/config");
+    expect(requests[1].init?.method).toBe("PATCH");
+    expect(JSON.parse(String(requests[1].init?.body))).toEqual({
+      execution: { allowedDomains: ["**.gxl.ai"] },
+    });
+  });
 });

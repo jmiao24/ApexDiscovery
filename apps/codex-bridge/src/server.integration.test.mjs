@@ -117,6 +117,7 @@ test("bridge exposes only approved skills and MCP config without persisting secr
 
     const initialConfig = await fetch(`${base}/global/config`).then((r) => r.json());
     assert.deepEqual(initialConfig.reviewer, { enabled: false, autoFix: true, maxPasses: 2 });
+    assert.deepEqual(initialConfig.execution, { allowedDomains: [] });
     await fetch(`${base}/global/config`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -124,6 +125,22 @@ test("bridge exposes only approved skills and MCP config without persisting secr
     });
     const updatedConfig = await fetch(`${base}/global/config`).then((r) => r.json());
     assert.deepEqual(updatedConfig.reviewer, { enabled: false, autoFix: false, maxPasses: 2 });
+    const executionUpdate = await fetch(`${base}/global/config`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ execution: { allowedDomains: ["EUTILS.NCBI.NLM.NIH.GOV."] } }),
+    });
+    assert.equal(executionUpdate.status, 200);
+    assert.deepEqual(
+      (await fetch(`${base}/global/config`).then((r) => r.json())).execution,
+      { allowedDomains: ["eutils.ncbi.nlm.nih.gov"] },
+    );
+    const invalidExecutionUpdate = await fetch(`${base}/global/config`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ execution: { allowedDomains: ["127.0.0.1"] } }),
+    });
+    assert.equal(invalidExecutionUpdate.status, 400);
 
     const created = await fetch(`${base}/session?directory=${encodeURIComponent(workspace)}`, {
       method: "POST",

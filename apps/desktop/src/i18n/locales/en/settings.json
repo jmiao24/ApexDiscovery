@@ -119,6 +119,18 @@
     "useThisPython": "Use this Python",
     "clearOverride": "Clear override"
   },
+  "executionNetwork": {
+    "title": "ExecuteCode network",
+    "hint": "Allowlisted network access for Python requests and urllib; the kernel otherwise remains offline",
+    "connectPrompt": "Connect the runtime to configure ExecuteCode network access.",
+    "domainsLabel": "Allowed ExecuteCode network domains",
+    "placeholder": "One domain per line — e.g. eutils.ncbi.nlm.nih.gov or **.gxl.ai",
+    "active_one": "{{count}} domain is allowed. Unlisted hosts, redirects to other hosts, localhost, and private addresses remain blocked.",
+    "active_other": "{{count}} domains are allowed. Unlisted hosts, redirects to other hosts, localhost, and private addresses remain blocked.",
+    "disabled": "No domains are allowed; ExecuteCode remains fully offline.",
+    "updateFailed": "Could not update ExecuteCode network settings",
+    "updated": "ExecuteCode network allowlist updated"
+  },
   "toast": {
     "interpreterSet": "Interpreter set — notebook cells now run on it.",
     "overrideCleared": "Override cleared.",

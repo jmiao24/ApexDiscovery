@@ -280,7 +280,14 @@ proposes a narrow command-prefix rule, **Always allow** accepts and persists
 that execpolicy amendment in the user's Codex rules so matching commands skip
 future prompts. File-change approvals remain session-scoped. `ExecuteCode`
 remains workspace-contained and records each step in
-`execution_trace/worker-0.ipynb`. Full maps to explicit
+`execution_trace/worker-0.ipynb`. Its Python kernel is offline by default. A
+domain allowlist in **Settings → ExecuteCode network** can selectively enable
+`requests` and `urllib` calls: the sandbox can reach only a private local broker,
+which validates the requested hostname, resolves it to a public address, and
+opens ports 80/443 without exposing unrestricted network access. Exact domains,
+`*.example.org` (subdomains only), and `**.example.org` (the domain and its
+subdomains) are supported; redirects to unlisted hosts, IP literals, localhost,
+and private addresses remain blocked. Full maps to explicit
 `danger-full-access` execution. Direct `!` shell execution remains disabled in
 approve mode. A message sent while the agent is working steers the active Codex
 turn instead of starting a competing turn. Plan-first routing remains ignored.
