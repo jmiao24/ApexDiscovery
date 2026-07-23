@@ -506,12 +506,12 @@ export function LiveSessionPage() {
               onSelectedSkillsChange={setSelectedSkills}
               onSkillsOpen={openSkillPicker}
               skillsOpen={skillPickerOpen}
-              disabled={!connected || working}
+              disabled={!connected || sending}
               working={running}
               onStop={() => void interrupt()}
               placeholder={
                 working
-                  ? t("live.placeholder.waiting")
+                  ? t("live.placeholder.steering")
                   : connected
                     ? t("composer.placeholder.default")
                     : t("live.placeholder.disconnected")

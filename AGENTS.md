@@ -23,7 +23,7 @@ for macOS, Windows, and Linux. See `README.md`, `docs/PRD.md`, and
 `docs/TECHNICAL_DESIGN.md`.
 
 Recommended stack: **Tauri 2 + React + TypeScript + Vite**, Tailwind + Radix UI,
-the **OpenAI Codex SDK** behind the bundled APEX Runtime API bridge (HTTP + SSE),
+the **OpenAI Codex app-server** behind the bundled APEX Runtime API bridge (HTTP + SSE),
 local workspace + SQLite + JSONL provenance.
 
 ## Repository map

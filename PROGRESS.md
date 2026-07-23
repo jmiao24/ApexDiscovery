@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-22 18:55 · feat(codex-app-server): replaced the one-shot Codex SDK exec transport with a long-lived stdio app-server, relayed native command/file approvals and user questions through the existing APEX interaction cards, added mid-turn steering and real interruption, restored native command execution while retaining notebook-first ExecuteCode, and verified 58/59 bridge tests (one opt-in containment test skipped), all 460 desktop tests, TypeScript, a production build, a subscription-backed turn, and an end-to-end Paperclip network approval that returned a live PMC result.
+
 2026-07-22 17:53 · feat(builtin-paperclip-skill): added Paperclip to the APEX core skill catalog, verified builtin discovery and 8 focused bridge tests, committed only the new skill as `71fa7d1`, pushed it to `origin/master`, and registered this Mac with GitHub using a dedicated passphrase-protected SSH key and persistent SSH remote configuration.
 
 2026-07-22 17:41 · config(user-scope-paperclip-skill): migrated the repository-local Paperclip skill into `~/.agents/skills/paperclip`, verified byte-identical contents and successful discovery as a `user` skill from an independent APEX research-session workspace, and removed the ignored project duplicate.

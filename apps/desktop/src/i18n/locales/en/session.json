@@ -167,7 +167,8 @@
     },
     "placeholder": {
       "disconnected": "Connect to chat",
-      "waiting": "Waiting for the reply…"
+      "waiting": "Waiting for the reply…",
+      "steering": "Add an instruction while the agent works…"
     }
   },
   "tool": {

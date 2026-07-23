@@ -1,16 +1,14 @@
 #!/usr/bin/env node
-// codex-bridge: the OpenAI Codex SDK behind the stable APEX Runtime API.
+// codex-bridge: the OpenAI Codex app-server behind the stable APEX Runtime API.
 // It speaks the HTTP + SSE subset consumed by packages/sdk's ApexRuntimeClient.
 //
 // Codex-specific notes:
-// - Approvals: the SDK JSONL transport does not relay approval prompts back to
-//   APEX, but Codex still runs with its managed-policy-compatible on-request
-//   approval policy. The app's approve/full switch maps to sandboxMode:
-//   approve → "workspace-write" (writes confined to the workspace), full →
-//   "danger-full-access". permission.asked events never fire on this backend.
+// - Approvals: app-server keeps a bidirectional JSON-RPC connection open, so
+//   Codex's native command/file approval requests are relayed to APEX.
+// - Steering: a prompt sent while a turn is running uses `turn/steer`.
 // - Plan mode: the `agent` field on prompt_async is ignored (no plan routing).
 // - Auth: uses OPENAI_API_KEY from the parent process or an in-memory value
-//   supplied through Settings. The SDK vendors its own Codex binary.
+//   supplied through Settings. The installed SDK vendors the Codex binary.
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import {
@@ -25,7 +23,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Codex } from "@openai/codex-sdk";
+import { AppServerCodex, CodexAppServer } from "./codex-app-server.mjs";
 import { apexExecutionMcpConfig, mainCodexConfig } from "./codex-client-config.mjs";
 import { commandExecutionMetadata } from "./command-description.mjs";
 import {
@@ -169,12 +167,13 @@ let runtimeApiKey = process.env.OPENAI_API_KEY || null;
 const mcpStatuses = new Map();
 
 const EXECUTION_TOOL_CONTRACT = `## APEX execution tools
-Use the apex_execution MCP's Bash and ExecuteCode tools for all local execution. The native Codex shell is disabled:
-- Bash is the only tool for CLI and shell commands, including package installation, documentation lookup, file inspection, and database/search CLIs. Its command and stdout remain in conversation history and the execution audit, but are never written to the reproducibility notebook.
+Use Codex's native command execution for CLI and shell commands, and the apex_execution MCP's ExecuteCode for notebook-first analysis:
+- Native command execution is the only tool for CLI and shell commands, including package installation, documentation lookup, file inspection, and database/search CLIs. Its command and stdout remain in conversation history, but are never written to the reproducibility notebook. If Codex requests additional permissions, wait for the user's approval in APEX.
+- When a CLI reports a DNS, connection, or network-sandbox failure, retry the same command by requesting the required network permission. Do not stop after the first sandboxed failure or replace the requested CLI with generic web search.
 - Useful CLI output is not disposable: cite or summarize it directly when sufficient. When it must become formal research data, use ExecuteCode to parse it into a table/file/artifact so that transformation is captured in the notebook.
 - ExecuteCode accepts only Python or R and is the default for formal data analysis, calculations, transformations, and plotting. Put the complete code for each logical step directly in the code argument so the notebook is self-contained. Split longer work into incremental calls and reuse Python/R state from earlier calls.
 - Never create a .py or .R file as a staging mechanism and then run, import, exec, source, or shell that file from ExecuteCode. Write a script only when the user explicitly requests one, or export it after the notebook-first analysis is already validated.
-- human_description is required on every Bash and ExecuteCode call. Write a distinct 3-8 word action label that identifies the concrete operation and object. Never reuse a generic label such as "Running code" or "Querying Open Targets".
+- human_description is required on every ExecuteCode call. Write a distinct 3-8 word action label that identifies the concrete operation and object. Never reuse a generic label such as "Running code".
 - Use environment="workspace" unless the platform exposes another environment.`;
 
 function mcpServers() {
@@ -183,7 +182,7 @@ function mcpServers() {
 
 function codexClient(session, { allowSubagents = true } = {}) {
   const configured = toCodexMcpServers(mcpServers(), process.env);
-  // Keep the custom APEX research MCP dormant for now. Codex SDK native live
+  // Keep the custom APEX research MCP dormant for now. Codex native live
   // research supports both discovery and opening exact URLs under the active
   // Codex authentication, without requiring a second research credential.
   // To restore the richer structured APEX result envelope later, replace this
@@ -198,9 +197,8 @@ function codexClient(session, { allowSubagents = true } = {}) {
   //     }
   //   : {};
   const research = {};
-  // Always replace the native shell with APEX's typed execution tools. In the
-  // default mode their subprocesses run through Codex's :workspace OS sandbox;
-  // Full access deliberately keeps the direct execution path.
+  // Keep notebook-first ExecuteCode as an APEX MCP, while native Codex command
+  // execution handles CLI work and can request approval through app-server.
   const executionMode = sandboxMode();
   const execution = apexExecutionMcpConfig({
     processPath: process.execPath,
@@ -210,11 +208,8 @@ function codexClient(session, { allowSubagents = true } = {}) {
     executionMode,
   });
   const mcpConfig = { ...configured, ...research, ...execution };
-  return new Codex({
-    ...(runtimeApiKey ? { apiKey: runtimeApiKey } : {}),
-    // Do not expose Codex's native shell alongside APEX Bash/ExecuteCode. The
-    // native command_execution item has no human_description field and would
-    // bypass APEX's execution audit and reproducibility contract.
+  return new AppServerCodex(appServer(), {
+    sessionId: session.id,
     config: mainCodexConfig({
       mcpServers: mcpConfig,
       hasApexExecution: "apex_execution" in mcpConfig,
@@ -227,9 +222,9 @@ function codexClient(session, { allowSubagents = true } = {}) {
 // read-only sandbox prevents local mutation; removing MCPs also prevents a
 // reviewer from accidentally invoking an externally mutating connector.
 // Network remains available per-thread for read-only citation verification.
-function reviewerCodexClient() {
-  return new Codex({
-    ...(runtimeApiKey ? { apiKey: runtimeApiKey } : {}),
+function reviewerCodexClient(session) {
+  return new AppServerCodex(appServer(), {
+    sessionId: session.id,
     config: { mcp_servers: {}, features: { shell_tool: false } },
   });
 }
@@ -329,8 +324,138 @@ setInterval(() => {
   for (const res of sseClients) res.write(": keepalive\n\n");
 }, 25_000).unref();
 
+// ---- bidirectional Codex requests ----
+const pendingPermissions = new Map();
+const pendingQuestions = new Map();
+let appServerInstance = null;
+
+function publicRequestId(prefix) {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function appServer() {
+  if (appServerInstance) return appServerInstance;
+  appServerInstance = new CodexAppServer({
+    env: runtimeApiKey ? { CODEX_API_KEY: runtimeApiKey, OPENAI_API_KEY: runtimeApiKey } : undefined,
+    onStderr: (line) => {
+      if (/error|warn/i.test(line)) process.stderr.write(`[codex app-server] ${line}\n`);
+    },
+    onServerRequest: handleCodexServerRequest,
+  });
+  appServerInstance.subscribe(handleCodexNotification);
+  return appServerInstance;
+}
+
+function restartAppServer() {
+  appServerInstance?.close();
+  appServerInstance = null;
+}
+
+function requestSession(message, server) {
+  return server.sessionForThread(message.params?.threadId)
+    ?? [...sessions.values()].find((session) => session.codexThreadId === message.params?.threadId)?.id
+    ?? null;
+}
+
+function permissionResources(params) {
+  return [...new Set([
+    params.command,
+    params.cwd,
+    params.reason,
+    params.grantRoot,
+    params.networkApprovalContext?.host,
+  ].filter((value) => typeof value === "string" && value.trim()))];
+}
+
+function handleCodexServerRequest(message, server) {
+  const sessionId = requestSession(message, server);
+  if (message.method === "item/commandExecution/requestApproval"
+      || message.method === "item/fileChange/requestApproval") {
+    const requestId = publicRequestId("perm");
+    const action = message.method.includes("commandExecution") ? "bash" : "write";
+    const entry = {
+      id: requestId,
+      sessionID: sessionId,
+      permission: action,
+      patterns: permissionResources(message.params ?? {}),
+      rpcId: message.id,
+      method: message.method,
+      threadId: message.params?.threadId,
+      server,
+    };
+    pendingPermissions.set(requestId, entry);
+    broadcast("permission.asked", {
+      sessionID: sessionId,
+      id: requestId,
+      permission: action,
+      patterns: entry.patterns,
+    });
+    return;
+  }
+  if (message.method === "item/tool/requestUserInput") {
+    const requestId = publicRequestId("question");
+    const questions = (message.params?.questions ?? []).map((question) => ({
+      question: question.question,
+      header: question.header,
+      options: (question.options ?? []).map((option) => ({
+        label: option.label,
+        description: option.description,
+      })),
+      custom: Boolean(question.isOther),
+    }));
+    pendingQuestions.set(requestId, {
+      id: requestId,
+      sessionID: sessionId,
+      questions,
+      sourceQuestions: message.params?.questions ?? [],
+      threadId: message.params?.threadId,
+      rpcId: message.id,
+      server,
+    });
+    broadcast("question.asked", { sessionID: sessionId, id: requestId, questions });
+    return;
+  }
+  server.respondError(message.id, -32601, `APEX does not support ${message.method} yet`);
+}
+
+function handleCodexNotification(message) {
+  if (message.method !== "serverRequest/resolved") return;
+  const rawId = message.params?.requestId;
+  for (const entry of pendingPermissions.values()) {
+    if (entry.rpcId !== rawId) continue;
+    pendingPermissions.delete(entry.id);
+    broadcast("permission.replied", { sessionID: entry.sessionID, requestID: entry.id });
+  }
+  for (const entry of pendingQuestions.values()) {
+    if (entry.rpcId !== rawId) continue;
+    pendingQuestions.delete(entry.id);
+    broadcast("question.replied", { sessionID: entry.sessionID, requestID: entry.id });
+  }
+}
+
+function resolvePermission(entry, reply) {
+  const decision = reply === "always"
+    ? "acceptForSession"
+    : reply === "once"
+      ? "accept"
+      : "decline";
+  entry.server.respond(entry.rpcId, { decision });
+  pendingPermissions.delete(entry.id);
+  broadcast("permission.replied", { sessionID: entry.sessionID, requestID: entry.id });
+}
+
+function resolveQuestion(entry, answers) {
+  const mapped = {};
+  entry.sourceQuestions.forEach((question, index) => {
+    mapped[question.id] = { answers: Array.isArray(answers?.[index]) ? answers[index] : [] };
+  });
+  entry.server.respond(entry.rpcId, { answers: mapped });
+  pendingQuestions.delete(entry.id);
+  broadcast("question.replied", { sessionID: entry.sessionID, requestID: entry.id });
+}
+
 // ---- running turns ----
-/** sessionId → { aborted: boolean, close: () => void } */
+/** sessionId → active bridge turn, including the steerable Main Agent thread. */
 const runningTurns = new Map();
 let idCounter = 0;
 const freshId = (prefix) => `${prefix}_${Date.now().toString(36)}${(idCounter++).toString(36)}`;
@@ -380,8 +505,11 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
   const turn = {
     aborted: false,
     closers: new Set(),
+    activeThreads: new Set(),
+    mainThread: null,
     close() {
       for (const close of this.closers) close();
+      for (const thread of this.activeThreads) void thread.interrupt?.().catch(() => {});
     },
   };
   runningTurns.set(session.id, turn);
@@ -499,11 +627,10 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
     ...(chosen && chosen !== "default" ? { model: chosen } : {}),
     sandboxMode: sandboxMode(),
     // Enterprise-managed Codex profiles may require on-request approvals. The
-    // SDK transport cannot surface those prompts in APEX yet, so an operation
-    // that actually needs approval is rejected safely instead of weakening the
-    // user's managed policy.
+    // app-server transport relays those requests to APEX's existing permission
+    // card without weakening the user's managed policy.
     approvalPolicy: "on-request",
-    // Use Codex SDK native live research under both ChatGPT-managed and API-key
+    // Use Codex native live research under both ChatGPT-managed and API-key
     // authentication. The custom APEX research MCP remains dormant above.
     webSearchMode: research.webSearchMode,
     skipGitRepoCheck: true,
@@ -525,6 +652,7 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
     const mainThread = session.codexThreadId
       ? codex.resumeThread(session.codexThreadId, threadOptions)
       : codex.startThread(threadOptions);
+    turn.mainThread = mainThread;
 
     /** Stream one Main/Reviewer/Fix phase through the APEX Runtime event stream. */
     const streamPhase = async ({
@@ -552,6 +680,7 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
       const { events } = await thread.runStreamed(prompt);
       const closeEvents = () => void events.return?.();
       turn.closers.add(closeEvents);
+      turn.activeThreads.add(thread);
       const prefix = phase.replace(/[^a-zA-Z0-9_-]/g, "_");
 
       try {
@@ -701,7 +830,7 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
           case "web_search": {
             if (event.type !== "item.completed") break;
             result.externalEvidenceUsed = true;
-            // The Codex SDK currently flattens search/open/find actions into a
+            // The bridge currently flattens search/open/find actions into a
             // single `query` string. Some open-page events arrive with an empty
             // query because the SDK does not expose the underlying action URL.
             // An invented "web search" row is misleading and has no useful
@@ -738,6 +867,7 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
         }
       } finally {
         turn.closers.delete(closeEvents);
+        turn.activeThreads.delete(thread);
       }
       return result;
     };
@@ -996,7 +1126,7 @@ async function runTurn(session, promptText, { reviewOnly = false, selectedSkills
       const skillNames = reviewerSkillNames(currentTargets);
       const selected = invokedSkills(skillNames.map((name) => `$${name}`).join(" "), discoveredSkills);
       const reviewerSkills = loadSkills(selected, `review-${pass}`);
-      const reviewerThread = reviewerCodexClient().startThread({
+      const reviewerThread = reviewerCodexClient(session).startThread({
         ...threadOptions,
         sandboxMode: "read-only",
         networkAccessEnabled: true,
@@ -1239,12 +1369,28 @@ const server = createServer(async (req, res) => {
           .map((p) => p.text)
           .join("\n");
         if (!text) return void apiError(res, 400, "empty prompt");
-        if (runningTurns.has(id)) return void apiError(res, 409, "a turn is already running");
         const selectedSkills = Array.isArray(body.skills)
           ? body.skills
               .filter((name) => typeof name === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(name))
               .slice(0, 20)
           : [];
+        const activeTurn = runningTurns.get(id);
+        if (activeTurn) {
+          if (!activeTurn.mainThread) return void apiError(res, 409, "the active turn is not steerable yet");
+          const steeringText = selectedSkills.length
+            ? `${selectedSkills.map((name) => `$${name}`).join(" ")}\n\n${text}`
+            : text;
+          appendHistory(id, {
+            info: { id: freshId("msg"), role: "user", time: { completed: Date.now() } },
+            parts: [{ type: "text", text }],
+          });
+          try {
+            await activeTurn.mainThread.steer(steeringText);
+          } catch (error) {
+            return void apiError(res, 409, error instanceof Error ? error.message : String(error));
+          }
+          return void json(res, { ok: true, steered: true });
+        }
         // body.agent (plan routing) is deliberately ignored on the Codex backend.
         void runTurn(session, text, { selectedSkills });
         return void json(res, { ok: true });
@@ -1337,24 +1483,54 @@ const server = createServer(async (req, res) => {
     const authMatch = /^\/auth\/([^/]+)$/.exec(path);
     if (authMatch) {
       if (method === "PUT") {
+        if (runningTurns.size) return void apiError(res, 409, "finish or stop the active turn before changing authentication");
         const body = await readBody(req);
         if (typeof body.key === "string") {
           runtimeApiKey = body.key.trim() || null;
           if (runtimeApiKey) process.env.OPENAI_API_KEY = runtimeApiKey;
           else delete process.env.OPENAI_API_KEY;
         }
+        restartAppServer();
         return void json(res, { ok: true });
       }
       if (method === "DELETE") {
+        if (runningTurns.size) return void apiError(res, 409, "finish or stop the active turn before changing authentication");
         runtimeApiKey = null;
         delete process.env.OPENAI_API_KEY;
+        restartAppServer();
         return void json(res, { ok: true });
       }
     }
 
-    // --- interactive requests: Codex uses sandboxing, not per-tool approvals ---
-    if (method === "GET" && path === "/permission") return void json(res, []);
-    if (method === "GET" && path === "/question") return void json(res, []);
+    // --- interactive requests relayed from the long-lived app-server ---
+    if (method === "GET" && path === "/permission") {
+      return void json(res, [...pendingPermissions.values()].map(({ id, sessionID, permission, patterns }) => ({
+        id, sessionID, permission, patterns,
+      })));
+    }
+    const permissionReply = /^\/permission\/([^/]+)\/reply$/.exec(path);
+    if (method === "POST" && permissionReply) {
+      const entry = pendingPermissions.get(decodeURIComponent(permissionReply[1]));
+      if (!entry) return void apiError(res, 404, "no such permission request");
+      const body = await readBody(req);
+      if (!["once", "always", "reject"].includes(body.reply)) return void apiError(res, 400, "invalid permission reply");
+      resolvePermission(entry, body.reply);
+      return void json(res, { ok: true });
+    }
+    if (method === "GET" && path === "/question") {
+      return void json(res, [...pendingQuestions.values()].map(({ id, sessionID, questions }) => ({
+        id, sessionID, questions,
+      })));
+    }
+    const questionReply = /^\/question\/([^/]+)\/(reply|reject)$/.exec(path);
+    if (method === "POST" && questionReply) {
+      const entry = pendingQuestions.get(decodeURIComponent(questionReply[1]));
+      if (!entry) return void apiError(res, 404, "no such question request");
+      const body = await readBody(req);
+      const answers = questionReply[2] === "reject" ? [] : body.answers;
+      resolveQuestion(entry, answers);
+      return void json(res, { ok: true });
+    }
 
     // --- discovery stubs the UI polls ---
     if (method === "GET" && path === "/api/skill/content") {
@@ -1408,5 +1584,13 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOSTNAME, () => {
-  console.error(`codex-bridge listening on http://${HOSTNAME}:${PORT} (agent: OpenAI Codex SDK)`);
+  console.error(`codex-bridge listening on http://${HOSTNAME}:${PORT} (agent: OpenAI Codex app-server)`);
 });
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.once(signal, () => {
+    appServerInstance?.close();
+    server.close(() => process.exit(0));
+    server.closeAllConnections?.();
+  });
+}

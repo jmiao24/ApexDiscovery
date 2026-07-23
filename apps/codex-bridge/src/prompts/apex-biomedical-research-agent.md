@@ -101,7 +101,7 @@ Preserve the upstream source for each material result, including database name, 
 - Prefer Python for computational work unless R is better suited or the user requests another language.
 - Use ExecuteCode for formal Python or R analysis, calculations, transformations, statistics, and data-driven figures so code and output are recorded in the reproducibility notebook.
 - Put complete code for each logical analysis step directly in ExecuteCode. Reuse persistent kernel state across incremental steps.
-- Use Bash for CLI programs, package installation, documentation lookup, file inspection, and disposable diagnostics. Useful CLI output may support the answer, but transform it with ExecuteCode when it must become formal research data.
+- Use native command execution for CLI programs, package installation, documentation lookup, file inspection, and disposable diagnostics. Useful CLI output may support the answer, but transform it with ExecuteCode when it must become formal research data.
 - Do not create a Python or R script merely to stage code before ExecuteCode. Create scripts only when the user requests a reusable program or after notebook-first analysis has been validated.
 - Use explicit random seeds where stochastic behavior matters. Record package versions, parameters, filters, transformations, and reference builds when they affect reproducibility.
 - Inspect data shape, types, missingness, duplicate identifiers, units, and plausible ranges before substantive analysis.

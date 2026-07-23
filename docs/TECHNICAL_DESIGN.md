@@ -23,7 +23,7 @@ AI4S Workbench Desktop
 ├── Frontend: React + TypeScript + Vite
 ├── UI System: Tailwind CSS + Radix UI / shadcn-style components
 ├── Local Service: Rust commands + supervised Codex bridge
-├── Agent Runtime: OpenAI Codex SDK (bundled with Node)
+├── Agent Runtime: OpenAI Codex app-server (binary bundled through the SDK package)
 ├── Agent Protocol: versioned APEX Runtime HTTP + SSE API
 ├── Skills Layer: Codex skills + optional third-party scientific skills
 ├── MCP Layer: filesystem / paper-search / BioMCP / Zotero / GitHub / custom
@@ -79,12 +79,13 @@ capabilities only, not heavy computation.
 
 ## 5. Agent runtime
 
-### 5.1 Choice: OpenAI Codex SDK
+### 5.1 Choice: OpenAI Codex app-server
 
-The production agent runtime is the **OpenAI Codex SDK**. A small Node service in
-`apps/codex-bridge` exposes the versioned **APEX Runtime API** consumed by the UI.
-This keeps product code independent of SDK-internal event shapes without adding a
-second third-party agent executable.
+The production agent runtime is the **OpenAI Codex app-server** over a long-lived
+stdio JSON-RPC connection. A small Node service in `apps/codex-bridge` exposes
+the versioned **APEX Runtime API** consumed by the UI. The bidirectional transport
+forwards native approvals and supports `turn/steer` and `turn/interrupt`, while
+keeping product code independent of Codex-internal event shapes.
 
 ### 5.2 Desktop ↔ APEX Runtime API communication
 
@@ -95,7 +96,9 @@ The app talks to APEX Runtime over its HTTP + SSE API, wrapped by `packages/sdk`
 | --- | --- |
 | `POST /session` · `GET /session` | Create / list sessions (conversation history) |
 | `GET /session/:id/message` | Load a session's history |
-| `POST /session/:id/prompt_async` | Send a prompt |
+| `POST /session/:id/prompt_async` | Start a prompt, or steer the active turn |
+| `POST /session/:id/abort` | Interrupt the active Codex turn |
+| `GET /permission` · `POST /permission/:id/reply` | Recover and answer native Codex approvals |
 | `GET /event` (SSE) | Stream `message.part.updated` (text/tool), `session.idle`, `session.error` |
 | `GET /api/skill` · `GET /agent` | Real loaded skills / agents |
 
@@ -106,9 +109,9 @@ App launch → Rust starts the bundled Codex bridge (dedicated free port)
 ↓
 ApexRuntimeClient opens GET /event (SSE) and creates/loads sessions
 ↓
-Prompt → POST /session/:id/prompt_async
+Prompt → POST /session/:id/prompt_async → app-server turn/start or turn/steer
 ↓
-SSE streams message.part.updated / session.idle → folded into thread blocks by part/call id
+app-server notifications → SSE message.part.updated / session.idle → folded into thread blocks by part/call id
 ↓
 Frontend renders streaming messages, tool cards, and per-session history
 ```
@@ -490,7 +493,7 @@ command dialogs; optional Docker sandbox; full provenance recording.
 Tauri 2
 React + TypeScript + Vite
 Tailwind + Radix UI
-OpenAI Codex SDK behind a bundled Node bridge
+OpenAI Codex app-server behind a bundled Node bridge
 Versioned APEX Runtime HTTP + SSE API via ApexRuntimeClient (packages/sdk)
 Codex skills + optional third-party scientific skills
 Local workspace + SQLite + JSONL provenance

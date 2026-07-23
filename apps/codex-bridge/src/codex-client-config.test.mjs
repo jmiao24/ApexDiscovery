@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { apexExecutionMcpConfig, mainCodexConfig } from "./codex-client-config.mjs";
 
-test("disables the native Codex shell when APEX execution is available", () => {
+test("keeps native command execution beside notebook-first APEX execution", () => {
   assert.deepEqual(
     mainCodexConfig({
       mcpServers: { apex_execution: { command: "node", args: ["science-mcp.mjs"] } },
@@ -10,7 +10,6 @@ test("disables the native Codex shell when APEX execution is available", () => {
     }),
     {
       mcp_servers: { apex_execution: { command: "node", args: ["science-mcp.mjs"] } },
-      features: { shell_tool: false },
     },
   );
 });
@@ -31,7 +30,7 @@ test("disables nested subagents without removing the shared APEX tools", () => {
     }),
     {
       mcp_servers: { apex_execution: { command: "node", args: ["science-mcp.mjs"] } },
-      features: { shell_tool: false, multi_agent: false },
+      features: { multi_agent: false },
     },
   );
 });
@@ -59,7 +58,6 @@ test("registers sandboxed APEX execution in WorkspaceWrite mode", () => {
   });
   assert.deepEqual(mainCodexConfig({ mcpServers: execution, hasApexExecution: true }), {
     mcp_servers: execution,
-    features: { shell_tool: false },
   });
 });
 

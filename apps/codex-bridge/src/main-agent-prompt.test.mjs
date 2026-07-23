@@ -10,7 +10,7 @@ test("ships an APEX biomedical research prompt without Biomni-only infrastructur
   assert.match(APEX_MAIN_AGENT_PROMPT, /# Visualization Standards/);
   assert.match(APEX_MAIN_AGENT_PROMPT, /native web research/);
   assert.match(APEX_MAIN_AGENT_PROMPT, /ExecuteCode/);
-  assert.match(APEX_MAIN_AGENT_PROMPT, /Bash/);
+  assert.match(APEX_MAIN_AGENT_PROMPT, /native command execution/);
   assert.match(APEX_MAIN_AGENT_PROMPT, /Place each citation inline/);
   assert.match(APEX_MAIN_AGENT_PROMPT, /do not append a standalone source list/);
   assert.doesNotMatch(APEX_MAIN_AGENT_PROMPT, /checks evidence-backed answers at runtime/);

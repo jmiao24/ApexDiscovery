@@ -98,7 +98,7 @@ export function Composer({
   onSkillsOpen?: () => void;
   skillsOpen?: boolean;
   disabled?: boolean;
-  /** A turn is running: the send button becomes Stop (wired to `onStop`). */
+  /** A turn is running: a new message steers it; Stop remains available. */
   working?: boolean;
   onStop?: () => void;
   /** Defaults to `t("composer.placeholder.default")` ("Ask anything"). */
@@ -151,10 +151,10 @@ export function Composer({
   const composerDraft = useUiStore((s) => s.composerDraft);
   const setComposerDraft = useUiStore((s) => s.setComposerDraft);
 
-  const shellMode = !!onRunShell && !command && value.startsWith("!");
+  const shellMode = !working && !!onRunShell && !command && value.startsWith("!");
   // The palette is open while the command NAME is being typed ("/na…"); the
   // first space ends name-typing (arguments follow) and closes it.
-  const slashTyping = !!onRunCommand && !command && /^\/\S*$/.test(value);
+  const slashTyping = !working && !!onRunCommand && !command && /^\/\S*$/.test(value);
   const query = slashTyping ? value.slice(1).toLowerCase() : "";
   const matches = slashTyping
     ? commands
@@ -247,7 +247,7 @@ export function Composer({
     }
     // "/name args" — run a KNOWN slash command; unknown names stay a prompt
     // (a message can legitimately start with a path like "/etc/hosts …").
-    if (onRunCommand && text.startsWith("/")) {
+    if (!working && onRunCommand && text.startsWith("/")) {
       const name = text.slice(1).split(/\s/, 1)[0];
       if (commands.some((c) => c.name === name)) {
         onRunCommand(name, text.slice(1 + name.length).trim());
@@ -559,7 +559,7 @@ export function Composer({
             aria-label={t("composer.review.aria")}
             title={t("composer.review.title")}
             onClick={onReview}
-            disabled={disabled}
+            disabled={disabled || working}
           >
             <ShieldCheck size={13} />
             <span>{t("composer.review.label")}</span>
@@ -615,6 +615,7 @@ export function Composer({
               onClick={() => {
                 setApprovalOpen((open) => !open);
               }}
+              disabled={disabled || working}
             >
               {approvalMode === "full" ? <Zap size={12} /> : <Hand size={12} />}
               <span>{approvalCopy[approvalMode].label}</span>
@@ -623,18 +624,17 @@ export function Composer({
           </div>
         )}
         <span className="flex-1" />
-        {working && onStop ? (
-          // Same spot, same shape, one action: the send button becomes Stop
-          // while the agent works — always live, even though the input is not.
+        {working && onStop && (
           <button
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-input bg-accent text-accent-fg hover:opacity-90"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-input border border-border text-muted hover:bg-surface-2 hover:text-text"
             aria-label={t("composer.stop.aria")}
             title={t("composer.stop.title")}
             onClick={onStop}
           >
             <Square size={11} fill="currentColor" />
           </button>
-        ) : (
+        )}
+        {(!working || !!onSend) && (
           <button
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-input bg-accent text-accent-fg hover:opacity-90 disabled:opacity-40"
             aria-label={t("composer.send.aria")}

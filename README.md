@@ -187,9 +187,11 @@ agent-runtime password stay in the local server/sidecar process.
 
 ### OpenAI Codex runtime
 
-`apps/codex-bridge/` is the same idea on the
-[OpenAI Codex SDK](https://developers.openai.com/codex/sdk) behind the APEX
-Runtime API. Choose exactly one OpenAI authentication source when starting the
+`apps/codex-bridge/` runs the bundled
+[OpenAI Codex app-server](https://learn.chatgpt.com/docs/app-server.md) behind
+the APEX Runtime API. Its long-lived JSON-RPC connection supports streaming,
+mid-turn steering, interruption, and native Codex approval callbacks. Choose
+exactly one OpenAI authentication source when starting the
 browser distribution:
 
 - **Codex subscription:** pass `CODEX_HOME="$HOME/.codex"` so the sidecar can
@@ -269,15 +271,15 @@ for citation verification. Settings controls whether a manually started review
 may perform the one bounded fix/re-review cycle. Each phase is persisted in the
 task timeline.
 
-The native Codex shell is disabled throughout APEX Discovery. Agent-side local
-execution uses the audited APEX `Bash` and persistent Python/R `ExecuteCode`
-tools instead. In the default approve mode, both tools launch their subprocesses
-through Codex's `:workspace` OS sandbox; full maps to direct
+CLI and shell work uses Codex's native command execution, while formal Python/R
+analysis uses APEX's persistent `ExecuteCode` notebook tool. In the default
+approve mode, native commands run in Codex's workspace sandbox and requests for
+network, out-of-workspace access, or other elevated permissions appear in the
+APEX permission card. `ExecuteCode` remains workspace-contained and records each
+step in `execution_trace/worker-0.ipynb`. Full maps to explicit
 `danger-full-access` execution. Direct `!` shell execution remains disabled in
-approve mode because it bypasses this contract. MCP tools default to the
-conservative `writes` approval policy; the current TypeScript SDK transport
-cannot relay interactive approval callbacks to the browser. Plan-first routing
-remains ignored.
+approve mode. A message sent while the agent is working steers the active Codex
+turn instead of starting a competing turn. Plan-first routing remains ignored.
 
 ## Build from source
 
@@ -329,7 +331,7 @@ pnpm lint
 | --- | --- |
 | `apps/desktop/` | Shared React frontend plus the legacy Tauri shell. |
 | `apps/server/` | Axum server for the self-hosted web version. |
-| `apps/codex-bridge/` | APEX Runtime API bridge to the OpenAI Codex SDK. |
+| `apps/codex-bridge/` | APEX Runtime API bridge to the OpenAI Codex app-server. |
 | `crates/shell-core/` | Shared Rust command core (desktop + web server). |
 | `packages/sdk/` | `ApexRuntimeClient`; the typed APEX Runtime API client. |
 | `packages/shared/` | Shared domain types and chart palette. |

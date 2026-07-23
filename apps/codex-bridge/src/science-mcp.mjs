@@ -34,25 +34,11 @@ function response(job) {
 }
 
 server.registerTool(
-  "Bash",
-  {
-    title: "Bash",
-    description:
-      "Run disposable diagnostics, package installation, and one-shot shell commands. Do not use it for formal data analysis. Each call uses a fresh process, is security-audited, and is never added to the reproducibility notebook.",
-    inputSchema: z.object({
-      command: z.string().min(1).describe("One-shot shell command; not a formal analysis program"),
-      ...common,
-    }).strict(),
-  },
-  async (input) => response(await runtime.runBash(input)),
-);
-
-server.registerTool(
   "ExecuteCode",
   {
     title: "ExecuteCode",
     description:
-      "Run notebook-first Python or R analysis. Put complete code for the current logical step directly in the code argument; never stage analysis in a script and execute that script here. Foreground kernels persist across calls in the active task runtime, and every call and output is appended to a reproducibility notebook. Use Bash for every CLI or shell command.",
+      "Run notebook-first Python or R analysis. Put complete code for the current logical step directly in the code argument; never stage analysis in a script and execute that script here. Foreground kernels persist across calls in the active task runtime, and every call and output is appended to a reproducibility notebook. Use native command execution for every CLI or shell command.",
     inputSchema: z.object({
       code: z.string().min(1).describe("Complete inline code for one reproducible notebook step; staged script loaders are rejected"),
       language: z.enum(["python", "r"]).default("python"),

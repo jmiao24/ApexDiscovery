@@ -347,6 +347,27 @@ describe("per-session workspace folders", () => {
     expect(useRuntimeStore.getState().threads["ses_new"].blocks).toHaveLength(1);
   });
 
+  it("steers a running turn without re-locking it after an in-flight idle", async () => {
+    await useRuntimeStore.getState().sendPrompt("first");
+    expect(useRuntimeStore.getState().runningSessions.ses_new).toBe(true);
+    mocks.sendPrompt.mockImplementationOnce(() => {
+      mocks.fireEvent({ type: "session.idle", sessionId: "ses_new" });
+    });
+
+    await useRuntimeStore.getState().sendPrompt("focus on genetics");
+
+    expect(mocks.sendPrompt).toHaveBeenLastCalledWith(
+      "ses_new",
+      "focus on genetics",
+      {},
+    );
+    expect(useRuntimeStore.getState().runningSessions.ses_new).toBeUndefined();
+    expect(useRuntimeStore.getState().threads.ses_new.blocks).toContainEqual({
+      kind: "user",
+      text: "focus on genetics",
+    });
+  });
+
   it("session.idle ends the turn: running cleared, done line folded in", async () => {
     await useRuntimeStore.getState().sendPrompt("hi");
     expect(useRuntimeStore.getState().runningSessions["ses_new"]).toBe(true);

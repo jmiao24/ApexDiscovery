@@ -3,12 +3,13 @@
   "version": "0.1.9",
   "private": true,
   "type": "module",
-  "description": "APEX Runtime API bridge powered by the OpenAI Codex SDK.",
+  "description": "APEX Runtime API bridge powered by the OpenAI Codex app-server.",
   "bin": {
     "codex-bridge": "./src/server.mjs"
   },
   "files": [
     "src/server.mjs",
+    "src/codex-app-server.mjs",
     "src/codex-client-config.mjs",
     "src/command-description.mjs",
     "src/codex-sandbox.mjs",

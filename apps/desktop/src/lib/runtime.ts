@@ -355,6 +355,10 @@ async function performTurn(
       void get().refreshSessions();
     }
     const sid = id;
+    // A second prompt can now steer an already-running app-server turn. Do
+    // not re-arm its running flag after the POST: session.idle may have landed
+    // while the steering request was in flight.
+    const alreadyRunning = Boolean(get().runningSessions[sid]);
     interruptedSessions.delete(sid); // a fresh turn folds its events normally
     void logDebug(`turn → ${sid}`);
     if (syncTurn) {
@@ -396,7 +400,9 @@ async function performTurn(
       });
     } else {
       await post(sid);
-      set((s) => ({ runningSessions: { ...s.runningSessions, [sid]: true } }));
+      if (!alreadyRunning) {
+        set((s) => ({ runningSessions: { ...s.runningSessions, [sid]: true } }));
+      }
     }
     void logDebug("turn OK");
     return sid;

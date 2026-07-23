@@ -52,12 +52,14 @@ describe("Composer", () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
-  it("turns the send button into Stop while working, back to Send when done", () => {
+  it("keeps both steering and Stop available while working", () => {
     const onStop = vi.fn();
-    const { rerender } = render(<Composer onSend={vi.fn()} disabled working onStop={onStop} />);
-    // The send arrow is gone; in its place a live Stop button (the composer
-    // itself stays disabled while the agent works).
-    expect(screen.queryByLabelText("Send")).toBeNull();
+    const onSend = vi.fn();
+    const { rerender } = render(<Composer onSend={onSend} working onStop={onStop} />);
+    const input = screen.getByLabelText("Ask anything");
+    fireEvent.change(input, { target: { value: "Focus on the network failure" } });
+    fireEvent.click(screen.getByLabelText("Send"));
+    expect(onSend).toHaveBeenCalledWith("Focus on the network failure");
     fireEvent.click(screen.getByLabelText("Stop"));
     expect(onStop).toHaveBeenCalledTimes(1);
 
